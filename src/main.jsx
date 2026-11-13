@@ -11,6 +11,10 @@ import './design/base.css';
 import './design/shelf.css';
 import './design/reader.css';
 import './design/library.css';
+/* MIUI 的手感层必须最后加载：它要和 design/ 抢同一批控件的形态与反馈，
+   放在最后才不必用 !important 硬顶。作用域仍限定在 [data-skin='miui']，
+   Apple 皮肤完全不受影响。见文件头注释。 */
+import './miui-motion.css';
 
 /* 截图/回归用的确定性开关：?static=1 让 framer 的补间一律瞬时完成。
    没有它，headless 下 AnimatePresence mode="wait" 的退场动画可能永远不结束，

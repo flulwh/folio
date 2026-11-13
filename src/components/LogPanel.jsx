@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { modalVariants } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import { useAppActions } from '../store/AppStore.jsx';
 import { usePresence } from '../hooks/usePresence.js';
 import { IconX, IconTrash, IconShare, IconSearch } from './Icons.jsx';
@@ -35,6 +35,7 @@ function bodyOf(line) {
  * 排查书源问题时，用户把这里的东西发过来就够了。
  */
 export default function LogPanel({ open, onClose }) {
+  const kit = useMotionKit();
   const { logTail, logInfo, logLevel, logClear, logOpen, logExport, notify } = useAppActions();
   const alive = usePresence(open);
   const [lines, setLines] = useState([]);
@@ -120,7 +121,7 @@ export default function LogPanel({ open, onClose }) {
       <motion.div
         className="modal log-modal"
         onClick={(event) => event.stopPropagation()}
-        variants={modalVariants}
+        variants={kit.modal}
         initial="initial"
         animate="animate"
         exit="exit"

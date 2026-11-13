@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { modalVariants } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import {
   useAppActions,
   useRules,
@@ -154,6 +154,7 @@ function RuleRow({ rule, onToggle, onRemove }) {
 }
 
 export default function SourcePanel({ open, onClose }) {
+  const kit = useMotionKit();
   const sources = useSources();
   const rules = useRules();
   const settings = useSettings();
@@ -417,7 +418,7 @@ export default function SourcePanel({ open, onClose }) {
               <motion.div
                 key="source-modal"
             className="modal source-modal"
-            variants={modalVariants}
+            variants={kit.modal}
             initial="initial"
             animate="animate"
             exit="exit"

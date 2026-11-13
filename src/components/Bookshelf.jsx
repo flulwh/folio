@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { DUR, EASE, SPRING, backdropVariants, modalVariants, riseItem, staggerContainer } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
 import SourcePanel from './SourcePanel.jsx';
@@ -22,10 +22,6 @@ import {
   IconTrash,
   IconX,
 } from './Icons.jsx';
-
-const containerVariants = staggerContainer(0.018, 0.05);
-
-const cardVariants = riseItem;
 
 function hashHue(name) {
   let h = 0;
@@ -57,7 +53,7 @@ function coverStyle(book) {
   };
 }
 
-function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick }) {
+function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick, variants }) {
   const percentValue = Math.min(100, Math.max(0, percent || 0));
   const finished = percentValue >= 99.5;
   const coverTickValue = coverTick; // 批量封面就绪后重新求一次地址
@@ -66,7 +62,7 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick }
   return (
     <motion.div
       className="book-card"
-      variants={cardVariants}
+      variants={variants}
       layout
       custom={index}
       onClick={() => onOpen(book)}
@@ -158,6 +154,12 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick }
 }
 
 export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) {
+  const kit = useMotionKit();
+  // 级联节奏随皮肤走：苹果 18ms 紧凑，MIUI 26ms 能看出"一列列亮起来"
+  const containerVariants = useMemo(
+    () => (kit.id === 'miui' ? kit.stagger(0.026, 0.06) : kit.stagger(0.018, 0.05)),
+    [kit]
+  );
   const books = useBooks();
   const progress = useProgress();
   const sources = useSources();
@@ -445,8 +447,8 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
             <motion.section
               className="continue-card"
               initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0, transition: { ...SPRING.card, delay: 0.04 } }}
-              exit={{ opacity: 0, y: -8, transition: { duration: DUR.fast, ease: EASE } }}
+              animate={{ opacity: 1, y: 0, transition: { ...kit.spring.card, delay: 0.04 } }}
+              exit={{ opacity: 0, y: -8, transition: { duration: kit.dur.fast, ease: kit.ease } }}
               onClick={() => onOpenBook?.(lastReading)}
               role="button"
               tabIndex={0}
@@ -476,7 +478,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                     <motion.span
                       initial={{ width: 0 }}
                       animate={{ width: `${lastPercent}%` }}
-                      transition={{ duration: 0.72, delay: 0.18, ease: EASE }}
+                      transition={{ duration: 0.72, delay: 0.18, ease: kit.ease }}
                     />
                   </div>
                   <span className="continue-percent">{formatPercent(lastPercent)}</span>
@@ -562,6 +564,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                   book={book}
                   index={i}
                   coverTick={coverTick}
+                  variants={kit.rise}
                   percent={percentOf(book)}
                   onOpen={onOpenBook}
                   onDelete={setPendingDelete}
@@ -588,7 +591,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         {dragging && (
           <motion.div
             className="drop-overlay"
-            variants={backdropVariants}
+            variants={kit.backdrop}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -598,7 +601,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
               initial={{ scale: 0.94, y: 10 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+              transition={kit.spring.surface}
             >
               <IconPlus size={26} />
               <p>松开即可导入到书架</p>
@@ -616,7 +619,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         {cacheBook && (
           <motion.div
             className="modal-backdrop"
-            variants={backdropVariants}
+            variants={kit.backdrop}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -624,7 +627,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
           >
             <motion.div
               className="modal"
-              variants={modalVariants}
+              variants={kit.modal}
               initial="initial"
               animate="animate"
               exit="exit"
@@ -689,7 +692,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         {pendingDelete && (
           <motion.div
             className="modal-backdrop"
-            variants={backdropVariants}
+            variants={kit.backdrop}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -697,7 +700,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
           >
             <motion.div
               className="modal"
-              variants={modalVariants}
+              variants={kit.modal}
               initial="initial"
               animate="animate"
               exit="exit"

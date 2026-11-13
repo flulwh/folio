@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { backdropVariants, modalVariants } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import { IconCommand, IconX } from './Icons.jsx';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
 
 /** 「?」唤出的快捷键速查；也承担新手引导的作用。 */
 export default function ShortcutHelp({ open, onClose }) {
+  const kit = useMotionKit();
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (event) => {
@@ -20,7 +21,7 @@ export default function ShortcutHelp({ open, onClose }) {
       {open && (
         <motion.div
           className="modal-backdrop shortcuts-backdrop"
-          variants={backdropVariants}
+          variants={kit.backdrop}
           initial="initial"
           animate="animate"
           exit="exit"
@@ -31,7 +32,7 @@ export default function ShortcutHelp({ open, onClose }) {
             role="dialog"
             aria-modal="true"
             aria-label="快捷键说明"
-            variants={modalVariants}
+            variants={kit.modal}
             initial="initial"
             animate="animate"
             exit="exit"

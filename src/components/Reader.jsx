@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { motionKitFor } from '../motion-kit.js';
 import { useAppActions, useFonts, useProgress, useSettings } from '../store/AppStore.jsx';
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
@@ -68,6 +69,8 @@ function saveHeights(key, width, heights) {
 
 export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const settings = useSettings();
+  // 阅读器已经订阅了 settings，直接按皮肤取套件，不再多挂一个 hook
+  const kit = motionKitFor(settings.skin);
   const progress = useProgress();
   const fonts = useFonts();
   const { saveProgress, patchSettings, resetSettings, notify } = useAppActions();
@@ -1001,7 +1004,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       <motion.header
         className="reader-header"
         animate={{ y: uiVisible ? 0 : -84, opacity: uiVisible ? 1 : 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        transition={kit.chrome}
         style={{ pointerEvents: uiVisible ? 'auto' : 'none' }}
       >
         <div className="reader-head-left">
@@ -1134,7 +1137,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           ref={bottomRef}
           className="reader-bottom"
           animate={{ y: uiVisible ? 0 : 90, opacity: uiVisible ? 1 : 0 }}
-          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          transition={kit.chrome}
           style={{ pointerEvents: uiVisible ? 'auto' : 'none' }}
         >
           <div

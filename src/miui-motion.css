@@ -1,0 +1,344 @@
+/* ==========================================================================
+   Folio · MIUI 手感层（[data-skin='miui'] 专用）
+   ────────────────────────────────────────────────────────────────────────
+   为什么单独一层，而不是塞进 skin-miui.css：
+     视觉层（skin-miui.css / miui.css）在 design/ 之前加载，负责颜色、圆角、
+     阴影这些"静态长相"。而 design/ 那套编辑排版会重定义控件形态 —— 顶栏的
+     排序是下划线标签、设置页的分段是方角小滑块、滑杆是 1px 细线。
+     这些规则和皮肤同优先级且在皮肤之后，于是皮肤层里写的按压、滑块、开关
+     动效全被盖回去：MIUI 实际只活下来一个主色。
+     把手感单独成层、放在最后加载，谁也不用和谁比 !important，
+     皮肤想要的那套交互才真的跑得起来。
+
+   分工：
+     · 位移 / 转场 / 级联  → src/motion-miui.js（framer 弹簧，皮肤感知）
+     · 按下 / 悬停 / 拖动  → 本文件（CSS，高频交互不能等一次 React 渲染）
+   ========================================================================== */
+
+/* ------------------------------ 令牌 ------------------------------------- */
+/* 与 src/motion-miui.js 的 MI_DUR / MI_SPRING 同源，改一处要对齐另一处。 */
+[data-skin='miui'] {
+  --mi-motion-instant: 80ms;   /* 按下 —— 快到读不出是动画 */
+  --mi-motion-fast: 160ms;     /* 颜色 / 阴影 */
+  --mi-motion-base: 220ms;
+  --mi-motion-slow: 300ms;
+  --mi-motion-standard: cubic-bezier(0.2, 0, 0, 1); /* 位移：起步快、收尾长 */
+  --mi-motion-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mi-motion-in: cubic-bezier(0.4, 0, 1, 1);       /* 退场：不拖尾 */
+  --mi-motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* 回弹：过冲一点 */
+  --mi-motion-press: 0.96;
+  --mi-motion-press-small: 0.92;
+}
+
+/* 依赖主题的令牌定义在 .app 上（它同时带 data-theme），而不是 html。
+   原因：--accent / --bg-elevated 在 html 上是编辑风的纸色与朱砂，
+   MIUI 的蓝与白只覆盖 .app 子树；在 html 上定义 var() 会提前替换成错的那一档
+   （实测：选中文字拿到了朱砂，滑块拿到了纸白）。 */
+[data-skin='miui'] [data-theme] {
+  /* 滑块抬起的表面色。浅色直接用 --bg-elevated（白）。 */
+  --mi-raised: var(--bg-elevated);
+  --mi-seg-active: var(--accent);
+}
+
+/* 夜间必须单独提亮滑块 —— MIUI 深色里 --bg-elevated(#1c1c1c) 比轨道
+   --mi-s3(#242424) 还暗，直接用它会让"选中"比"未选中"更靠里，层级是反的。
+   文字同理：--accent(#277af7) 压在近黑底上对比度只有 3.9，小字发虚；
+   --mi-primary-hover 是同一支蓝的亮阶，语义不变、可读。 */
+[data-skin='miui'] [data-theme='night'],
+[data-skin='miui'] [data-theme='forest'] {
+  --mi-raised: color-mix(in srgb, var(--bg-elevated) 86%, var(--text));
+  --mi-seg-active: var(--mi-primary-hover);
+}
+
+/* ==========================================================================
+   一、按压与悬停
+   ────────────────────────────────────────────────────────────────────────
+   规则只有两条，但决定了整台机器的"手感性格"：
+
+   1) 按下是瞬时的（80ms 直线），松手才是弹簧（260ms 过冲）。
+      对称的补间读起来是"淡了一下"，不对称才读得出"按到了 / 弹回来"。
+   2) 悬停不位移，只有按压才位移。
+      一屏 20 张封面同时往上飘 4px，界面会显得在抖；悬停用底色和阴影说话，
+      位移留给真正的动作。
+   ========================================================================== */
+
+[data-skin='miui'] .btn {
+  transition: transform 260ms var(--mi-motion-spring),
+    background-color var(--mi-motion-fast) var(--mi-motion-out),
+    color var(--mi-motion-fast) var(--mi-motion-out),
+    box-shadow var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .btn:hover {
+  transform: none;
+}
+
+[data-skin='miui'] .btn:active {
+  transform: scale(var(--mi-motion-press));
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+/* 主按钮按下：底色沉一档、投影收紧（贴近桌面），而不是加深内阴影 */
+[data-skin='miui'] .btn.primary:active {
+  background: var(--mi-primary-active);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.16);
+  transform: scale(var(--mi-motion-press));
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+[data-skin='miui'] .icon-btn {
+  transition: transform 240ms var(--mi-motion-spring),
+    background-color var(--mi-motion-fast) var(--mi-motion-out),
+    color var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+/* 图标按钮悬停不再放大：放大是"抬起来"，和按压的"按下去"语义打架 */
+[data-skin='miui'] .icon-btn:hover {
+  transform: none;
+}
+
+[data-skin='miui'] .icon-btn:active {
+  transform: scale(var(--mi-motion-press-small));
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+/* 封面：悬停抬起 4px，按下压回桌面。这里必须 !important ——
+   悬停规则（skin-miui.css）自带了 !important，否则按下瞬间会被顶回去。 */
+[data-skin='miui'] .book-cover:active,
+[data-skin='miui'] .market-cover:active {
+  transform: translateY(-1px) scale(0.972) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 4px 10px -8px rgba(0, 0, 0, 0.3) !important;
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+/* 继续阅读卡：整卡可点，按下去要有"按到纸面"的反馈 */
+[data-skin='miui'] .continue-card:active {
+  transform: translateY(0) scale(0.994);
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+/* 目录项：按住时有底色，松手回落 —— 长列表里点错时能立刻察觉 */
+[data-skin='miui'] .toc-item {
+  transition: background-color var(--mi-motion-fast) var(--mi-motion-out),
+    color var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .toc-item:active {
+  background: var(--mi-s-active);
+  transition: background-color var(--mi-motion-instant) linear;
+}
+
+[data-skin='miui'] .market-kind-tab:active,
+[data-skin='miui'] .market-search-btn:active {
+  transform: scale(var(--mi-motion-press));
+  transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
+}
+
+/* ==========================================================================
+   二、分段控件：会滑的白色药丸
+   ────────────────────────────────────────────────────────────────────────
+   旧 MIUI 皮肤把滑块 display:none、直接硬切底色 —— 那是效果最少的做法：
+   切换后看不出自己是从哪一段走到哪一段的。这里恢复滑块，位移交给
+   Segmented.jsx 的 layoutId 弹簧（MIUI 用 control 弹簧，收尾有过冲）。
+
+   选择器写得重复是因为要逐层压过 design/ 里 `.shelf-tools .…` 与
+   `.settings-page .…` 两组规则，而不是靠 !important 硬顶。
+   ========================================================================== */
+
+[data-skin='miui'] .segmented,
+[data-skin='miui'] .shelf-tools .segmented,
+[data-skin='miui'] .settings-page .segmented {
+  height: 32px;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--mi-border);
+  border-radius: var(--mi-r-sm);
+  background: var(--mi-s3);
+}
+
+[data-skin='miui'] .segmented-item,
+[data-skin='miui'] .shelf-tools .segmented-item,
+[data-skin='miui'] .settings-page .segmented-item {
+  position: relative;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--mi-font);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-soft);
+  transition: color var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .segmented-item:hover,
+[data-skin='miui'] .shelf-tools .segmented-item:hover,
+[data-skin='miui'] .settings-page .segmented-item:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+/* 选中态交给滑块，按钮本身透明：两层底色叠在一起会发灰 */
+[data-skin='miui'] .segmented-item.active,
+[data-skin='miui'] .shelf-tools .segmented-item.active,
+[data-skin='miui'] .settings-page .segmented-item.active {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: var(--mi-seg-active);
+}
+
+[data-skin='miui'] .segmented-thumb,
+[data-skin='miui'] .shelf-tools .segmented-thumb,
+[data-skin='miui'] .settings-page .segmented-thumb {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  height: auto;
+  border-radius: 9px;
+  background: var(--mi-raised);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 8px -4px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+
+/* ==========================================================================
+   三、开关：橡皮筋
+   ────────────────────────────────────────────────────────────────────────
+   按住时滑块横向拉长（24 → 30px），松手弹回。宽度和位移要一起补偿，
+   否则滑块会"长出去"：
+     关：left 3 → 右边缘 27
+     开：left 23 → 右边缘 47（translate 20）
+     拉长到 30 且右边缘不变 → translate 减 4，即 16（开态按住时）
+   ========================================================================== */
+
+[data-skin='miui'] .switch {
+  transition: background-color var(--mi-motion-base) var(--mi-motion-out),
+    border-color var(--mi-motion-base) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .switch::after {
+  transition: transform 340ms var(--mi-motion-spring),
+    width var(--mi-motion-base) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .switch:active::after {
+  width: 30px;
+}
+
+[data-skin='miui'] .switch:checked:active::after {
+  transform: translateX(14px);
+}
+
+/* ==========================================================================
+   四、拖动：进度条与滑杆
+   ========================================================================== */
+
+/* 拖进度：轨道加粗、圆点放大、光圈扩散。
+   手指按住哪里、进度走到哪里，要在同一处体现，而不是各动各的。 */
+[data-skin='miui'] .reader-progress-fill {
+  transition: width 260ms var(--mi-motion-out),
+    height var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .reader-progress-knob {
+  transition: opacity var(--mi-motion-fast) var(--mi-motion-out),
+    transform var(--mi-motion-base) var(--mi-motion-spring),
+    box-shadow var(--mi-motion-base) var(--mi-motion-out);
+}
+
+[data-skin='miui'] .reader-progress-track.scrubbing .reader-progress-knob {
+  transform: translate(-50%, -50%) scale(1.55);
+  box-shadow: 0 0 0 7px var(--accent-soft);
+}
+
+/* 滑杆：4px 轨道 + 18px 拇指，按住再涨一点。
+   设置页（.settings-page）和阅读面板（.slider-row）共用这一套。 */
+[data-skin='miui'] input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--mi-r-pill);
+}
+
+[data-skin='miui'] input[type='range']::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 2px solid var(--mi-primary);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  transition: transform var(--mi-motion-base) var(--mi-motion-spring),
+    box-shadow var(--mi-motion-fast) var(--mi-motion-out);
+}
+
+[data-skin='miui'] input[type='range']:active::-webkit-slider-thumb {
+  transform: scale(1.2);
+  box-shadow: 0 0 0 6px var(--mi-primary-glow);
+}
+
+/* ==========================================================================
+   五、焦点与遮罩
+   ========================================================================== */
+
+/* 焦点环由内向外撑开，而不是突然出现一圈描边 */
+[data-skin='miui'] :focus-visible {
+  animation: mi-focus-open var(--mi-motion-base) var(--mi-motion-out) both;
+}
+
+@keyframes mi-focus-open {
+  from {
+    outline-offset: 0;
+  }
+  to {
+    outline-offset: 3px;
+  }
+}
+
+/* 弹窗遮罩：用毛玻璃表达"退到后面去"，比单纯压暗更能读出层级 */
+[data-skin='miui'] .modal-backdrop,
+[data-skin='miui'] .shortcuts-backdrop,
+[data-skin='miui'] .drop-overlay,
+[data-skin='miui'] .plugin-overlay-backdrop {
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  transition: opacity var(--mi-motion-base) var(--mi-motion-out);
+}
+
+/* 面板从边缘推入时，给内容一点点"迎面过来"的阴影梯度 */
+[data-skin='miui'] .panel {
+  transition: box-shadow var(--mi-motion-slow) var(--mi-motion-out);
+}
+
+/* ==========================================================================
+   六、减弱动效
+   ────────────────────────────────────────────────────────────────────────
+   base.css 已对 [data-motion='off'] 和 prefers-reduced-motion 做了全局压制；
+   这里只补一处它管不到的：橡皮筋是靠 width 变形的，压掉时长也仍会留一个
+   30px 的静态宽度，所以要在该状态下直接锁死尺寸。
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  [data-skin='miui'] .switch:active::after,
+  [data-skin='miui'] .switch:checked:active::after {
+    width: 24px;
+    transform: none;
+  }
+
+  [data-skin='miui'] .switch:checked::after {
+    transform: translateX(20px);
+  }
+}
+
+[data-motion='off'][data-skin='miui'] .switch:active::after {
+  width: 24px;
+}
+
+[data-motion='off'][data-skin='miui'] .switch:checked:active::after {
+  transform: translateX(20px);
+}

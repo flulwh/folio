@@ -1,5 +1,5 @@
 // 离屏截图工具：起一个临时 HTTP 服务托管 dist/，注入种子数据后再加载页面。
-// 用法：npx electron tools/_shot.cjs --out=x.png [--w=1280] [--h=800] [--theme=night] [--wait=1200]
+// 用法：npx electron tools/_shot.cjs --out=x.png [--w=1280] [--h=800] [--theme=night] [--skin=miui] [--wait=1200]
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -17,6 +17,7 @@ const OUT = argv.out || 'shot.png';
 const W = Number(argv.w || 1280);
 const H = Number(argv.h || 800);
 const THEME = argv.theme || '';
+const SKIN = argv.skin || '';
 const WAIT = Number(argv.wait || 1100);
 
 const MIME = {
@@ -71,7 +72,7 @@ app.whenReady().then(async () => {
 
   // 先落在空白页，写入 localStorage 种子，再进入应用
   await win.loadURL(`${base}/seed.html`).catch(() => {});
-  await win.webContents.executeJavaScript(require('./_seed.cjs')('shelf', THEME, '')).catch((e) => {
+  await win.webContents.executeJavaScript(require('./_seed.cjs')('shelf', THEME, '', SKIN)).catch((e) => {
     console.error('seed failed:', e.message);
   });
 

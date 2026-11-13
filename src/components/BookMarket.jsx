@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { SPRING } from '../motion.js';
+import { motionKitFor } from '../motion-kit.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useSettings, useSources, dataApi } from '../store/AppStore.jsx';
 import {
@@ -32,14 +32,14 @@ function coverStyle(name) {
   };
 }
 
-function MarketCard({ item, added, index, onOpen }) {
+function MarketCard({ item, added, index, onOpen, spring }) {
   const isComic = Number(item.type) === 2;
   return (
     <motion.div
       className="market-card"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ ...SPRING.card, delay: Math.min(index, 16) * 0.016 }}
+      transition={{ ...spring, delay: Math.min(index, 16) * 0.016 }}
     >
       <button className="market-cover" onClick={() => onOpen(item)} title={item.name}>
         <span className="market-cover-art" style={coverStyle(item.name)}>
@@ -99,6 +99,7 @@ export default function BookMarket({ onClose, onOpenBook }) {
   const sources = useSources();
   const books = useBooks();
   const settings = useSettings();
+  const kit = motionKitFor(settings.skin);
   const { notify, addCloudBook, toggleSource } = useAppActions();
   const cached = marketCache;
 
@@ -572,6 +573,7 @@ export default function BookMarket({ onClose, onOpenBook }) {
                       index={i}
                       added={shelfKeys.has(item.key)}
                       onOpen={openBook}
+                      spring={kit.spring.card}
                     />
                   ))}
                 </div>

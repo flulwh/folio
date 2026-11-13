@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { backdropVariants, sheetVariants } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import { AUTO_CHAPTER_REGEX, compileRegex } from '../utils/chapters.js';
 import { formatCount } from '../utils/format.js';
 import { IconCommand, IconType, IconX } from './Icons.jsx';
@@ -48,6 +48,7 @@ export default function SettingsPanel({
   onClose,
   chapterStats,
 }) {
+  const kit = useMotionKit();
   const { themes } = useThemeState();
   const [regexDraft, setRegexDraft] = useState(settings.chapterRegex || '');
   const [regexError, setRegexError] = useState('');
@@ -92,7 +93,7 @@ export default function SettingsPanel({
           <motion.div
             key="settings-backdrop"
             className="panel-backdrop"
-            variants={backdropVariants}
+            variants={kit.backdrop}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -102,7 +103,7 @@ export default function SettingsPanel({
           <motion.aside
             key="settings-panel"
             className="panel settings-panel"
-            variants={sheetVariants('right')}
+            variants={kit.sheet('right')}
             initial="initial"
             animate="animate"
             exit="exit"

@@ -1,16 +1,39 @@
-# 动效系统（macOS 风格）
+# 动效系统
 
-`src/motion.js` 是唯一的动效参数来源：曲线、时长、弹簧、变体都在这里定义，组件只引用 token，不再各自写魔法数字。
+动效分**两套语言**，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口：
+组件不再直接 import 某个变体，而是 `const kit = useMotionKit()`，由当前皮肤决定拿到哪套。
 
-## 原则
+```
+src/motion.js        Apple  ·「沉降」
+src/motion-miui.js   MIUI   ·「回弹 + 推进」
+src/motion-kit.js    皮肤 → 套件映射 + useMotionKit() / motionKitFor(skin)
+src/miui-motion.css  MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载）
+```
 
-1. **动效只解释层级**：内容淡入并轻微落位；面板、抽屉、对话框用接近临界阻尼的弹簧滑入。
-2. **快进慢出**：入场 220–360ms，退场约为入场的 65%。
-3. **距离小、缩放轻**：位移 8–14px，缩放 0.99–1.01；观感是「落定」，不是「飞入」。
-4. **弹簧阻尼比 0.88–1.0**：大表面完全不回弹，小控件允许一丝过冲。
-5. **降低动效时仍传达层级**：只保留透明度，其余位移/缩放归零。
+## 两套手感差在哪
+
+| 维度 | Apple（沉降） | MIUI（回弹 + 推进） |
+| --- | --- | --- |
+| 转场 | 交叉淡化 + 0.992→1 缩放 | 从右侧推入 34px，旧页向左让位 |
+| 入书 | 缩放 1.012→1，几乎看不出位移 | 0.94→1 的「长出来」，弹簧过冲 |
+| 弹簧阻尼比 | 0.88–1.0（临界阻尼，不晃） | 0.70–0.93（刻意欠阻尼，收尾有回弹） |
+| 列表级联 | 20ms 一拍 | 26ms 一拍，能看出「一列列亮起来」 |
+| 亮度 | 悬停抬起 3–5px | 悬停不位移，只有按压才位移 |
+| 按压 | 0.97，140ms 平滑 | 0.96，按下 80ms 直线、松手 260ms 弹簧 |
+
+### 三条原则（MIUI 侧）
+
+1. **按下是瞬时的，回弹才是弹簧。** 按下 80ms 到位（用户要的是「我按到了」），松手走
+   `cubic-bezier(0.34, 1.56, 0.64, 1)`，过冲 1–2%。这一对不对称就是 MIUI 手感的来源；
+   两个方向都做 140ms 补间，读起来只是「淡了一下」。
+2. **层级越深，位移越大。** 同级推进 34px，入书是「生长」而非平移，弹窗从中心弹出。
+   距离本身在解释信息结构。
+3. **悬停不位移，只有按压位移。** 一屏 20 张封面同时上飘会让界面显得在抖；
+   悬停用底色和阴影说话，位移留给真正的动作。
 
 ## Token
+
+### Apple（`src/motion.js`）
 
 | Token | 值 | 用途 |
 | --- | --- | --- |
@@ -18,35 +41,60 @@
 | `EASE_SOFT` | `cubic-bezier(0.4, 0, 0.2, 1)` | 悬停、按压、颜色 |
 | `DUR.page / slow / base / fast / instant` | 360 / 320 / 240 / 180 / 120ms | 页面、遮罩、控件、退场、即时反馈 |
 | `SPRING.panel` | k320 / c34 / m0.92（ζ≈0.99） | 侧边面板 |
-| `SPRING.card` | k260 / c28 / m0.90（ζ≈0.91） | 卡片、列表项、主视觉 |
-| `SPRING.modal` | k380 / c32 / m0.85（ζ≈0.95） | 对话框 |
-| `SPRING.toast` | k420 / c30 / m0.80（ζ≈0.82） | 提示条（唯一允许轻微回弹的） |
+| `SPRING.card` | k280 / c25 / m0.90（ζ≈0.91） | 卡片、列表项、主视觉 |
+| `SPRING.modal` | k400 / c28 / m0.85（ζ≈0.95） | 对话框 |
+| `SPRING.toast` | k460 / c26 / m0.80（ζ≈0.82） | 提示条 |
 
-## 变体与映射
+### MIUI（`src/motion-miui.js`）
 
-| 变体 | 用在哪 |
+| Token | 值 | 用途 |
+| --- | --- | --- |
+| `MI_EASE` | `cubic-bezier(0.2, 0, 0, 1)` | 「standard」：起步极快、尾巴很长 |
+| `MI_EASE_IN` | `cubic-bezier(0.4, 0, 1, 1)` | 退场，不拖尾 |
+| `MI_DUR.page / slow / base / fast / instant` | 340 / 300 / 220 / 160 / 80ms | 页面、遮罩、控件、颜色、按下 |
+| `MI_SPRING.tap` | k700 / c34 / m0.55（ζ≈0.86） | 按压回弹 |
+| `MI_SPRING.control` | k520 / c30 / m0.70（ζ≈0.79） | 分段滑块、开关 |
+| `MI_SPRING.surface` | k380 / c32 / m0.85（ζ≈0.89） | 面板、整页推进 |
+| `MI_SPRING.pop` | k620 / c27 / m0.60（ζ≈0.70） | 弹窗、提示条 |
+| `MI_SPRING.chrome` | k420 / c34 / m0.80（ζ≈0.93） | 阅读器上下工具栏 |
+
+两套的键名完全一致（`page / zoom / sheet / backdrop / modal / toast / stagger / rise /
+settle / spring / dur / ease / chrome / section`），缺一个切皮肤时就会漏动画。
+
+## 组件映射
+
+| 套件键 | 用在哪 |
 | --- | --- |
-| `pageVariants` | 书架 ↔ 书籍市场（淡入 + 0.992→1 缩放，退场更快） |
-| `zoomInVariants` | 打开阅读器 / 漫画（像窗口从书架里长出来） |
-| `sheetVariants('left' \| 'right')` | 目录抽屉、阅读设置、书源面板 |
-| `modalVariants` / `backdropVariants` | 快捷键说明、缓存管理、删除确认、日志 |
-| `toastVariants` | 右下提示条 |
-| `staggerContainer(step, delay)` + `riseItem` | 书架卡片、市场卡片、书源行 |
-| `settleItem` | 需要更「贴地」的网格项 |
+| `page` | 书架 ↔ 书籍市场 ↔ 设置 |
+| `zoom` | 打开阅读器 / 漫画 / 云端书 |
+| `sheet('left' \| 'right')` | 目录抽屉、阅读设置、书源面板 |
+| `backdrop` / `modal` | 快捷键说明、缓存管理、删除确认、日志 |
+| `toast` | 右下提示条 |
+| `stagger(step, delay)` + `rise` | 书架卡片、市场卡片 |
+| `chrome` | 阅读器工具栏显隐 |
+| `section(dir)` | 设置页分区切换（按导航方向推拉） |
 
-## 交互节奏
+## 为什么 MIUI 的手感单独一个 CSS 层
 
-- **视图切换**：`AnimatePresence` 不再 `mode="wait"`，退场与入场重叠（`.view` 是绝对定位），过渡中不会出现空白帧。
-- **悬停**：卡片 280ms 上浮 3–5px；按钮只换色，不位移。
-- **按压**：卡片封面 `scale(0.985)`、图标按钮 `scale(0.9)`、主按钮 `scale(0.97)`，全部 140ms。
-- **阅读器 / 漫画工具栏**：透明度 200ms 先行，位移 280ms 跟随。
+`skin-miui.css`（视觉层）在 `design/` **之前**加载，而 `design/` 那套编辑排版会重定义控件形态
+——顶栏排序是下划线标签、设置页分段是方角小滑块。皮肤层里写的按压、滑块、开关动效和这些规则
+同优先级且更早，于是全被盖回去，MIUI 实际只活下来一个主色。
+
+所以手感单独成层 `src/miui-motion.css`，**放在最后加载**：谁也不用和谁比 `!important`，
+皮肤想要的那套交互才真的跑得起来。它整套规则仍挂在 `[data-skin='miui']` 下，Apple 不受影响。
+
+高频交互（按下、悬停、拖动）必须是 CSS：按下到变色之间不能有一次 React 渲染的延迟。
+位移和转场才交给 framer。
 
 ## 降低动效
 
-- 设置面板的「减少动效」开关 → `document.documentElement.dataset.motion = off`，CSS 层统一把动画/过渡压到 0.001ms；
-- 同时 `<MotionConfig reducedMotion={...}>` 让 framer 只保留透明度动画；
-- 另有一份 `@media (prefers-reduced-motion: reduce)` 兜底系统级偏好。
+- 设置里的「减少动效」→ `document.documentElement.dataset.motion = off`，`design/base.css`
+  统一把动画/过渡压到 0.01ms；
+- `<MotionConfig reducedMotion>` 让 framer 只保留透明度动画（所以每个变体都带 opacity 通道）；
+- `@media (prefers-reduced-motion: reduce)` 兜底系统级偏好；
+- 橡皮筋开关是靠 `width` 变形的，压掉时长仍会留一个静态宽度，`miui-motion.css` 里单独锁死。
 
 ## 改动的文件
 
-`src/motion.js`（新增）、`src/App.jsx`、`src/components/Bookshelf.jsx`、`src/components/BookMarket.jsx`、`src/components/SettingsPanel.jsx`、`src/components/TocPanel.jsx`、`src/components/ShortcutHelp.jsx`、`src/components/LogPanel.jsx`、`src/components/SourcePanel.jsx`、`src/index.css`。
+`src/motion.js`、`src/motion-miui.js`、`src/motion-kit.js`、`src/miui-motion.css`、
+`src/main.jsx`、`src/App.jsx`、`src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`

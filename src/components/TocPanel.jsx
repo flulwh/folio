@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { backdropVariants, sheetVariants } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import { IconList, IconSearch, IconX } from './Icons.jsx';
 import { usePresence } from '../hooks/usePresence.js';
 
@@ -14,6 +14,7 @@ export default function TocPanel({
   onSelect,
   onOpenSettings,
 }) {
+  const kit = useMotionKit();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const listRef = useRef(null);
@@ -86,7 +87,7 @@ export default function TocPanel({
           <motion.div
             key="toc-backdrop"
             className="panel-backdrop"
-            variants={backdropVariants}
+            variants={kit.backdrop}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -96,7 +97,7 @@ export default function TocPanel({
           <motion.aside
             key="toc-panel"
             className="panel toc-panel"
-            variants={sheetVariants('left')}
+            variants={kit.sheet('left')}
             initial="initial"
             animate="animate"
             exit="exit"

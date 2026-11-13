@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import { DUR, EASE, pageVariants, toastVariants, zoomInVariants } from './motion.js';
+import { useMotionKit } from './motion-kit.js';
 import { useAppActions, useBooks, useLoaded, useSettings, useThemeState, useToast } from './store/AppStore.jsx';
 import Bookshelf from './components/Bookshelf.jsx';
 import Reader from './components/Reader.jsx';
@@ -45,6 +45,7 @@ function Splash() {
   );
 }
 function Toast({ toast, onDismiss }) {
+  const kit = useMotionKit();
   return (
     <AnimatePresence>
       {toast && (
@@ -53,7 +54,7 @@ function Toast({ toast, onDismiss }) {
           key={toast.id}
           role="status"
           aria-live="polite"
-          variants={toastVariants}
+          variants={kit.toast}
           initial="initial"
           animate="animate"
           exit="exit"
@@ -85,6 +86,8 @@ function Toast({ toast, onDismiss }) {
 }
 
 export default function App() {
+  // 动效词汇随皮肤切换：Apple 沉降 / MIUI 回弹推进（见 motion-kit.js）
+  const kit = useMotionKit();
   // 只订阅 App 自己真正需要的状态。注意这里刻意不订阅 progress：
   // 阅读进度每滚动一次就变一次，App 一旦订阅它，整个组件树都会跟着重渲染。
   const books = useBooks();
@@ -267,7 +270,7 @@ export default function App() {
   return (
     <MotionConfig
       reducedMotion={settings.reduceMotion ? 'always' : 'never'}
-      transition={{ duration: DUR.base, ease: EASE }}
+      transition={{ duration: kit.dur.base, ease: kit.ease }}
     >
     <div className="app" data-theme={activeTheme?.builtin ? activeTheme.id : activeTheme?.tone === 'dark' ? 'night' : 'paper'} data-theme-id={activeTheme?.id}>
       <AnimatePresence initial={false}>
@@ -279,7 +282,7 @@ export default function App() {
           <motion.div
             key={`reader-${bookForReader.id}`}
             className="view"
-            variants={zoomInVariants}
+            variants={kit.zoom}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -300,7 +303,7 @@ export default function App() {
           <motion.div
             key="market"
             className="view"
-            variants={pageVariants}
+            variants={kit.page}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -316,7 +319,7 @@ export default function App() {
           <motion.div
             key="settings"
             className="view"
-            variants={pageVariants}
+            variants={kit.page}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -329,7 +332,7 @@ export default function App() {
           <motion.div
             key="shelf"
             className="view"
-            variants={pageVariants}
+            variants={kit.page}
             initial="initial"
             animate="animate"
             exit="exit"

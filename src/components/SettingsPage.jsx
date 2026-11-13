@@ -12,7 +12,7 @@ import { parseThemeJson, themeToJson } from '../themes.js';
 import { AUTO_CHAPTER_REGEX, compileRegex } from '../utils/chapters.js';
 import { formatCount } from '../utils/format.js';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
-import { SPRING } from '../motion.js';
+import { useMotionKit } from '../motion-kit.js';
 import SourcePanel from './SourcePanel.jsx';
 import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
@@ -44,13 +44,6 @@ const SECTIONS = [
   { key: 'shortcuts', label: '快捷键', Icon: IconCommand },
   { key: 'about', label: '关于', Icon: IconSettings },
 ];
-
-/** 分区切换的推拉过渡：按导航顺序决定方向，弹簧跟手、可被打断 */
-const sectionVariants = (dir) => ({
-  initial: { opacity: 0, x: dir * 16 },
-  animate: { opacity: 1, x: 0, transition: SPRING.panel },
-  exit: { opacity: 0, x: dir * -12, transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] } },
-});
 
 function Slider({ label, hint, value, min, max, step, unit, onChange }) {
   return (
@@ -91,6 +84,7 @@ function Row({ title, hint, children }) {
 }
 
 export default function SettingsPage({ onClose }) {
+  const kit = useMotionKit();
   const settings = useSettings();
   const sources = useSources();
   const books = useBooks();
@@ -266,7 +260,7 @@ export default function SettingsPage({ onClose }) {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={section}
-                variants={sectionVariants(dir)}
+                variants={kit.section(dir)}
                 initial="initial"
                 animate="animate"
                 exit="exit"
