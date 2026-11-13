@@ -3,7 +3,7 @@
 本文件记录 Folio 的正式版本变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。版本号唯一来源是 `package.json`。
 
-## [Unreleased]
+## [2.2.0] — 2026-11-13
 
 把书架和阅读进度搬到局域网里：手机在同一 Wi-Fi 下用浏览器就能看、能读，读到哪里桌面端就跟到哪里。
 
