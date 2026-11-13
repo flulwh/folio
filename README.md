@@ -2,7 +2,7 @@
 
 一个用 **Electron + React** 打造的极简电子书阅读器。主页就是书架，一切交互都为"读进去"服务：克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
 
-![version](https://img.shields.io/badge/version-2.0.0-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) ![tech](https://img.shields.io/badge/Vite-5-646cff) ![tech](https://img.shields.io/badge/Framer%20Motion-11-9d5cff)
+![version](https://img.shields.io/badge/version-2.1.0-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) ![tech](https://img.shields.io/badge/Vite-5-646cff) ![tech](https://img.shields.io/badge/Framer%20Motion-11-9d5cff)
 
 ---
 
@@ -263,7 +263,7 @@ npm run build:vite
 npm run build
 ```
 
-> 版本号只写在 `package.json`（当前 `2.0.0`）。用 `npm version <new> --no-git-tag-version` 改版本，
+> 版本号只写在 `package.json`（当前 `2.1.0`）。用 `npm version <new> --no-git-tag-version` 改版本，
 > 会同步 `package-lock.json`；界面里的版本由 Vite 的 `__APP_VERSION__` 注入，别再手动硬编码。
 > CI 会跑 `npm run check -- --require-dist`，版本漂移或语法错误直接红灯。
 > 版本变更记录见 [CHANGELOG.md](CHANGELOG.md)，许可证见 [LICENSE](LICENSE)（MIT）。
@@ -274,15 +274,15 @@ npm run build
 > `settings.json`（排版偏好）、`sources.json` / `rules.json` / `cloud/` / `covers/`。
 > 大版本更新中 `appId` 与包名保持不变，升级不会让书架和进度「消失」。
 
-### 打包产物（v2.0.0）
+### 打包产物（v2.1.0）
 
 `npm run build` 在 `release/` 下一次产出四份：
 
 | 产物 | 用途 |
 | --- | --- |
-| `Folio-Setup-2.0.0.exe` | NSIS 安装包：可选安装目录、创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| `Folio-Portable-2.0.0.exe` | 单文件便携版，双击即用；数据默认仍写 userData，可用 `FOLIO_DATA_DIR` 让它跟着 U 盘走 |
-| `Folio-2.0.0-win-x64.zip` | 免安装压缩包，解压后运行 `Folio.exe`（zip 是扁平结构，解压出来就是 exe 本体） |
+| `Folio-Setup-2.1.0.exe` | NSIS 安装包：可选安装目录、创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| `Folio-Portable-2.1.0.exe` | 单文件便携版，双击即用；数据默认仍写 userData，可用 `FOLIO_DATA_DIR` 让它跟着 U 盘走 |
+| `Folio-2.1.0-win-x64.zip` | 免安装压缩包，解压后运行 `Folio.exe`（zip 是扁平结构，解压出来就是 exe 本体） |
 | `win-unpacked/Folio.exe` | 免安装目录版，需连同同目录 dll/pak/locales/resources 一起保留 |
 
 分步构建（输出目录被占用时特别有用）：

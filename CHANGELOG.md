@@ -3,7 +3,62 @@
 本文件记录 Folio 的正式版本变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。版本号唯一来源是 `package.json`。
 
-## [Unreleased]
+## [2.1.0] — 2026-11-13
+
+把 MIUI 皮肤从"换了个颜色"补成"换了一套动态语言"，并修掉三个会让人放弃使用的缺陷。
+三处问题都是先用脚本定量复现、再动手改的，`docs/motion.md` 记了实测数据。
+
+### 界面与交互
+
+- **MIUI 动效独立成语言**：此前 MIUI 只换配色，动效仍是 Apple 那套"沉降"（交叉淡化 +
+  `0.992→1` 缩放、临界阻尼）。现在两套语言并存——Apple 走沉降，MIUI 走**回弹 + 推进**：
+  页面从右侧推入 34px、入书 `0.94→1`「长出来」、悬停只变色不位移、
+  书架级联 26ms（能看出"一列列亮起来"）。
+- **弹簧阻尼比刻意欠阻尼**：MIUI 五档 ζ≈.70–.93，过冲 1–2%；Apple 仍是 0.88–1.00 的临界阻尼。
+- **按压不对称**：按下 80ms 直线到位（"我按到了"），松手 260ms 走
+  `cubic-bezier(0.34,1.56,0.64,1)` 过冲。两个方向都做对称补间只会"淡一下"，这是此前 MIUI 手感发闷的根因。
+- **控件手感重做**：开关橡皮筋（24→30px，位移补偿让右边缘不动）、进度拖动圆点放大 1.55 倍 +
+  7px 光圈、滑杆 4px 轨道 18px 拇指、焦点环由内向外撑开、遮罩 10px 毛玻璃。
+- **新增三个文件**：`src/motion-miui.js`（MIUI 动效词汇）、`src/motion-kit.js`
+  （`useMotionKit()` 皮肤 → 套件映射，两套 kit 键名严格一致）、`src/miui-motion.css`
+  （手感层，在 design/ 之后最后加载）。10 个组件改为按 `settings.skin` 取用。
+
+### 修复
+
+- **启动白屏**：窗口在后台时 Chromium 把 `requestAnimationFrame` 完全冻住（实测 0 帧/秒），
+  而 framer 挂载时已同步写入首帧 `opacity: 0`。动画没有下一帧，整屏停在透明——内容全在，就是看不见。
+  修复为 `webPreferences.backgroundThrottling: false`；实测 dev 3/6 白屏 → 0/6。
+- **切皮肤后设置页空白**：切 Apple/MIUI 再点其他分区，内容停在上一个分区的 exit 终态
+  （`opacity: 0`、位移 12/20px），`AnimatePresence mode="wait"` 等不到退场回调，新分区永不挂载。
+  修复为 presence 树随 `key={skin}` 重建 + variants 引用固定 + 分区方向与分区合并为单次状态更新。
+- **MIUI 下主题颜色与描述不符**：`--accent` 被硬写成 MIUI 蓝、`--bg/--text` 写死纯白纯黑、
+  且 `forest`（冷灰，light 主题）被归进深色分支导致整套变黑。现在**皮肤只负责形态，配色交还主题**，
+  灰阶用 `color-mix` 从 `text/bg` 派生，所有按主题 id 分深浅的地方改按 `data-theme-tone`。
+- **`npm run dev` 在 IPv6 优选的 Windows 上起不来**：Vite 默认 host 解析为 `::1` 只监听 IPv6，
+  而 `wait-on` 与主进程都连 `127.0.0.1`，两边永远对不上。已在 `vite.config.js` 显式 `host: '127.0.0.1'`。
+
+### 行为变化
+
+- **MIUI 皮肤不再固定蓝色**。默认（浅色主题）下为朱砂红，暖沙为米色棕调，冷灰为浅灰绿。
+  皮肤风格改由圆角、灰阶、密度、动效承担，与主题卡的描述一致。
+
+### 工具
+
+- 新增四个回归脚本：`tools/_boot-race.cjs`（启动白屏率）、`tools/_feel.cjs`（逐帧手感测量）、
+  `tools/_settings-blank.cjs`（切皮肤后分区切换）、`tools/_theme-check.cjs`（四主题令牌核对）。
+  前两个补的是真盲区——截图与视觉回归全带 `?static=1`（`skipAnimations`），入场动画被整体跳过，
+  于是 8 张图全绿但用户拿到白屏。
+
+### 已知问题
+
+- **分段滑块是瞬移而非滑动**：两套皮肤、生产构建均如此，`layoutId` 的共享布局动画在这套结构里未生效。
+  修法需拆分语义——书架里拇指是 1px 下划线，设置页是胶囊，统一到容器层驱动会把下划线变成实色块。
+- Apple 的 `SPRING` 缺 `control` 键，`Segmented` 取 `kit.spring.control` 时拿到 `undefined`。
+
+## [2.0.0] — 2026-11-07
+
+「工业级发布」大版本。**业务契约完全不变**：IPC 通道、数据文件格式、UI 交互、书源规则语义均与 1.x 一致，
+升级不影响已有书架、进度、书源与净化规则。
 
 ### 界面与交互（Apple 化）
 
@@ -54,11 +109,6 @@
 - **发版门禁扩充**：`npm run check` 增加「macOS 边框切换端到端」可选项（`--with-frame-e2e`），
   基于 CDP 驱动真实 Electron 窗口，验证开关 → 窗口重建 → 视图与进度还原的完整链路。
 
-## [2.0.0] — 2026-11-07
-
-「工业级发布」大版本。**业务契约完全不变**：IPC 通道、数据文件格式、UI 交互、书源规则语义均与 1.x 一致，
-升级不影响已有书架、进度、书源与净化规则。
-
 ### 发布工程化
 
 - 版本号升至 `2.0.0`，`package.json` / `package-lock.json` 同步；Electron 的 `app.getVersion()` 与
@@ -105,7 +155,7 @@
 > `WriteUninstaller` 出 `uninstaller.exe`（`NsisTarget.js` 的两阶段编译）。这一步在部分系统上会失败
 > 并报 `Exit code: 2`——此时 `.onInit` 根本不会被调用，连裸 NSIS 脚本都跑不起来，属环境限制而非配置问题。
 > 本项目改用 electron-builder 自带的 `UninstallerReader`（纯 JS 解析 PE 节表 + NSIS 数据块，
-> 不执行任何 exe）提取卸载器，详见下方 [Unreleased] 的「打包」小节。
+> 不执行任何 exe）提取卸载器，详见上方「打包」小节。
 
 ## [1.0.0]
 
