@@ -15,6 +15,11 @@ const CDP = Number(process.env.CDP_PORT || 9222);
 const DATA_DIR = process.env.FOLIO_DATA_DIR || path.join(__dirname, '..', '.folio-test-data');
 const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 
+// 每次从固定位置开始：否则上次运行留下的进度会改变排序和「未读」筛选结果。
+fs.writeFileSync(PROGRESS_FILE, JSON.stringify({
+  'lan-demo': { paraIndex: 18, percent: 12, chapterTitle: '第二章 灯火', updatedAt: Date.now() },
+}, null, 2), 'utf8');
+
 const getJson = (p) =>
   new Promise((resolve, reject) => {
     http
@@ -141,11 +146,46 @@ const ok = (name, cond, extra = '') => {
   ok('没有横向溢出', mobile.overflowX === false);
   await shot('_lan-panel-mobile.png');
 
+  /* ---------- 新版书架：搜索、筛选与列表布局 ---------- */
+  await js(`(() => {
+    const input = document.getElementById('bookSearch');
+    input.value = '夜航';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  const searched = JSON.parse((await js(`(() => JSON.stringify({
+    cards: document.querySelectorAll('.card').length,
+    title: document.querySelector('.card-title')?.textContent || '',
+    count: document.getElementById('bookCount').textContent,
+  }))()`)) || '{}');
+  ok('书架搜索能缩小结果', searched.cards === 1 && searched.title === '夜航西飞', JSON.stringify(searched));
+
+  await js(`(() => {
+    const input = document.getElementById('bookSearch');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('[data-filter="unread"]').click();
+    return true;
+  })()`);
+  // 期望值从服务端当前数据算：桌面端进程里可能还留着上次的进度，不能写死数量。
+  const expectedUnread = await js(
+    `fetch('/api/state', { cache: 'no-store' }).then((r) => r.json()).then((d) => d.books.filter((b) => !(d.progress[b.id] && Number(d.progress[b.id].percent) > 0)).length)`
+  );
+  ok('未读筛选生效', (await js(`document.querySelectorAll('.card').length`)) === expectedUnread, `期望 ${expectedUnread}`);
+  await js(`document.querySelector('[data-filter="all"]').click(); document.getElementById('listLayout').click();`);
+  const listLayout = JSON.parse((await js(`(() => JSON.stringify({
+    layout: document.getElementById('grid').dataset.layout,
+    cols: getComputedStyle(document.getElementById('grid')).gridTemplateColumns.split(' ').length,
+    overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
+  }))()`)) || '{}');
+  ok('列表视图生效且不横向溢出', listLayout.layout === 'list' && listLayout.cols === 1 && !listLayout.overflowX, JSON.stringify(listLayout));
+  await js(`document.getElementById('gridLayout').click();`);
+
   /* ---------- 打开一本书阅读 ---------- */
   const before = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'));
   const entryBefore = before['lan-demo'] || {};
 
-  await js(`(() => { const c = document.querySelector('.card'); c.click(); return true; })()`);
+  await js(`(() => { const c = document.querySelector('.card[data-book-id="lan-demo"]'); c.click(); return true; })()`);
   await sleep(1600);
 
   const reader = JSON.parse(
@@ -164,6 +204,59 @@ const ok = (name, cond, extra = '') => {
   ok('正文段落渲染出来了', reader.paras > 50, `${reader.paras} 段`);
   ok('按上次位置恢复（不是从头）', reader.scrollTop > 200, `scrollTop=${reader.scrollTop}`);
   await shot('_lan-panel-reader.png');
+
+  /* ---------- 本地书目录、目录搜索与跳转 ---------- */
+  await js(`document.getElementById('openToc').click();`);
+  await sleep(350);
+  const localToc = JSON.parse((await js(`(() => JSON.stringify({
+    open: !document.getElementById('tocSheet').hidden,
+    rows: document.querySelectorAll('.toc-row').length,
+    current: document.querySelector('.toc-row.current')?.dataset.i || '',
+  }))()`)) || '{}');
+  ok('本地书自动识别出目录', localToc.open && localToc.rows === 6, JSON.stringify(localToc));
+  await js(`(() => {
+    const input = document.getElementById('tocSearch');
+    input.value = '第五';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  ok('目录可以按标题搜索', (await js(`document.querySelectorAll('.toc-row').length`)) === 1);
+  await js(`document.querySelector('.toc-row').click();`);
+  await sleep(450);
+  ok('目录跳转到第五章', (await js(`document.getElementById('readerChapter').textContent`)).includes('第五章'));
+
+  /* ---------- 阅读偏好、本机夜间主题与沉浸模式 ---------- */
+  await js(`document.getElementById('readerSettings').click();`);
+  await sleep(250);
+  await js(`document.querySelector('[data-theme-choice="night"]').click(); document.getElementById('fontUp').click();`);
+  const prefs = JSON.parse((await js(`(() => JSON.stringify({
+    open: !document.getElementById('prefsSheet').hidden,
+    tone: document.documentElement.dataset.tone,
+    size: getComputedStyle(document.documentElement).getPropertyValue('--reading-size').trim(),
+    saved: (localStorage.getItem('folio.lan.prefs.v2') || '').includes('night'),
+  }))()`)) || '{}');
+  ok('阅读设置面板与本机夜间主题生效', prefs.open && prefs.tone === 'dark' && prefs.saved, JSON.stringify(prefs));
+  ok('字号调整立即生效', prefs.size === '19px', prefs.size);
+  await shot('_lan-panel-preferences.png');
+  await js(`document.querySelector('[data-theme-choice="follow"]').click(); document.getElementById('fontDown').click(); document.getElementById('prefsClose').click();`);
+  await js(`document.getElementById('paper').click();`);
+  ok('点正文进入沉浸模式', await js(`document.getElementById('readerView').classList.contains('chrome-hidden')`));
+  await js(`document.getElementById('paper').click();`);
+
+  /* ---------- 进度条定位 ---------- */
+  await js(`(() => {
+    const range = document.getElementById('progressRange');
+    range.value = '500';
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    range.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await sleep(450);
+  const sought = JSON.parse((await js(`(() => JSON.stringify({
+    pct: document.getElementById('readerPct').textContent,
+    scrollTop: Math.round(document.getElementById('readerScroll').scrollTop),
+  }))()`)) || '{}');
+  ok('拖动进度条能定位正文', sought.scrollTop > 500 && Math.abs(parseInt(sought.pct) - 50) <= 4, JSON.stringify(sought));
 
   /* ---------- 滚动 → 进度写回磁盘 ---------- */
   // 目标比例要和当前位置拉开距离：重复跑这个脚本时，上次就停在同一个百分比上，
