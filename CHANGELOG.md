@@ -3,7 +3,10 @@
 本文件记录 Folio 的正式版本变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。版本号唯一来源是 `package.json`。
 
-## [未发布]
+## [2.4.0] — 2026-11-13
+
+局域网面板从「能看书」重做成「能长期用的手机书房」，同时下线插件系统，
+并修掉两个会在真机上遇到的同步缺陷。
 
 ### 移除
 
