@@ -272,7 +272,15 @@ export default function App() {
       reducedMotion={settings.reduceMotion ? 'always' : 'never'}
       transition={{ duration: kit.dur.base, ease: kit.ease }}
     >
-    <div className="app" data-theme={activeTheme?.builtin ? activeTheme.id : activeTheme?.tone === 'dark' ? 'night' : 'paper'} data-theme-id={activeTheme?.id}>
+    {/* data-theme-tone 是皮肤（尤其 MIUI）分深浅灰阶的依据，必须挂在 .app 上：
+        applyTheme 只写到 html / body，而主题令牌（--bg 等）是在 .app 上覆盖的，
+        放在 html 上会被 .app 的同名令牌压回去。 */}
+    <div
+      className="app"
+      data-theme={activeTheme?.builtin ? activeTheme.id : activeTheme?.tone === 'dark' ? 'night' : 'paper'}
+      data-theme-id={activeTheme?.id}
+      data-theme-tone={activeTheme?.tone || 'light'}
+    >
       <AnimatePresence initial={false}>
         {!loaded ? (
           <Splash key="splash" />

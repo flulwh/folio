@@ -82,10 +82,10 @@ function process(source) {
 }
 
 const header = `/* ==========================================================================
-   Miuix Console · 视觉层（精确移植 bmbxwbh/miuix-console 的 design token）
+   Miuix Console · 视觉层（由 src/miui.css 作用域化生成）
    ────────────────────────────────────────────────────────────────────────
-   由 miui.css 作用域化而来：所有规则挂在 [data-skin='miui'] 下，
-   与 apple.css 的 Apple 风格并存，由「设置 → 外观 → 界面风格」切换。
+   所有规则挂在 [data-skin='miui'] 下，与 apple.css 的 Apple 风格并存，
+   由「设置 → 外观 → 界面风格」切换。
    不要直接改这个文件；改 src/miui.css 后重新执行 tools/_scope-skin.mjs。
    ========================================================================== */
 

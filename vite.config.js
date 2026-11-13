@@ -56,6 +56,12 @@ export default defineConfig({
     },
   },
   server: {
+    // 必须显式绑 IPv4。Vite 的默认 host 是 'localhost'，在 Node 18+ 的 Windows 上
+    // 会优先解析成 ::1（IPv6），只监听 IPv6 回环；而主进程 electron/main.js 加载的是
+    // http://127.0.0.1:5173，dev:electron 的 wait-on 等的也是 127.0.0.1。
+    // 结果就是 wait-on 永远等不到、Electron 起不来（或起来后白屏）。
+    // 写死 127.0.0.1 让三者用同一个地址族。
+    host: '127.0.0.1',
     port: 5173,
     strictPort: false,
   },

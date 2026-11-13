@@ -676,6 +676,14 @@ function createWindow(options = {}) {
       // 渲染进程代码缓存：让 Chromium 把编译后的 JS 存到磁盘，
       // 第二次启动解析同一份 JS 会快一截（配合下面的手动分包收益更明显）。
       v8CacheOptions: 'code',
+      // 窗口在后台 / 被遮挡时不要把渲染帧降频。
+      // 默认 true 会让 Chromium 把这类窗口的 requestAnimationFrame 压到 ~1Hz 甚至 0，
+      // 而 framer-motion 的入场动画全靠 rAF 推进：挂载瞬间写下的首帧 opacity:0
+      // 之后就再也没有下一帧，表现是「内容都在、整屏透明」的白屏，
+      // 直到用户点了窗口（visibility 变回 visible）才突然亮起来。实测 hidden 状态下
+      // rAF 为 0 帧/秒、窗口前置后恢复到 ~145 帧/秒。
+      // 代价是后台也保留少量定时器开销，对一个本地阅读器可以接受。
+      backgroundThrottling: false,
     },
   });
 

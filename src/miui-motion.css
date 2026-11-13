@@ -32,20 +32,20 @@
 
 /* 依赖主题的令牌定义在 .app 上（它同时带 data-theme），而不是 html。
    原因：--accent / --bg-elevated 在 html 上是编辑风的纸色与朱砂，
-   MIUI 的蓝与白只覆盖 .app 子树；在 html 上定义 var() 会提前替换成错的那一档
+   皮肤要在 .app 子树里换掉它们；在 html 上定义 var() 会提前替换成错的那一档
    （实测：选中文字拿到了朱砂，滑块拿到了纸白）。 */
 [data-skin='miui'] [data-theme] {
-  /* 滑块抬起的表面色。浅色直接用 --bg-elevated（白）。 */
+  /* 滑块抬起的表面色。浅色直接用 --bg-elevated。 */
   --mi-raised: var(--bg-elevated);
   --mi-seg-active: var(--accent);
 }
 
-/* 夜间必须单独提亮滑块 —— MIUI 深色里 --bg-elevated(#1c1c1c) 比轨道
-   --mi-s3(#242424) 还暗，直接用它会让"选中"比"未选中"更靠里，层级是反的。
-   文字同理：--accent(#277af7) 压在近黑底上对比度只有 3.9，小字发虚；
-   --mi-primary-hover 是同一支蓝的亮阶，语义不变、可读。 */
-[data-skin='miui'] [data-theme='night'],
-[data-skin='miui'] [data-theme='forest'] {
+/* 夜间必须单独提亮滑块 —— 深色主题里 --bg-elevated 比轨道
+   --mi-s3(color-mix 自 bg) 还暗，直接用它会让"选中"比"未选中"更靠里，层级是反的。
+   文字同理：深色下的 --accent 压在近黑底上对比度偏低，小字发虚；
+   --mi-primary-hover 是同一支颜色的亮阶，语义不变、可读。
+   按 tone 判断，不按主题 id：forest（冷灰）是浅色主题，不能进这一桶。 */
+[data-skin='miui'] [data-theme-tone='dark'] {
   --mi-raised: color-mix(in srgb, var(--bg-elevated) 86%, var(--text));
   --mi-seg-active: var(--mi-primary-hover);
 }

@@ -98,3 +98,49 @@ settle / spring / dur / ease / chrome / section`），缺一个切皮肤时就�
 
 `src/motion.js`、`src/motion-miui.js`、`src/motion-kit.js`、`src/miui-motion.css`、
 `src/main.jsx`、`src/App.jsx`、`src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`
+
+## 实测数据（脚本测得，非目测）
+
+工具：`tools/_feel.cjs`（用 CDP 注入 rAF 采样器 + 真实鼠标事件，逐帧记录一个标量），
+`tools/_boot-race.cjs`（连续 reload，固定时刻采 `opacity`，统计白屏率）。
+
+| 控件 | 按下 | 松手回弹 | 稳定 |
+|---|---|---|---|
+| 主按钮 `.btn` | `1 → 0.96`，约 90ms 到位 | 冲到 `1.004`（+0.39%），约 350ms | ≈430ms |
+| 开关 `.switch::after` | `24 → 30px`（+25%），右边缘不动 | 无（宽度走 ease-out，设计如此） | ≈780ms |
+| 分段滑块 | — | — | 见下方「已知问题」 |
+
+主按钮那条曲线（`scale` 随时间）就是「按下不对称」原则的直接证据：
+`1 → 0.97 → 0.96（保持）→ 松手 → 0.977 → 0.989 → 0.998 → 1.002 → 1.004 → 回落 → 1`。
+按压段是瞬时的，回弹段是弹簧并越过 1 —— 两个方向都做对称补间的话，这条曲线会是一条平滑的 S 形，
+读起来只是「淡了一下」。
+
+## 已知问题
+
+**1. 冷启动偶发白屏（已修）**
+
+窗口在后台或被遮挡时，Chromium 会把该窗口的 `requestAnimationFrame` 压到约 1Hz 甚至 0。
+framer 的入场动画全靠 rAF 推进：挂载瞬间写下的首帧 `opacity: 0` 之后再也没有下一帧，
+表现就是「内容都在、整屏透明」，用户点了窗口才突然亮起来。
+实测 `visibility: hidden` 时 rAF 为 **0 帧/秒**，窗口前置后恢复到 ~145 帧/秒。
+
+修复在 `electron/main.js` 的 `webPreferences.backgroundThrottling: false`。
+验证：`node tools/_boot-race.cjs 6 --keep-bg`（不把窗口提前置），dev 与生产构建各 6 次，白屏率均为 0/6。
+
+> 顺带暴露了一个检查盲区：截图与视觉回归全部带 `?static=1`（`MotionGlobalConfig.skipAnimations`），
+> 入场动画被整体跳过，所以 8 张图全绿也发现不了白屏。需要回归时用 `_boot-race.cjs`，它不跳过动画。
+
+**2. 分段控件的拇指是「瞬移」而不是「滑过去」（未修，两套皮肤都如此）**
+
+`Segmented.jsx` 用的是 `{active && <motion.span layoutId=…/>}`，设计意图是共用布局动画。
+逐帧采样内联 `transform` 得到的序列是 `79.27 → 79.03 → 79.03 → 3`：两帧之间直接跳完，
+中间没有任何过渡帧（生产构建同样，不只是 dev 的 StrictMode 现象）。
+即 framer 的 layoutId 投影在这套结构里从未生效，之前文档里「会滑的白色药丸」的说法不成立。
+
+另有一处独立缺陷：`motion.js` 的 `SPRING` 里没有 `control` 键，而 `Segmented` 取的是
+`kit.spring.control`，Apple 皮肤拿到的是 `undefined`（MIUI 有）。
+
+修法不能只改 JS：书架的拇指在设计层里是 `1px` 下划线（`design/shelf.css` 的
+`.shelf-tools .segmented-thumb { inset: auto 0 0 0; height: 1px }`），设置页是胶囊，
+两处语义不同。把拇指从选中项提到容器层统一驱动位移，会把下划线变成一个 26px 高的实色块。
+需要先在设计层把两种形态显式区分，再改组件，因此留作单独一轮处理。

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   useAppActions,
@@ -98,7 +98,6 @@ export default function SettingsPage({ onClose }) {
     saveCustomTheme,
     removeCustomTheme,
   } = useAppActions();
-  const [section, setSection] = useState('appearance');
 
   // 排版预览的字体栈：与阅读器保持一致（用户字体优先）
   const previewFontStack = useMemo(
@@ -108,16 +107,31 @@ export default function SettingsPage({ onClose }) {
         : `var(--font-${settings.fontFamily})`,
     [settings.userFont, settings.fontFamily]
   );
-  // 分区切换方向：按导航顺序决定内容是推入还是推出
-  const [dir, setDir] = useState(1);
-  const prevSection = useRef(section);
-  useEffect(() => {
-    const order = SECTIONS.map((item) => item.key);
-    const from = order.indexOf(prevSection.current);
-    const to = order.indexOf(section);
-    setDir(to >= from ? 1 : -1);
-    prevSection.current = section;
-  }, [section]);
+  /*
+   * 分区与方向放在同一个 state 里，点击时一次算准。
+   *
+   * 原来分两个 state（section + effect 里补 dir），点一下会渲染两次：
+   * 第一次用旧方向挂上新分区，第二次才把方向改对 → variants 对象在退场动画
+   * 进行中被换掉，AnimatePresence 的 onExitComplete 就再也不会回调，
+   * 旧分区停在 opacity:0 永不卸载，mode="wait" 也就永远不挂新内容（表现为空白）。
+   */
+  const [nav, setNav] = useState({ section: 'appearance', dir: 1 });
+  const { section, dir } = nav;
+  const goSection = useCallback((key) => {
+    setNav((prev) => {
+      if (prev.section === key) return prev;
+      const order = SECTIONS.map((item) => item.key);
+      return { section: key, dir: order.indexOf(key) >= order.indexOf(prev.section) ? 1 : -1 };
+    });
+  }, []);
+
+  /*
+   * 变体必须是稳定引用。
+   * kit.section(dir) 每次渲染都会新建对象，而 framer 通过引用判断"动画定义变了没有"；
+   * 拖动滑杆、切开关这类无关重渲染都会让引用变化，从而把进行中的退场动画判成被替换，
+   * onExitComplete 丢失 → 旧分区留在 opacity:0、新分区永不挂载。
+   */
+  const sectionVariants = useMemo(() => kit.section(dir), [kit, dir]);
   const [regexDraft, setRegexDraft] = useState(settings.chapterRegex || '');
   const [regexError, setRegexError] = useState('');
   const [proxyDraft, setProxyDraft] = useState(settings.proxy || '');
@@ -246,7 +260,7 @@ export default function SettingsPage({ onClose }) {
             <button
               key={key}
               className={`settings-nav-item${section === key ? ' active' : ''}`}
-              onClick={() => setSection(key)}
+              onClick={() => goSection(key)}
             >
               <Icon size={16} />
               <span>{label}</span>
@@ -257,10 +271,17 @@ export default function SettingsPage({ onClose }) {
 
         <div className="settings-main">
           <div className="settings-main-inner">
-            <AnimatePresence mode="wait" initial={false}>
+            {/*
+              key={settings.skin}：切皮肤会让 MotionConfig 的默认 transition 和整套
+              variants 同时换掉。AnimatePresence 内部记录退场状态的那份 presence
+              数据会因此失配——之后任何一次分区切换，退场元素都停在 opacity:0 不再卸载，
+              mode="wait" 于是永远等不到回调，整块内容空白。
+              给它一个跟皮肤绑定的 key，切皮肤时整个 presence 树重建，状态天然干净。
+            */}
+            <AnimatePresence key={settings.skin} mode="wait" initial={false}>
               <motion.div
                 key={section}
-                variants={kit.section(dir)}
+                variants={sectionVariants}
                 initial="initial"
                 animate="animate"
                 exit="exit"
@@ -269,7 +290,10 @@ export default function SettingsPage({ onClose }) {
               <>
                 <section className="settings-group">
                   <h3 className="settings-group-title">界面风格</h3>
-                  <Row title="外观语言" hint="Apple 克制风，或 MIUI Console 风；两套皮肤即时切换">
+                  <Row
+                    title="外观语言"
+                    hint="Apple 克制风，或 MIUI Console 风；两套皮肤即时切换。皮肤决定形态与动效，配色跟随上方主题"
+                  >
                     <Segmented
                       options={[
                         { value: 'apple', label: 'Apple' },

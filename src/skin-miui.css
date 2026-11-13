@@ -1,28 +1,33 @@
 /* ==========================================================================
-   Miuix Console · 视觉层（精确移植 bmbxwbh/miuix-console 的 design token）
+   Miuix Console · 视觉层（由 src/miui.css 作用域化生成）
    ────────────────────────────────────────────────────────────────────────
-   由 miui.css 作用域化而来：所有规则挂在 [data-skin='miui'] 下，
-   与 apple.css 的 Apple 风格并存，由「设置 → 外观 → 界面风格」切换。
+   所有规则挂在 [data-skin='miui'] 下，与 apple.css 的 Apple 风格并存，
+   由「设置 → 外观 → 界面风格」切换。
    不要直接改这个文件；改 src/miui.css 后重新执行 tools/_scope-skin.mjs。
    ========================================================================== */
 
 /* ==========================================================================
-   Miuix Console · 视觉层（精确移植 bmbxwbh/miuix-console 的 design token）
+   Miuix Console · 视觉层（移植 bmbxwbh/miuix-console 的形态语言）
    ────────────────────────────────────────────────────────────────────────
    在 index.css 与 apple.css 之后加载，用 !important 反向覆盖 iOS 扁平风。
-   Token 直接来自 miuix-console 的 core/tokens.css：
-   主色蓝 #3482FF（深 #277AF7）· 平滑圆角 16px · 柔和弥散阴影 · 弹簧动效 ·
-   MiSans 字体 · 深色优先（5 级 Surface）。
+   形态与度量来自 miuix-console 的 core/tokens.css：
+   平滑圆角 16px · 五级 Surface · 柔和弥散阴影 · 弹簧动效 · MiSans 字体 · 深色优先。
+   配色不来自它：主色跟随「设置 → 主题」的 --accent，皮肤只负责形态。
    正文阅读区（.reader 排版）保持克制。
    ========================================================================== */
 
 /* ------------------------------- tokens --------------------------------- */:root{
-  /* Primary（来自 Miuix lightColorScheme） */
-  --mi-primary: #3482ff;
-  --mi-primary-hover: #5d9bff;
-  --mi-primary-active: #277af7;
-  --mi-primary-glow: rgba(52, 130, 255, 0.12);
-  --mi-tertiary-container: #eaf2ff;
+  /*
+   * Primary 不再写死 #3482FF，改为跟随主题的强调色。
+   * 原来固定蓝色，导致设置页里"暖沙 / 冷灰"这些主题选完界面仍是蓝的——
+   * 主题卡写着什么颜色，界面就该是什么颜色。
+   * MIUI 的风格由形态承担（圆角 / 灰阶 surface / 密度 / 动效），不靠一个蓝色撑着。
+   */
+  --mi-primary: var(--accent);
+  --mi-primary-hover: color-mix(in srgb, var(--accent) 78%, #ffffff);
+  --mi-primary-active: color-mix(in srgb, var(--accent) 86%, #000000);
+  --mi-primary-glow: var(--accent-soft);
+  --mi-tertiary-container: color-mix(in srgb, var(--accent) 10%, var(--bg));
 
   /* Error */
   --mi-error: #e94634;
@@ -47,44 +52,27 @@
     'Microsoft YaHei', sans-serif;
 }
 
-/* 浅色主题（paper / sepia）：Miuix lightColorScheme */[data-skin='miui'] [data-theme='paper'],
-[data-skin='miui'] [data-theme='sepia']{
-  --accent: #3482ff;
-  --accent-soft: rgba(52, 130, 255, 0.12);
-  --accent-glow: rgba(52, 130, 255, 0.25);
-  --bg: #ffffff;
-  --bg-elevated: #ffffff;
-  --bg-sunken: #f7f7f7;
-  --text: #000000;
-  --text-soft: rgba(0, 0, 0, 0.6);
-  --text-faint: rgba(0, 0, 0, 0.4);
-  --line: #e0e0e0;
-  --mi-border: #d9d9d9;
-  --mi-s3: #e8e8e8;
-  --mi-s4: #e8e8e8;
-  --mi-s-hover: rgba(0, 0, 0, 0.04);
-  --mi-s-active: rgba(0, 0, 0, 0.07);
-  --mi-shadow: var(--mi-sh1);
-  --mi-shadow-lg: var(--mi-sh3);
+/*
+ * 结构灰阶全部从主题的 --text / --bg 派生，皮肤不再自带一套白/黑。
+ *
+ * 之前这里把 --bg / --text / --line 写死成纯白与纯黑，于是四个主题在 MIUI 下
+ * 只剩两种外观：浅色主题一律纯白、深色主题一律纯黑，"暖沙"的米色和"冷灰"的
+ * 青灰全都看不见——主题卡画什么颜色、界面就该是什么颜色。
+ * 现在 MIUI 只负责形态（圆角 / 密度 / 阴影 / 字体 / 动效），配色归主题。
+ *
+ * 顺带修掉一个把 forest 归错桶的 bug：原先按主题 id 分深浅，
+ * 而 forest（冷灰）的 tone 是 light，被归进深色分支后整套界面直接变黑。
+ */[data-skin='miui'] [data-theme-tone]{
+  --mi-border: color-mix(in srgb, var(--text) 15%, transparent);
+  --mi-s3: color-mix(in srgb, var(--text) 9%, var(--bg));
+  --mi-s4: color-mix(in srgb, var(--text) 13%, var(--bg));
+  --mi-s-hover: color-mix(in srgb, var(--text) 4%, transparent);
+  --mi-s-active: color-mix(in srgb, var(--text) 7%, transparent);
+  --mi-shadow: 0 1px 4px color-mix(in srgb, #000 8%, transparent);
+  --mi-shadow-lg: 0 8px 32px color-mix(in srgb, #000 10%, transparent);
 }
 
-/* 深色主题（night / forest）：Miuix darkColorScheme（5 级 Surface） */[data-skin='miui'] [data-theme='night'],
-[data-skin='miui'] [data-theme='forest']{
-  --accent: #277af7;
-  --accent-soft: rgba(39, 122, 247, 0.15);
-  --accent-glow: rgba(39, 122, 247, 0.3);
-  --bg: #161616;
-  --bg-elevated: #1c1c1c;
-  --bg-sunken: #0c0c0c;
-  --text: #f2f2f2;
-  --text-soft: rgba(255, 255, 255, 0.6);
-  --text-faint: rgba(255, 255, 255, 0.4);
-  --line: #404040;
-  --mi-border: #484848;
-  --mi-s3: #242424;
-  --mi-s4: #2c2c2c;
-  --mi-s-hover: rgba(255, 255, 255, 0.04);
-  --mi-s-active: rgba(255, 255, 255, 0.07);
+/* 深色下阴影要更实，否则在近黑底上看不见层次 */[data-skin='miui'] [data-theme-tone='dark']{
   --mi-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   --mi-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
 }
@@ -106,9 +94,10 @@
 /* 恢复氛围层：极淡的蓝色光晕 */[data-skin='miui'] .app::before{
   content: '' !important;
   display: block !important;
+  /* 氛围光晕取自当前主题的强调色，而不是固定的 MIUI 蓝 */
   background:
-    radial-gradient(50% 42% at 12% -8%, rgba(52, 130, 255, 0.06), transparent 70%),
-    radial-gradient(42% 38% at 88% -4%, rgba(39, 122, 247, 0.04), transparent 72%) !important;
+    radial-gradient(50% 42% at 12% -8%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+    radial-gradient(42% 38% at 88% -4%, color-mix(in srgb, var(--accent) 4%, transparent), transparent 72%) !important;
 }
 
 /* ------------------------------ buttons --------------------------------- */[data-skin='miui'] .btn{
@@ -283,9 +272,9 @@
   width: 34px !important;
   height: 34px !important;
   border-radius: 11px !important;
-  background: linear-gradient(160deg, #5d9bff 0%, #3482ff 100%) !important;
+  background: linear-gradient(160deg, var(--mi-primary-hover) 0%, var(--accent) 100%) !important;
   border: none;
-  box-shadow: 0 2px 8px rgba(76, 139, 245, 0.3) !important;
+  box-shadow: 0 2px 8px var(--accent-soft) !important;
 }[data-skin='miui'] .brand-name{
   font-family: var(--mi-font) !important;
   font-size: 18px !important;
@@ -659,22 +648,18 @@
   }
 }
 
-/* ---------------------------- 深色主题微调 ------------------------------ */[data-skin='miui'] [data-theme='night'] .toast,
-[data-skin='miui'] [data-theme='forest'] .toast{
+/* ---------------------------- 深色主题微调 ------------------------------ */
+/* 按 tone 判断：forest（冷灰）是浅色主题，不该走这里 */[data-skin='miui'] [data-theme-tone='dark'] .toast{
   background: #2a2a2e;
   color: #fff;
-}[data-skin='miui'] [data-theme='night'] .cover-badge,
-[data-skin='miui'] [data-theme='forest'] .cover-badge{
+}[data-skin='miui'] [data-theme-tone='dark'] .cover-badge{
   background: rgba(40, 40, 44, 0.85);
   color: #fff;
 }
 
-/* 深色主题卡片内高光（Miuix dark signature depth） */[data-skin='miui'] [data-theme='night'] .continue-card,
-[data-skin='miui'] [data-theme='forest'] .continue-card,
-[data-skin='miui'] [data-theme='night'] .modal,
-[data-skin='miui'] [data-theme='forest'] .modal,
-[data-skin='miui'] [data-theme='night'] .shortcuts,
-[data-skin='miui'] [data-theme='forest'] .shortcuts{
+/* 深色主题卡片内高光（Miuix dark signature depth） */[data-skin='miui'] [data-theme-tone='dark'] .continue-card,
+[data-skin='miui'] [data-theme-tone='dark'] .modal,
+[data-skin='miui'] [data-theme-tone='dark'] .shortcuts{
   box-shadow: var(--mi-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
 }
 
