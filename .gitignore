@@ -36,3 +36,11 @@ docs/*.png
 docs/*.jpg
 docs/*.jpeg
 docs/*.gif
+
+# Android 构建产物与本地工具链
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+.tools/
