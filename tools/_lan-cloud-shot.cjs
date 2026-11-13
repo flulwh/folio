@@ -204,7 +204,7 @@ function seedCloudBook() {
         open: view && !view.hidden,
         paras: document.querySelectorAll('#paper p').length,
         chapter: chapter.textContent,
-        clickable: chapter.classList.contains('link') && chapter.disabled === false,
+        clickable: chapter.classList.contains('link') && document.getElementById('readerMeta').disabled === false,
         prevHref: !document.getElementById('prevChapter').hidden,
         nextHref: !document.getElementById('nextChapter').hidden,
         pct: document.getElementById('readerPct').textContent,
@@ -261,6 +261,20 @@ function seedCloudBook() {
   ok('当前章在可视区内', sheet.visible === true, `scrollTop=${sheet.scrollTop}`);
   await shot('_lan-cloud-toc.png');
 
+  await js(`(() => {
+    const input = document.getElementById('tocSearch');
+    input.value = '第 20 章';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  ok('云端目录也能按标题搜索', (await js(`document.querySelectorAll('.toc-row').length`)) === 1);
+  await js(`(() => {
+    const input = document.getElementById('tocSearch');
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+
   await js(`(() => { document.querySelector('.toc-row[data-i="2"]').click(); return true; })()`);
   await sleep(2200);
   const jumped = JSON.parse(
@@ -301,6 +315,27 @@ function seedCloudBook() {
     Number(inApp.chapter) === Number(saved.chapter) && Number(inApp.windowBase) === Number(saved.windowBase),
     `chapter ${inApp.chapter} vs ${saved.chapter}`
   );
+
+  /* ---------- 进度条按全书比例跳转 ---------- */
+  await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  await call('Page.navigate', { url: `${base}/?t=${token}#${encodeURIComponent(BOOK_ID)}` });
+  await sleep(2400);
+  await js(`(() => {
+    const range = document.getElementById('progressRange');
+    range.value = '600';
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    range.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  await sleep(2600);
+  const seeked = JSON.parse(
+    (await js(`(() => JSON.stringify({
+      chapter: document.getElementById('readerChapter').textContent,
+      paras: document.querySelectorAll('#paper p').length,
+    }))()`)) || '{}'
+  );
+  ok('拖动进度条跳到全书 60% 附近', String(seeked.chapter).includes('第 19 章'), seeked.chapter);
+  ok('跳转后正文已加载', seeked.paras > 20, `${seeked.paras} 段`);
 
   console.log(`\n${failed ? '✗' : '✓'} ${failed} 项失败`);
   ws.close();
