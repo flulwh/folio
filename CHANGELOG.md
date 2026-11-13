@@ -3,6 +3,20 @@
 本文件记录 Folio 的正式版本变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。版本号唯一来源是 `package.json`。
 
+## [未发布]
+
+### 文档
+
+- **README 重写为双层结构**：README 只保留「怎么用起来」——下载、30 秒上手、核心能力、
+  数据位置、快捷键、开发命令；实现细节下沉到 `docs/`
+- 新增 `docs/sources.md`：书源与净化规则的完整规格（规则语法全集、脚本 API、
+  目录/正文兜底、正文净化、云端阅读、漫画）
+- 新增 `docs/architecture.md`：进程模型、目录职责、关键设计取舍、主题与动效系统
+- 新增 `docs/performance.md`：实测基线、虚拟滚动分块测量、高度缓存、书源引擎优化、回归工具
+- 新增 `docs/troubleshooting.md`：启动白屏、沙箱、`ELECTRON_RUN_AS_NODE`、npm 11、
+  书源导入报错、代理等常见坑
+- `docs/README.md` 改成文档索引
+
 ## [2.3.0] — 2026-11-13
 
 把局域网面板里云端书的那块空缺补上：现在手机上也能翻目录、读章节，
