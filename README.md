@@ -10,27 +10,27 @@
 
 | 书架（空态） | 书架（有书 + 继续阅读） |
 | --- | --- |
-| ![书架空态](docs/shelf-empty.png) | ![书架](docs/bookshelf.png) |
+| ![书架空态](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/shelf-empty.png) | ![书架](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/bookshelf.png) |
 
 | 沉浸阅读 | 自动滚动（可调速） |
 | --- | --- |
-| ![阅读器](docs/reader.png) | ![自动滚动](docs/auto-scroll.png) |
+| ![阅读器](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/reader.png) | ![自动滚动](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/auto-scroll.png) |
 
 | 拖动进度条 | 目录（正则识别） | 阅读设置 | 深色主题 |
 | --- | --- | --- | --- |
-| ![拖动进度条](docs/scrub.png) | ![目录](docs/toc.png) | ![设置](docs/settings.png) | ![深色](docs/night.png) |
+| ![拖动进度条](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/scrub.png) | ![目录](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/toc.png) | ![设置](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/settings.png) | ![深色](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/night.png) |
 
 | 外部书源 | 净化规则 | 网上搜书 | 云端阅读（书源正文） |
 | --- | --- | --- | --- |
-| ![书源](docs/sources.png) | ![净化规则](docs/rules.png) | ![搜书](docs/cloud-search.png) | ![云端阅读](docs/cloud-reader.png) |
+| ![书源](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/sources.png) | ![净化规则](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/rules.png) | ![搜书](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/cloud-search.png) | ![云端阅读](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/cloud-reader.png) |
 
 | 书源仓库 | 书源合集 | 云端书封面（本地缓存） |
 | --- | --- | --- |
-| ![书源仓库](docs/repo.png) | ![书源合集](docs/repo-collections.png) | ![封面](docs/cloud-cover.png) |
+| ![书源仓库](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/repo.png) | ![书源合集](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/repo-collections.png) | ![封面](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/cloud-cover.png) |
 
 | 漫画阅读（图片书） | 运行日志（调试） |
 | --- | --- |
-| ![漫画阅读](docs/comic.png) | ![运行日志](docs/logs.png) |
+| ![漫画阅读](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/comic.png) | ![运行日志](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/logs.png) |
 
 ---
 
@@ -424,6 +424,3 @@ Windows 10/11 与 macOS 自带 `curl`，Linux 装 `curl` 即可；同时它也�
 ## License
 
 MIT
-
-<!-- camotest -->
-![测试](https://github.com/flulwh/folio/releases/download/docs-media/shelf-empty.png)
