@@ -72,6 +72,12 @@
     backToShelf: $('backToShelf'),
     fontUp: $('fontUp'),
     fontDown: $('fontDown'),
+    prevChapter: $('prevChapter'),
+    nextChapter: $('nextChapter'),
+    tocSheet: $('tocSheet'),
+    tocList: $('tocList'),
+    tocCount: $('tocCount'),
+    tocClose: $('tocClose'),
     toast: $('toast'),
     foot: $('foot'),
   };
@@ -83,7 +89,13 @@
     server: {},
     allowWrite: true,
     current: null,
+    mode: 'local', // local：整本 txt 一次取回；cloud：按章取
     paragraphs: [],
+    toc: null, // 云端书目录 [{ i, title }]，没加载完是 null
+    tocTotal: 0,
+    chapter: 0,
+    chapterTitle: '',
+    chapterLoading: false,
     cards: new Map(),
     dirty: false,
     leaving: false, // 页面正在隐藏：停止一切重新测量的动作
@@ -309,7 +321,7 @@
   }
 
   function heroSub(book, entry) {
-    if (!entry) return book.kind === 'cloud' ? '云端书 · 请在桌面端打开' : '还没开始读';
+    if (!entry) return '还没开始读';
     const bits = [];
     if (entry.chapterTitle) bits.push(entry.chapterTitle);
     bits.push(`${Math.round(pct(entry))}%`);
@@ -330,14 +342,79 @@
     return clamped;
   }
 
+  /* ---------------- 阅读：公共部分 ---------------- */
+
+  function showReader() {
+    el.shelfView.hidden = true;
+    el.readerView.hidden = false;
+    el.foot.hidden = true;
+    document.body.classList.add('reading');
+    closeToc();
+  }
+
+  function showShelf() {
+    el.readerView.hidden = true;
+    el.shelfView.hidden = false;
+    el.foot.hidden = false;
+    document.body.classList.remove('reading');
+    closeToc();
+  }
+
+  function readingHeader(book, title) {
+    el.readerBook.textContent = book.name || '未命名';
+    el.readerChapter.textContent = title || '';
+  }
+
+  /**
+   * 把段落挂进正文区，并定位到 startIndex。
+   *
+   * 段落用了 content-visibility，视口外的真实高度是浏览器估算的，
+   * 所以先 scrollIntoView 让这一段进渲染树，下一帧再用真实 offsetTop 校正。
+   */
+  function mountParagraphs(startIndex) {
+    const frag = document.createDocumentFragment();
+    state.paragraphs.forEach((item, index) => {
+      const node = document.createElement('p');
+      node.dataset.i = String(index);
+      if (item.blank) {
+        node.className = 'gap';
+        node.setAttribute('aria-hidden', 'true');
+      } else {
+        node.textContent = item.text;
+      }
+      frag.appendChild(node);
+    });
+    el.paper.textContent = '';
+    el.paper.dataset.error = '0';
+    el.paper.appendChild(frag);
+
+    const start = Math.max(0, Math.min(Math.max(0, state.paragraphs.length - 1), Number(startIndex) || 0));
+    requestAnimationFrame(() => {
+      const node = el.paper.querySelector(`[data-i="${start}"]`);
+      if (!node) {
+        updateFoot(start);
+        return;
+      }
+      node.scrollIntoView({ block: 'start' });
+      requestAnimationFrame(() => {
+        el.readerScroll.scrollTop = Math.max(0, node.offsetTop - 14);
+        updateFoot(start);
+      });
+    });
+  }
+
+  function scheduleSave() {
+    state.dirty = true;
+    clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(() => flushProgress(false), 1100);
+  }
+
+  /* ---------------- 阅读：本地 txt ---------------- */
+
   async function openBook(book) {
-    if (!state.allowWrite) {
-      toast('桌面端关闭了进度写入，这里是只读面板');
-      return;
-    }
-    if (book.kind !== 'local') {
-      const entry = state.progress[book.id];
-      toast(entry ? `云端书在桌面端读 · 当前 ${Math.round(pct(entry))}%` : '云端书请在桌面端打开');
+    // 云端书按章取，走另一条路径
+    if (book?.kind === 'cloud') {
+      openCloudBook(book);
       return;
     }
     setSync('saving', '正在加载正文');
@@ -352,73 +429,245 @@
     }
     if (!payload?.ok) {
       setSync('live', '已同步');
-      toast(payload?.error === 'cloud' ? '云端书请在桌面端打开' : payload?.error || '读不到这本书');
+      toast(payload?.error || '读不到这本书');
       return;
     }
 
+    const entry = state.progress[book.id] || null;
     state.current = book;
+    state.mode = 'local';
+    state.toc = null;
+    state.tocTotal = 0;
+    state.chapter = 0;
+    state.chapterTitle = entry?.chapterTitle || '';
     state.paragraphs = splitParagraphs(payload.text || '');
-    state.lastIndex = Math.max(0, Number(state.progress[book.id]?.paraIndex) || 0);
+    state.lastIndex = Math.max(0, Number(entry?.paraIndex) || 0);
     state.leaving = false;
     state.dirty = false;
-    el.readerBook.textContent = book.name || '未命名';
-    const entry = state.progress[book.id] || null;
-    el.readerChapter.textContent = entry?.chapterTitle || '';
 
-    const frag = document.createDocumentFragment();
-    state.paragraphs.forEach((item, index) => {
-      const node = document.createElement('p');
-      node.dataset.i = String(index);
-      if (item.blank) {
-        node.className = 'gap';
-        node.setAttribute('aria-hidden', 'true');
-      } else {
-        node.textContent = item.text;
-      }
-      frag.appendChild(node);
-    });
-    el.paper.textContent = '';
-    el.paper.appendChild(frag);
+    readingHeader(book, state.chapterTitle);
+    el.readerChapter.disabled = true;
+    el.readerChapter.classList.remove('link');
+    el.prevChapter.hidden = true;
+    el.nextChapter.hidden = true;
 
-    el.shelfView.hidden = true;
-    el.readerView.hidden = false;
-    el.foot.hidden = true;
-    document.body.classList.add('reading');
-
-    // 按 paraIndex 恢复（和桌面端同一口径）。段落用了 content-visibility，
-    // 视口外的真实高度是浏览器估算的，所以先 scrollIntoView 让它把这一段渲染出来，
-    // 下一帧再用真实 offsetTop 校正一次，位置才准。
-    const start = Math.max(0, Math.min(Math.max(0, state.paragraphs.length - 1), Number(entry?.paraIndex) || 0));
-    requestAnimationFrame(() => {
-      const node = el.paper.querySelector(`[data-i="${start}"]`);
-      if (!node) {
-        updateFoot(start);
-        return;
-      }
-      node.scrollIntoView({ block: 'start' });
-      requestAnimationFrame(() => {
-        el.readerScroll.scrollTop = Math.max(0, node.offsetTop - 14);
-        updateFoot(start);
-      });
-    });
-
+    showReader();
+    mountParagraphs(state.lastIndex);
     setSync('live', '已同步');
     history.pushState({ reader: book.id }, '', `#${encodeURIComponent(book.id)}`);
+  }
+
+  /* ---------------- 阅读：云端书（按章取） ---------------- */
+
+  async function openCloudBook(book) {
+    const entry = state.progress[book.id] || {};
+    const startChapter = Math.max(0, Number(entry.chapter ?? entry.windowBase) || 0);
+
+    state.current = book;
+    state.mode = 'cloud';
+    state.toc = null;
+    state.tocTotal = 0;
+    state.chapter = startChapter;
+    state.chapterTitle = String(entry.chapterTitle || '');
+    state.paragraphs = [];
+    state.lastIndex = Math.max(0, Number(entry.paraIndex) || 0);
+    state.leaving = false;
+    state.dirty = false;
+    state.chapterLoading = false;
+
+    readingHeader(book, state.chapterTitle || '正在获取目录…');
+    el.readerChapter.disabled = false;
+    el.readerChapter.classList.add('link');
+    el.prevChapter.hidden = false;
+    el.nextChapter.hidden = false;
+    el.prevChapter.disabled = startChapter <= 0;
+    el.nextChapter.disabled = false;
+    el.paper.textContent = '';
+    el.paper.dataset.error = '0';
+    el.readerPct.textContent = '0%';
+    el.footBar.style.width = '0%';
+
+    showReader();
+    history.pushState({ reader: book.id }, '', `#${encodeURIComponent(book.id)}`);
+    if (!state.allowWrite) toast('只读模式：可以看，不记录进度');
+
+    // 目录和正文并行取：目录要解析书源，往往比正文慢；串行会让「点开一本书」多等好几秒。
+    loadToc(book, startChapter);
+    loadChapter(startChapter, { resumeAt: state.lastIndex });
+  }
+
+  async function loadToc(book, jumpTo) {
+    setSync('saving', '正在获取目录');
+    try {
+      const res = await fetch(`/api/toc/${encodeURIComponent(book.id)}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (state.current?.id !== book.id) return; // 期间已经切走了
+      if (!payload?.ok) {
+        toast(payload?.error || '目录没取到，只能一章一章翻');
+        setSync('live', '已同步');
+        return;
+      }
+      state.toc = Array.isArray(payload.chapters) ? payload.chapters : [];
+      state.tocTotal = Number(payload.total) || state.toc.length;
+      const title = state.toc[jumpTo]?.title;
+      if (title) {
+        state.chapterTitle = title;
+        readingHeader(book, title);
+      }
+      el.nextChapter.disabled = state.chapter >= state.tocTotal - 1;
+      renderToc(jumpTo);
+      updateFoot(state.lastIndex);
+      setSync('live', '已同步');
+    } catch {
+      if (state.current?.id !== book.id) return;
+      setSync('off', '目录没取到');
+      toast('目录没取到，检查一下网络');
+    }
+  }
+
+  async function loadChapter(index, options = {}) {
+    const book = state.current;
+    if (!book || state.mode !== 'cloud' || state.chapterLoading) return;
+
+    state.chapterLoading = true;
+    state.chapter = index;
+    // 目录可能已经渲染好了：跟着翻章把高亮挪过去，否则点开目录还停在旧章
+    markTocCurrent(index);
+    if (state.toc?.[index]?.title) state.chapterTitle = state.toc[index].title;
+    readingHeader(book, state.chapterTitle || `第 ${index + 1} 章`);
+    el.prevChapter.disabled = index <= 0;
+    if (state.tocTotal) el.nextChapter.disabled = index >= state.tocTotal - 1;
+
+    el.readerScroll.scrollTop = 0;
+    el.paper.textContent = '';
+    el.paper.dataset.error = '0';
+    el.paper.dataset.loading = '1';
+    setSync('saving', '正在取正文');
+
+    try {
+      const res = await fetch(`/api/chapter/${encodeURIComponent(book.id)}?i=${index}`, { cache: 'no-store' });
+      const payload = await res.json();
+      if (state.current?.id !== book.id || state.mode !== 'cloud') return;
+      if (!payload?.ok) throw new Error(payload?.error || '这一章没有正文');
+
+      state.paragraphs = splitParagraphs(payload.text || '');
+      state.lastIndex = Math.max(0, Math.min(state.paragraphs.length - 1, Number(options.resumeAt) || 0));
+      state.leaving = false;
+      state.dirty = false;
+      mountParagraphs(state.lastIndex);
+      updateFoot(state.lastIndex);
+      setSync('live', '已同步');
+      // 翻到新的一章本身就是一次进度变化，不等滚动也记一笔
+      scheduleSave();
+    } catch (err) {
+      if (state.current?.id !== book.id || state.mode !== 'cloud') return;
+      state.paragraphs = [];
+      state.dirty = false;
+      el.paper.textContent = '';
+      const node = document.createElement('p');
+      node.className = 'reader-error';
+      node.textContent = err?.message || '这一章没取到';
+      el.paper.appendChild(node);
+      el.paper.dataset.error = '1';
+      setSync('off', '没取到正文');
+    } finally {
+      state.chapterLoading = false;
+      el.paper.dataset.loading = '0';
+    }
+  }
+
+  /** 切章统一入口：先把旧章停下的位置写掉，免得新章号覆盖它。 */
+  function openChapter(index) {
+    if (!state.current || state.mode !== 'cloud') return;
+    if (index < 0) return;
+    if (state.tocTotal && index >= state.tocTotal) return;
+    if (index === state.chapter && state.paragraphs.length) {
+      el.readerScroll.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    if (state.dirty && state.paragraphs.length) flushProgress(true);
+    loadChapter(index, {});
+  }
+
+  /* ---------------- 目录 ---------------- */
+
+  function markTocCurrent(index) {
+    const prev = el.tocList.querySelector('.toc-row.current');
+    if (prev) prev.classList.remove('current');
+    const row = el.tocList.querySelector(`.toc-row[data-i="${index}"]`);
+    if (row) row.classList.add('current');
+  }
+
+  function renderToc(current) {
+    if (!state.toc) return;
+    const frag = document.createDocumentFragment();
+    state.toc.forEach((item, index) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'toc-row';
+      row.dataset.i = String(index);
+      if (index === current) row.classList.add('current');
+      const num = document.createElement('span');
+      num.className = 'toc-num';
+      num.textContent = String(index + 1);
+      const name = document.createElement('span');
+      name.className = 'toc-name';
+      name.textContent = item.title || `第 ${index + 1} 章`;
+      row.append(num, name);
+      row.addEventListener('click', () => {
+        closeToc();
+        openChapter(index);
+      });
+      frag.appendChild(row);
+    });
+    el.tocList.textContent = '';
+    el.tocList.appendChild(frag);
+    el.tocCount.textContent = ` · ${state.toc.length}`;
+  }
+
+  function openToc() {
+    if (state.mode !== 'cloud') return;
+    if (!state.toc?.length) {
+      toast('目录还在加载，稍等一下');
+      return;
+    }
+    el.tocSheet.hidden = false;
+    document.body.classList.add('sheet-open');
+    requestAnimationFrame(() => {
+      const row = el.tocList.querySelector('.toc-row.current');
+      if (!row) return;
+      // 用 rect 相对定位，不依赖 offsetParent：.toc-row 的 offsetTop 是相对面板的，
+      // 直接拿来当 scrollTop 会多滚出半个视口。
+      const listRect = el.tocList.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const delta = rowRect.top - listRect.top - el.tocList.clientHeight / 2 + rowRect.height / 2;
+      el.tocList.scrollTop = Math.max(0, el.tocList.scrollTop + delta);
+    });
+  }
+
+  function closeToc() {
+    if (el.tocSheet.hidden) return;
+    el.tocSheet.hidden = true;
+    document.body.classList.remove('sheet-open');
   }
 
   function closeReader() {
     if (!state.current) return;
     flushProgress(true);
     state.current = null;
+    state.mode = 'local';
     state.paragraphs = [];
+    state.toc = null;
+    state.tocTotal = 0;
+    state.chapter = 0;
+    state.chapterTitle = '';
     state.lastIndex = 0;
     state.dirty = false;
-    el.readerView.hidden = true;
-    el.shelfView.hidden = false;
-    el.foot.hidden = false;
-    document.body.classList.remove('reading');
-    el.readerScroll.scrollTop = 0;
+    state.chapterLoading = false;
     el.paper.textContent = '';
+    el.paper.dataset.loading = '0';
+    el.readerScroll.scrollTop = 0;
+    showShelf();
     history.replaceState(null, '', location.pathname + location.search);
     render();
   }
@@ -449,36 +698,49 @@
 
   function updateFoot(index) {
     const total = state.paragraphs.length || 1;
-    const percent = Math.max(0, Math.min(100, (index / total) * 100));
-    el.readerPct.textContent = `${percent < 1 && index > 0 ? '<1' : Math.round(percent)}%`;
+    const inner = Math.max(0, Math.min(1, (Number(index) || 0) / total));
+    // 云端书的百分比按「第几章 + 章内位置」折成全书，和桌面端同一口径
+    const percent =
+      state.mode === 'cloud' && state.tocTotal > 0
+        ? Math.min(100, ((state.chapter + inner) / state.tocTotal) * 100)
+        : inner * 100;
+    el.readerPct.textContent = `${percent > 0 && percent < 1 ? '<1' : Math.round(percent)}%`;
     el.footBar.style.width = `${percent.toFixed(2)}%`;
     return percent;
   }
 
   function onScroll() {
     // 页面正在离开时的滚动不是用户在滚（多半是滚动条消失引起的重排），不能拿去覆盖位置
-    if (!state.current || state.leaving) return;
+    if (!state.current || state.leaving || !state.paragraphs.length) return;
     const index = currentIndex();
     state.lastIndex = index;
     updateFoot(index);
-    state.dirty = true;
-    clearTimeout(state.saveTimer);
-    state.saveTimer = setTimeout(() => flushProgress(false), 1100);
+    scheduleSave();
   }
 
   async function flushProgress(immediate) {
     if (!state.current || !state.dirty) return;
+    if (!state.paragraphs.length) return; // 正文还没到，没有位置可写
+    if (!state.allowWrite) return; // 只读面板：能读，不记录
     const book = state.current;
     // 离开页面（pagehide / 切后台）时布局已经开始失效，elementFromPoint 会算偏几段。
     // 这种情况下用最后一次滚动记下的索引 —— 它才是用户真正停下的地方。
     const useLast = immediate || state.leaving || !state.lastIndex;
     const index = useLast ? state.lastIndex || currentIndex() : currentIndex();
     const percent = updateFoot(index);
-    const data = {
-      paraIndex: index,
-      percent,
-      updatedAt: Date.now(),
-    };
+    // 云端书的定位锚点是章号（桌面端读 chapter / windowBase），
+    // paraIndex 只是章内位置，桌面端不解释它，但手机自己下次打开要用。
+    const data =
+      state.mode === 'cloud'
+        ? {
+            chapter: state.chapter,
+            chapterTitle: state.chapterTitle || '',
+            windowBase: state.chapter,
+            paraIndex: index,
+            percent,
+            updatedAt: Date.now(),
+          }
+        : { paraIndex: index, percent, updatedAt: Date.now() };
     state.dirty = false;
     setSync('saving', '正在同步');
 
@@ -643,8 +905,24 @@
 
   el.readerScroll.addEventListener('scroll', onScroll, { passive: true });
 
+  // 云端书：点标题开目录，底栏翻章
+  el.readerChapter.addEventListener('click', () => {
+    if (state.mode === 'cloud') openToc();
+  });
+  el.prevChapter.addEventListener('click', () => openChapter(state.chapter - 1));
+  el.nextChapter.addEventListener('click', () => openChapter(state.chapter + 1));
+  el.tocClose.addEventListener('click', closeToc);
+  el.tocSheet.addEventListener('click', (event) => {
+    if (event.target === el.tocSheet) closeToc(); // 点遮罩关闭
+  });
+
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.current) closeReader();
+    if (event.key !== 'Escape') return;
+    if (!el.tocSheet.hidden) {
+      closeToc();
+      return;
+    }
+    if (state.current) closeReader();
   });
 
   window.addEventListener('popstate', () => {

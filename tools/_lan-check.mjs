@@ -96,6 +96,13 @@ const writeJson = (file, data) => {
 };
 
 const remoteCalls = [];
+// 云端书的目录/正文由主进程提供，这里用假书源模拟：面板只认这两个回调
+const cloudCalls = [];
+const CLOUD_CHAPTERS = Array.from({ length: 40 }, (_, i) => ({
+  title: `第 ${i + 1} 章 · 测试`,
+  url: `http://example.com/c/${i}.html`,
+}));
+
 const service = createLanService({
   files,
   booksDir,
@@ -107,6 +114,20 @@ const service = createLanService({
   getVersion: () => '0.0.0-test',
   resolveCover: () => ({ url: 'http://example.com/c.jpg' }),
   onRemoteProgress: (progress, bookId) => remoteCalls.push({ progress, bookId }),
+  cloud: {
+    async toc(book) {
+      cloudCalls.push(['toc', book.id]);
+      if (book.id !== 'cloud1') return { error: '书源不存在或已删除' };
+      return { chapters: CLOUD_CHAPTERS, fromCache: true };
+    },
+    async chapter(book, index) {
+      cloudCalls.push(['chapter', book.id, index]);
+      if (!Number.isInteger(index) || index < 0 || index >= CLOUD_CHAPTERS.length) {
+        return { error: '这一章不存在' };
+      }
+      return { text: `第 ${index + 1} 章正文\n\n这是第 ${index + 1} 章的第一段。\n\n第二段。\n`, fromCache: true };
+    },
+  },
 });
 
 
@@ -174,6 +195,39 @@ async function main() {
   const coverRes = await fetch(`${base}/api/cover/cloud1`, { headers: { cookie }, redirect: 'manual' });
   ok('封面没有缓存时 302 到源站', coverRes.status === 302);
 
+  /* ---------------- 云端书 ---------------- */
+  section('云端书');
+
+  const tocRes = await fetch(`${base}/api/toc/cloud1`, { headers: { cookie } });
+  const tocData = await tocRes.json();
+  ok('目录能取到', tocRes.status === 200 && tocData.ok === true && tocData.total === 40);
+  ok(
+    '章节只带序号和标题',
+    tocData.chapters?.[0]?.i === 0 && String(tocData.chapters[0].title).includes('第 1 章'),
+    JSON.stringify(tocData.chapters?.[0])
+  );
+  ok('目录不泄漏章节地址', !JSON.stringify(tocData).includes('example.com/c/'));
+
+  const chapRes = await fetch(`${base}/api/chapter/cloud1?i=3`, { headers: { cookie } });
+  const chapData = await chapRes.json();
+  ok('单章正文能取到', chapRes.status === 200 && chapData.ok === true && chapData.text.includes('第 4 章的第一段'));
+  ok('正文带回章号', chapData.index === 3);
+
+  const badIndex = await fetch(`${base}/api/chapter/cloud1?i=-1`, { headers: { cookie } });
+  ok('章号非法 → 400', badIndex.status === 400);
+
+  const noIndex = await fetch(`${base}/api/chapter/cloud1`, { headers: { cookie } });
+  ok('缺章号 → 400', noIndex.status === 400);
+
+  const tocOnLocal = await fetch(`${base}/api/toc/local1`, { headers: { cookie } });
+  ok('本地书没有目录接口 → 400', tocOnLocal.status === 400);
+
+  const tocMissing = await fetch(`${base}/api/toc/nope`, { headers: { cookie } });
+  ok('不存在的书取目录 → 404', tocMissing.status === 404);
+
+  const tocNoAuth = await fetch(`${base}/api/toc/cloud1`);
+  ok('目录同样要鉴权 → 401', tocNoAuth.status === 401);
+
   /* ---------------- 进度写入 ---------------- */
   section('进度写入与合并');
 
@@ -209,6 +263,24 @@ async function main() {
     body: JSON.stringify({ id: 'local1', data: { paraIndex: 3, updatedAt: Date.now() } }),
   });
   ok('没访问码不能写', noCookie.status === 401);
+
+  // 云端书的进度锚点是章号，字段和桌面端 CloudBook 保持一致
+  const cloudWrite = await fetch(`${base}/api/progress`, {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: 'cloud1',
+      data: { chapter: 12, chapterTitle: '第 13 章 · 测试', windowBase: 12, paraIndex: 5, percent: 31.5, updatedAt: Date.now() },
+    }),
+  });
+  const cloudWriteData = await cloudWrite.json();
+  ok('云端书进度能写', cloudWrite.status === 200 && cloudWriteData.applied === true);
+  const cloudSaved = readJson(files.progress, {}).cloud1 || {};
+  ok(
+    '章号与章内位置都落盘',
+    cloudSaved.chapter === 12 && cloudSaved.paraIndex === 5 && cloudSaved.windowBase === 12,
+    JSON.stringify(cloudSaved)
+  );
 
   /* ---------------- SSE ---------------- */
   section('SSE 推送');

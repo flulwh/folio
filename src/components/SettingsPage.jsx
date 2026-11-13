@@ -1042,7 +1042,7 @@ export default function SettingsPage({ onClose }) {
                     第一次开启时 Windows 可能会弹防火墙提示，要允许「专用网络」，否则手机连不上。
                   </p>
                   <p className="settings-hint">
-                    云端书需要书源引擎抓正文，手机上只显示阅读进度；本地 txt 可以直接读。
+                    云端书由本机的书源引擎抓取正文，手机上照样能翻目录、读章节；抓不到时会明确提示。
                   </p>
                 </section>
               </>

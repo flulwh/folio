@@ -15,6 +15,10 @@ release*/
 *.tsbuildinfo
 # 局域网面板的冒烟截图（tools/_lan-ui.png、_lan-panel-*.png）
 tools/_lan-*.png
+# 局域网面板的临时数据目录（FOLIO_DATA_DIR 指向的测试副本）
+.folio-test-data/
+.folio-smoke/
+.folio-userdata/
 
 # 编辑器 / 系统
 .vscode/

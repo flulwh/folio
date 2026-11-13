@@ -57,7 +57,7 @@
         </button>
         <div class="reader-meta">
           <span class="reader-book" id="readerBook"></span>
-          <span class="reader-chapter" id="readerChapter"></span>
+          <button class="reader-chapter" id="readerChapter" type="button" tabindex="-1"></button>
         </div>
         <div class="reader-tools">
           <button class="icon-btn text" id="fontDown" aria-label="字号减小">A−</button>
@@ -68,11 +68,27 @@
         <article class="paper" id="paper"></article>
       </div>
       <div class="reader-foot">
+        <button class="foot-nav" id="prevChapter" type="button" aria-label="上一章" hidden>上一章</button>
         <span id="readerPct">0%</span>
         <div class="foot-bar"><i id="footBar"></i></div>
+        <button class="foot-nav" id="nextChapter" type="button" aria-label="下一章" hidden>下一章</button>
         <span class="foot-state" id="footState"></span>
       </div>
     </section>
+
+    <div class="sheet" id="tocSheet" hidden>
+      <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="目录">
+        <header class="sheet-head">
+          <span class="sheet-title">目录<span class="sheet-count" id="tocCount"></span></span>
+          <button class="icon-btn" id="tocClose" type="button" aria-label="关闭目录">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </header>
+        <div class="sheet-list" id="tocList"></div>
+      </div>
+    </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <footer class="foot" id="foot"></footer>

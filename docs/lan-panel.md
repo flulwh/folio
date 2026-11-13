@@ -37,6 +37,22 @@ dataDir/
 3. **只有一份进度**：写入永远是「读盘 → 按 `updatedAt` 合并 → 写盘」，
    所以两端不存在「谁是主」的问题。内存里的渲染层副本靠推送对齐。
 
+### 本地书与云端书的两条正文路径
+
+面板里点开一本书，走哪条路由 `kind` 决定：
+
+| | 本地书 | 云端书 |
+| --- | --- | --- |
+| 正文来源 | `GET /api/book/:id` 读 `books/` 里的 txt | `GET /api/chapter/:id?i=N`，由本机的书源引擎现抓 |
+| 目录 | 无（一本书一段连续正文） | `GET /api/toc/:id`，面板里可翻目录 |
+| 进度锚点 | `paraIndex`（全书段落下标） | `chapter` + `paraIndex`（章内段落下标）+ `windowBase` |
+
+云端书的正文不落到 `books/`，每次按需现抓；目录和章节都带缓存（桌面端自己的缓存目录），
+所以手机连着翻章不会反复打源站。抓不到时接口返回 `{error}`，面板直接显示原因，不会假装有内容。
+
+进度写回时两种书都走同一个 `POST /api/progress`，云端书额外带上 `chapter` 与 `windowBase`，
+合并是浅合并，所以桌面端读到的云端书进度不会被手机上的写入抹掉章口径。
+
 ### 双向同步的完整链路
 
 | 方向 | 触发 | 链路 |
@@ -62,6 +78,8 @@ dataDir/
 | GET | `/api/ping` | 健康检查 |
 | GET | `/api/state` | 书架（去掉 `filePath`/正文/原始抓取数据）+ 全量进度 + 主题 + 服务信息 |
 | GET | `/api/book/:id` | 本地书正文（≤12MB）；云端书返回 `409 {cloud:true}` |
+| GET | `/api/toc/:id` | 云端书目录（章名 + 章内段落数），由本机书源引擎取，取不到返回 `{error}` |
+| GET | `/api/chapter/:id?i=N` | 云端书第 N 章正文；`i` 省略时取当前章 |
 | GET | `/api/cover/:id` | 封面：本地缓存有就发文件，否则 302 到源站 |
 | POST | `/api/progress` | `{id, data}`，按 `updatedAt` 合并；只接受书架里存在的书 |
 | GET | `/api/events` | SSE：`hello` / `progress` / `books` / `config` |

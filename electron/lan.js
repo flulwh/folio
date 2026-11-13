@@ -149,6 +149,15 @@ function sendText(res, status, text, type = 'text/plain; charset=utf-8') {
   res.end(text);
 }
 
+function safeDecode(value) {
+  try {
+    return decodeURIComponent(String(value || ''));
+  } catch {
+    // 路径里带没转义的 % 时 decodeURIComponent 会抛，退回原样
+    return String(value || '');
+  }
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
@@ -212,6 +221,9 @@ export function createLanService(opts) {
     onRemoteProgress = () => {},
     resolveCover = () => null,
     getVersion = () => '',
+    // 云端书的目录/正文由主进程提供（那里才有书源引擎与磁盘缓存）。
+    // 面板不接触书源，也不需要手机能访问书源站。
+    cloud = null,
   } = opts;
 
   const assetsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -508,6 +520,89 @@ export function createLanService(opts) {
         sendJson(res, 200, { ok: true, book: slimBook(hit.book), text });
       } catch (err) {
         sendJson(res, 500, { ok: false, error: `读不到正文：${err?.message || err}` });
+      }
+      return;
+    }
+
+    /* ---------- 云端书：目录与单章正文 ---------- */
+
+    if (pathname.startsWith('/api/toc/') && method === 'GET') {
+      const book = listBooks().find((item) => item?.id === safeDecode(pathname.slice('/api/toc/'.length)));
+      if (!book) {
+        sendJson(res, 404, { ok: false, error: '书架上没有这本书' });
+        return;
+      }
+      if (book.kind !== 'cloud') {
+        sendJson(res, 400, { ok: false, error: '这不是云端书' });
+        return;
+      }
+      if (typeof cloud?.toc !== 'function') {
+        sendJson(res, 501, { ok: false, error: '当前版本没有接入云端书' });
+        return;
+      }
+      try {
+        const result = await cloud.toc(book);
+        const chapters = Array.isArray(result?.chapters) ? result.chapters : [];
+        if (!chapters.length) {
+          sendJson(res, 502, { ok: false, error: result?.error || '目录获取失败' });
+          return;
+        }
+        // 章节地址属于书源内部结构，不往浏览器送；面板只需要序号和标题。
+        sendJson(res, 200, {
+          ok: true,
+          total: chapters.length,
+          chapters: chapters.map((item, index) => ({
+            i: index,
+            title: String(item?.title || `第 ${index + 1} 章`),
+          })),
+          sourceName: book.sourceName || '',
+          lastChapter: book.lastChapter || '',
+          fromCache: result.fromCache !== false,
+        });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: `目录获取失败：${err?.message || err}` });
+      }
+      return;
+    }
+
+    if (pathname.startsWith('/api/chapter/') && method === 'GET') {
+      // 章节号走 ?i=，不放进路径：云端书的 id 里带 :: 和 /（书源地址），
+      // 塞进路径会被切碎。
+      const id = safeDecode(pathname.slice('/api/chapter/'.length));
+      const book = listBooks().find((item) => item?.id === id);
+      if (!book) {
+        sendJson(res, 404, { ok: false, error: '书架上没有这本书' });
+        return;
+      }
+      if (book.kind !== 'cloud') {
+        sendJson(res, 400, { ok: false, error: '这不是云端书' });
+        return;
+      }
+      if (typeof cloud?.chapter !== 'function') {
+        sendJson(res, 501, { ok: false, error: '当前版本没有接入云端书' });
+        return;
+      }
+      // Number(null) 是 0，缺参数必须先分辨出来，否则「没给章号」会被当成第 0 章
+      const rawIndex = url.searchParams.get('i');
+      const index = rawIndex === null || rawIndex.trim() === '' ? NaN : Number(rawIndex);
+      if (!Number.isInteger(index) || index < 0) {
+        sendJson(res, 400, { ok: false, error: '章节号不对' });
+        return;
+      }
+      try {
+        const result = await cloud.chapter(book, index);
+        const text = String(result?.text || '');
+        if (!text.trim()) {
+          sendJson(res, 502, { ok: false, error: result?.error || '这一章没有抓到正文' });
+          return;
+        }
+        if (text.length > MAX_TEXT) {
+          sendJson(res, 413, { ok: false, error: '这一章太大，局域网读取请回桌面端' });
+          return;
+        }
+        sendJson(res, 200, { ok: true, index, text, fromCache: result.fromCache !== false });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: `正文获取失败：${err?.message || err}` });
       }
       return;
     }

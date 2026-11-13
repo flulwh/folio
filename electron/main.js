@@ -1202,6 +1202,28 @@ function ensureLanService() {
       const file = existingCoverFile(coverKey(url));
       return file ? { file, url } : { url };
     },
+    // 手机读云端书：目录与正文都复用桌面端那套「缓存优先 + 抓取落盘」，
+    // 面板不接触书源、不直连书源站，代理也沿用桌面端的设置。
+    cloud: {
+      toc: (book) => {
+        const settings = readJson(files.settings, {}) || {};
+        return loadCloudToc({
+          sourceId: book?.sourceId,
+          bookUrl: book?.bookUrl,
+          book: { name: book?.name, author: book?.author, bookUrl: book?.bookUrl, cover: book?.cover },
+          proxy: settings.proxy || '',
+        });
+      },
+      chapter: (book, index) => {
+        const settings = readJson(files.settings, {}) || {};
+        return loadCloudChapter({
+          sourceId: book?.sourceId,
+          bookUrl: book?.bookUrl,
+          index: Number(index) || 0,
+          proxy: settings.proxy || '',
+        });
+      },
+    },
     // 手机写进来的进度：落盘由 lan.js 做，这里把结果推给桌面窗口，
     // 正在看的书架 / 阅读器立刻跟上。
     onRemoteProgress: (progress, bookId) => {
@@ -2361,7 +2383,13 @@ ipcMain.handle('cloud:search', async (_e, { keyword, sourceIds, page, proxy, lim
   };
 });
 
-ipcMain.handle('cloud:toc', async (_e, { sourceId, bookUrl, book, refresh, proxy } = {}) => {
+/**
+ * 取云端书目录。
+ *
+ * 抽成独立函数是为了让局域网面板复用同一条链路：手机点开云端书时，
+ * 目录同样走「磁盘缓存优先、不足 20 章就重抓」这套规则，面板自己不认识书源。
+ */
+async function loadCloudToc({ sourceId, bookUrl, book, refresh, proxy } = {}) {
   const source = findSource(sourceId);
   if (!source) return { error: '书源不存在或已删除' };
 
@@ -2410,9 +2438,12 @@ ipcMain.handle('cloud:toc', async (_e, { sourceId, bookUrl, book, refresh, proxy
     if (cached?.chapters?.length) return { ...cached, fromCache: true, warning: err.message };
     return { error: err?.message || '目录获取失败' };
   }
-});
+}
 
-ipcMain.handle('cloud:chapter', async (_e, { sourceId, bookUrl, index, url, chapter, book, proxy } = {}) => {
+ipcMain.handle('cloud:toc', (_e, payload = {}) => loadCloudToc(payload));
+
+/** 取云端书某一章正文：缓存命中直接返回，否则抓取并落盘。局域网面板同样走这里。 */
+async function loadCloudChapter({ sourceId, bookUrl, index, url, chapter, book, proxy } = {}) {
   const source = findSource(sourceId);
   if (!source) return { error: '书源不存在或已删除' };
 
@@ -2439,7 +2470,9 @@ ipcMain.handle('cloud:chapter', async (_e, { sourceId, bookUrl, index, url, chap
   } catch (err) {
     return { error: err?.message || '正文获取失败' };
   }
-});
+}
+
+ipcMain.handle('cloud:chapter', (_e, payload = {}) => loadCloudChapter(payload));
 
 ipcMain.handle('cloud:chapter-images', async (_e, { sourceId, bookUrl, index, url, chapter, book, proxy } = {}) => {
   const source = findSource(sourceId);
