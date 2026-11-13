@@ -166,7 +166,8 @@ class LanIntegrationTest {
     }
 
     private fun locateFixture(): File {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        val cwd = System.getProperty("user.dir") ?: "."
+        var dir: File? = File(cwd).absoluteFile
         repeat(4) {
             val current: File = dir ?: error("找不到 tools/_lan-fixture.mjs")
             val candidate = File(current, "tools/_lan-fixture.mjs")

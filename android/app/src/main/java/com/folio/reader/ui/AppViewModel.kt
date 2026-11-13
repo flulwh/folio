@@ -168,8 +168,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     return@launch
                 }
                 val entry = progressMap[book.id]
-                val startChapter = (entry?.chapter ?: 0).coerceIn(0, (toc.size - 1).coerceAtLeast(0))
-                loadChapter(book, startChapter, entry)
+                // toc 里的 index 是真实章号；离线兜底时列表还可能是稀疏的，
+                // 所以按章号找下标，而不是直接拿章号当位置。
+                val target = entry?.chapter ?: toc.first().index
+                val startIndex = toc.indexOfFirst { it.index == target }.coerceAtLeast(0)
+                _reader.update { it.copy(toc = toc) }
+                loadChapter(book, startIndex, entry)
             } else {
                 val (text, fromCache) = sync.loadLocalText(book)
                 if (text == null) {
@@ -198,39 +202,58 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private suspend fun loadChapter(book: Book, index: Int, entry: ProgressEntry?) {
-        val (text, fromCache) = sync.loadCloudChapter(book, index)
+    /**
+     * 载入云端书的某一章。[index] 是目录列表里的位置。
+     *
+     * 离线时如果这一章没缓存，退到离它最近的已缓存章节，而不是直接报错 ——
+     * 用户断网后想看的往往是之前读过的部分。
+     */
+    private suspend fun loadChapter(
+        book: Book,
+        index: Int,
+        entry: ProgressEntry?,
+        allowFallback: Boolean = true,
+    ) {
+        val current = _reader.value
+        val toc = if (current.toc.isEmpty()) sync.loadToc(book).first else current.toc
+        if (toc.isEmpty()) {
+            _reader.update { it.copy(loading = false, error = "拿不到目录，确认桌面端已打开") }
+            return
+        }
+        val position = index.coerceIn(0, toc.size - 1)
+        val chapterNo = toc[position].index
+        val (text, fromCache) = sync.loadCloudChapter(book, chapterNo)
         if (text == null) {
+            if (allowFallback) {
+                val cached = offline.cachedCloudChapters(book.id)
+                val nearest = cached.minByOrNull { kotlin.math.abs(it - chapterNo) }
+                val fallbackIndex = if (nearest != null) toc.indexOfFirst { it.index == nearest } else -1
+                if (fallbackIndex >= 0) {
+                    loadChapter(book, fallbackIndex, null, allowFallback = false)
+                    _reader.update { it.copy(offline = true, error = null) }
+                    return
+                }
+            }
             _reader.update {
-                it.copy(
-                    loading = false,
-                    error = "这一章还没缓存，连上桌面端再读",
-                )
+                it.copy(loading = false, error = "这一章还没缓存，连上桌面端再读")
             }
             return
         }
         val parsed = TextParser.parseBook(text)
-        val state = _reader.value
-        val toc = if (state.toc.isEmpty()) {
-            val (loaded, _) = sync.loadToc(book)
-            loaded
-        } else {
-            state.toc
-        }
-        val resume = if (entry != null && entry.chapter == index) (entry.paraIndex ?: 0) else 0
+        val resume = if (entry != null && entry.chapter == chapterNo) (entry.paraIndex ?: 0) else 0
         val paraIndex = resume.coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
         _reader.value = ReaderUiState(
             book = book,
             paragraphs = parsed.paragraphs,
             chapters = parsed.chapters,
             toc = toc,
-            chapterIndex = index,
-            chapterTitle = toc.getOrNull(index)?.title ?: "第 ${index + 1} 章",
+            chapterIndex = position,
+            chapterTitle = toc[position].title,
             paraIndex = paraIndex,
-            percent = percentOf(paraIndex, parsed.paragraphs.size, index, toc.size),
+            percent = percentOf(paraIndex, parsed.paragraphs.size, position, toc.size),
             offline = fromCache,
         )
-        recordProgress(book, buildEntry(book, paraIndex, index, parsed.chapters))
+        recordProgress(book, buildEntry(book, paraIndex, position, parsed.chapters, chapterNo))
     }
 
     fun switchChapter(index: Int) {
@@ -300,7 +323,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 percent = percentOf(index, state.paragraphs.size, chapterIndex, state.toc.size),
             )
         }
-        recordProgress(book, buildEntry(book, index, chapterIndex, state.chapters))
+        val chapterNo = if (state.isCloud) state.toc.getOrNull(chapterIndex)?.index else null
+        recordProgress(book, buildEntry(book, index, chapterIndex, state.chapters, chapterNo))
     }
 
     fun toggleToc() {
@@ -326,6 +350,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         paraIndex: Int,
         chapterIndex: Int,
         chapters: List<com.folio.reader.core.Chapter>,
+        chapterNo: Int? = null,
     ): ProgressEntry {
         val state = _reader.value
         val title = if (book.isCloud) {
@@ -333,13 +358,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             chapters.getOrNull(chapterIndex)?.title.orEmpty()
         }
+        val cloudChapter = chapterNo ?: chapterIndex
         return ProgressEntry(
             id = book.id,
             paraIndex = paraIndex,
-            chapter = if (book.isCloud) chapterIndex else null,
-            chapterIndex = if (book.isCloud) chapterIndex else null,
+            chapter = if (book.isCloud) cloudChapter else null,
+            chapterIndex = if (book.isCloud) cloudChapter else null,
             chapterTitle = title,
-            windowBase = if (book.isCloud) chapterIndex else null,
+            windowBase = if (book.isCloud) cloudChapter else null,
             percent = state.percent,
             updatedAt = System.currentTimeMillis(),
         )
