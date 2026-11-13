@@ -3,10 +3,9 @@
 Folio 的主题是「一组 CSS 变量」。内置四套（浅色 / 暖沙 / 深色 / 冷灰）写在 `src/index.css` 与 `src/apple.css` 里；除此之外，还可以：
 
 - 在 **设置 → 外观 → 新建主题** 里调颜色，实时生效；
-- 用 **导入** 粘贴一段主题 JSON；
-- 装带 `themes` 权限的插件，由插件提供配色（例如商店里的「配色包」）。
+- 用 **导入** 粘贴一段主题 JSON。
 
-自定义主题和插件主题都会出现在主题网格里，插件提供的会带一个「插件」角标。
+自定义主题会出现在主题网格里，可以随时删除。
 
 ## 主题 JSON
 
@@ -33,7 +32,7 @@ Folio 的主题是「一组 CSS 变量」。内置四套（浅色 / 暖沙 / 深
 }
 ```
 
-- `id`：小写字母、数字、连字符，2–41 位；插件提供的会自动加 `<插件id>-` 前缀。
+- `id`：小写字母、数字、连字符，2–41 位。
 - `label`：显示名，最多 24 字。
 - `tone`：`light` 或 `dark`。它决定用哪套「外壳」承载阴影、描边、滚动条这类结构性样式（`light` → 浅色外壳，`dark` → 深色外壳）。
 - `tokens`：至少要有 `bg` 与 `text`，其余缺省会由这两项和 `tone` 推导。支持 `#rgb` / `#rrggbb` / `#rrggbbaa` / `rgb()` / `rgba()` / `hsl()` / `hsla()` / 颜色关键字。
@@ -65,32 +64,13 @@ Folio 的主题是「一组 CSS 变量」。内置四套（浅色 / 暖沙 / 深
 
 切换回内置主题时会清掉所有行内变量，完全回到 CSS 定义。
 
-## 插件提供主题
+## 主题的安全边界
 
-插件需要 `themes` 权限：
-
-```json
-{ "permissions": ["themes"] }
-```
-
-```js
-module.exports.activate = (folio) => {
-  folio.themes.register({
-    id: 'amber',
-    label: '琥珀',
-    tone: 'light',
-    tokens: { bg: '#fbf3e6', text: '#2a1f12', accent: '#c2681a' },
-  });
-};
-```
-
-- 一个插件最多提供 8 个主题；id 会自动加插件前缀，不会和内置/其他插件冲突。
-- 插件被停用或卸载时，它提供的主题会自动消失；如果当时正用着该主题，界面会回落到浅色。
-- 主题令牌只接受颜色字符串，超出白名单的键会被忽略，不能借主题注入任意 CSS。
+主题令牌只接受颜色字符串，超出白名单的键会被忽略，不能借主题注入任意 CSS。
+`id` 必须匹配 `^[a-z0-9][a-z0-9-]{1,40}$`，主题数量与大小由设置页控制。
 
 ## 相关文件
 
 - `src/themes.js`：内置令牌、规范化、`applyTheme`、JSON 导入导出。
-- `src/store/AppStore.jsx`：`themes` / `activeTheme` / `saveCustomTheme` / `removeCustomTheme`，以及插件主题订阅。
+- `src/store/AppStore.jsx`：`themes` / `activeTheme` / `saveCustomTheme` / `removeCustomTheme`。
 - `src/components/SettingsPage.jsx`：主题网格、编辑器、导入导出。
-- `electron/plugins.js`：`folio.themes` 与主题校验。

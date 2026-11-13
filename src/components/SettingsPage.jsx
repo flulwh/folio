@@ -458,16 +458,15 @@ export default function SettingsPage({ onClose }) {
                         <button
                           className={`theme-swatch${settings.theme === theme.id ? ' active' : ''}`}
                           onClick={() => patchSettings({ theme: theme.id })}
-                          title={theme.owner ? `来自插件 ${theme.owner}` : theme.label}
+                          title={theme.label}
                         >
                           <span
                             className="theme-preview"
                             style={{ background: theme.tokens.bg, color: theme.tokens.accent }}
                           />
                           <span className="theme-label">{theme.label}</span>
-                          {theme.owner ? <span className="theme-badge">插件</span> : null}
                         </button>
-                        {!theme.builtin && !theme.owner ? (
+                        {!theme.builtin ? (
                           <button
                             className="theme-remove"
                             type="button"
@@ -493,7 +492,7 @@ export default function SettingsPage({ onClose }) {
                               onChange={(event) => setThemeDraft({ ...themeDraft, text: event.target.value, error: '' })}
                             />
                           </label>
-                          {themeDraft.error ? <p className="store-error">{themeDraft.error}</p> : null}
+                          {themeDraft.error ? <p className="theme-error">{themeDraft.error}</p> : null}
                           <div className="theme-editor-actions">
                             <button
                               className="btn primary small"

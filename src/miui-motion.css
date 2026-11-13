@@ -303,8 +303,7 @@
 /* 弹窗遮罩：用毛玻璃表达"退到后面去"，比单纯压暗更能读出层级 */
 [data-skin='miui'] .modal-backdrop,
 [data-skin='miui'] .shortcuts-backdrop,
-[data-skin='miui'] .drop-overlay,
-[data-skin='miui'] .plugin-overlay-backdrop {
+[data-skin='miui'] .drop-overlay {
   backdrop-filter: blur(10px) saturate(1.1);
   -webkit-backdrop-filter: blur(10px) saturate(1.1);
   transition: opacity var(--mi-motion-base) var(--mi-motion-out);

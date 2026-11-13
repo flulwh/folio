@@ -3,8 +3,8 @@
  *
  * 内置主题真正生效的是 CSS 里的 [data-theme='…'] 区块，即 src/design/tokens.css
  * —— 那是唯一的真相来源。这里保留一份同样的令牌，一是为了给设置页和阅读面板
- * 画预览卡（预览卡要显示真实的强调色，不能是另一个配色），二是给自定义主题 /
- * 插件主题做运行时注入。运行时注入写在 <html> 的行内样式上，优先级最高，
+ * 画预览卡（预览卡要显示真实的强调色，不能是另一个配色），二是给自定义主题
+ * 做运行时注入。运行时注入写在 <html> 的行内样式上，优先级最高，
  * 所以对内置主题也能覆盖。
  *
  * ⚠ 两份必须保持一致：改 tokens.css 之后要同步这里，并跑 `npm run check:theme`
@@ -133,7 +133,7 @@ export const BUILTIN_THEMES = [
 
 const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-z]+)$/i;
 
-export function normalizeTheme(raw, { builtin = false, owner = '' } = {}) {
+export function normalizeTheme(raw, { builtin = false } = {}) {
   if (!raw || typeof raw !== 'object') return null;
   const id = String(raw.id || '').trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{1,40}$/.test(id)) return null;
@@ -156,7 +156,7 @@ export function normalizeTheme(raw, { builtin = false, owner = '' } = {}) {
   tokens.accentSoft = tokens.accentSoft || tokens.bg;
   tokens.sheetBg = tokens.sheetBg || tokens.bgElevated;
   tokens.toolbarBg = tokens.toolbarBg || tokens.bg;
-  return { id, label, tone, builtin, owner, tokens };
+  return { id, label, tone, builtin, tokens };
 }
 
 /** 把主题写到 <html>，自定义主题用外壳主题承载结构性规则（阴影/描边等）。 */
