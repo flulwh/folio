@@ -2,6 +2,20 @@
 
 设计说明与审计记录。都是纯文本，随主仓库一起走。
 
+| 文档 | 内容 |
+| --- | --- |
+| [lan-panel.md](lan-panel.md) | 局域网面板：架构、接口表、双向同步链路、安全边界、故障排查 |
+| [sources.md](sources.md) | 书源与净化规则：规则语法全集、脚本 API、兜底策略、云端阅读、漫画 |
+| [architecture.md](architecture.md) | 进程模型、目录职责、关键设计取舍、主题与动效系统 |
+| [performance.md](performance.md) | 实测基线、虚拟滚动、高度缓存、书源引擎优化、回归工具 |
+| [troubleshooting.md](troubleshooting.md) | 启动白屏、沙箱、npm 11、书源导入报错、代理等常见坑 |
+| [themes.md](themes.md) | 主题扩展：自定义主题与主题 JSON 格式 |
+| [motion.md](motion.md) | 动效系统：Apple / MIUI 两套语言与参数 |
+| [design-brief.md](design-brief.md) | 「纸本 / Editorial」重构简报 |
+| [audit-2026-10-24.md](audit-2026-10-24.md) | 代码审计报告与修复清单 |
+
+README 保持精简，只放「怎么用起来」的部分；实现细节都在这里。
+
 ## 截图不在这里
 
 README 用到的截图（46 张 PNG）已迁到独立仓库 **[flulwh/folio-assets](https://github.com/flulwh/folio-assets)**，
