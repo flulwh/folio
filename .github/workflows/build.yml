@@ -100,8 +100,22 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: 创建 GitHub Release 草稿
+      - name: 检查该 tag 是否已有 Release
         if: startsWith(github.ref, 'refs/tags/v')
+        id: rel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME 已存在，跳过自动草稿（避免把手动发布的正式版改回 draft）"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 GitHub Release 草稿
+        if: startsWith(github.ref, 'refs/tags/v') && steps.rel.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           draft: true
