@@ -125,6 +125,18 @@ const api = {
   setProgress: (...args) => (window.readerAPI?.setProgress ?? browserFallback.setProgress)(...args),
   getSettings: (...args) => (window.readerAPI?.getSettings ?? browserFallback.getSettings)(...args),
   setSettings: (...args) => (window.readerAPI?.setSettings ?? browserFallback.setSettings)(...args),
+
+  // 局域网面板（只有桌面版有；浏览器预览里退化成「不可用」）
+  lanStart: (config) =>
+    window.readerAPI?.lanStart
+      ? window.readerAPI.lanStart(config)
+      : Promise.resolve({ ok: false, error: '局域网面板需要桌面版', running: false }),
+  lanStop: () =>
+    window.readerAPI?.lanStop ? window.readerAPI.lanStop() : Promise.resolve({ ok: true, running: false }),
+  lanStatus: () =>
+    window.readerAPI?.lanStatus ? window.readerAPI.lanStatus() : Promise.resolve({ running: false, urls: [] }),
+  lanOpen: (url) =>
+    window.readerAPI?.lanOpen ? window.readerAPI.lanOpen(url) : Promise.resolve({ ok: false }),
   pickBook: () => window.readerAPI?.pickBook?.(),
   // 正文存成 books/ 下的副本，书架 json 只留元数据
   addBookContent: async (payload) => {
@@ -351,6 +363,13 @@ export const DEFAULT_SETTINGS = {
   macosFrame: true, // macOS 风格边框：Windows 上自绘红黄绿交通灯并去掉原生标题栏
   comicFit: 'width', // width | original，漫画默认适应宽度
   proxy: '', // 书源抓取用的 HTTP 代理，如 http://127.0.0.1:7890
+  // 局域网面板：同一 Wi-Fi 下的手机/平板可以看书架和进度，并写回阅读位置
+  lan: {
+    enabled: false,
+    port: 7788,
+    token: '', // 空 = 首次开启时生成；由渲染层生成并落盘
+    allowWrite: true, // 关掉就变成纯只读面板
+  },
 };
 
 const THEME_NAMES = ['paper', 'sepia', 'night', 'forest'];
@@ -455,6 +474,28 @@ export function AppProvider({ children }) {
     if (loaded) persistSettings(settings);
   }, [settings, loaded, persistSettings]);
 
+  // 主进程兜底生成的访问码（老设置里没有这个字段时会发生）。
+  // 收到就落进 settings，让它成为唯一真相 —— 否则下次启动又会换一张码，
+  // 已经连上的手机全被踢下线。
+  useEffect(() => {
+    const off = window.readerAPI?.onLanToken?.((payload) => {
+      const token = String(payload?.token || '');
+      if (!token) return;
+      setSettings((prev) => {
+        const lan = prev.lan || {};
+        if (lan.token === token) return prev;
+        return { ...prev, lan: { ...lan, token } };
+      });
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {
+        /* 窗口正在销毁 */
+      }
+    };
+  }, []);
+
   // 关窗/切到后台时把防抖里还没落盘的书架、进度、设置冲刷掉
   useEffect(() => {
     const flushAll = () => {
@@ -473,6 +514,43 @@ export function AppProvider({ children }) {
       flushAll();
     };
   }, [persistBooks, persistProgress, persistSettings]);
+
+  // 局域网面板（手机）写回来的进度。
+  // 规则和主进程一致：updatedAt 新的一方赢，字段做浅合并；
+  // 合并结果与内存里完全一样时不动 state —— 否则正在读的桌面端会白重渲染一次。
+  useEffect(() => {
+    const off = window.readerAPI?.onLanProgress?.((payload) => {
+      const incoming = payload?.progress;
+      if (!incoming || typeof incoming !== 'object') return;
+      setProgress((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, entry] of Object.entries(incoming)) {
+          if (!entry || typeof entry !== 'object') continue;
+          const old = prev[id];
+          if (!old) {
+            next[id] = entry;
+            changed = true;
+            continue;
+          }
+          const newer = (Number(entry.updatedAt) || 0) >= (Number(old.updatedAt) || 0);
+          const merged = newer ? { ...old, ...entry } : old;
+          if (JSON.stringify(merged) !== JSON.stringify(old)) {
+            next[id] = merged;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {
+        /* 窗口正在销毁时 removeListener 可能抛错 */
+      }
+    };
+  }, []);
   const dismissToast = useCallback(() => setToast(null), []);
   const notify = useCallback((message, tone = 'info', options = {}) => {
     const id = Math.random().toString(36).slice(2);
@@ -894,6 +972,10 @@ export function AppProvider({ children }) {
       toggleRule,
       removeRule,
       clearRules,
+      lanStart: api.lanStart,
+      lanStop: api.lanStop,
+      lanStatus: api.lanStatus,
+      lanOpen: api.lanOpen,
       appInfo: api.appInfo,
       logTail: api.logTail,
       logInfo: api.logInfo,

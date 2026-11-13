@@ -27,6 +27,36 @@ contextBridge.exposeInMainWorld('readerAPI', {
   getSettings: () => ipcRenderer.invoke('store:get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('store:set-settings', settings),
 
+  // 局域网面板：手机/平板在同一个 Wi-Fi 下访问书架与阅读进度
+  lanStart: (config) => ipcRenderer.invoke('lan:start', config),
+  lanStop: () => ipcRenderer.invoke('lan:stop'),
+  lanStatus: () => ipcRenderer.invoke('lan:status'),
+  lanOpen: (url) => ipcRenderer.invoke('lan:open', url),
+  // 手机端写回了进度：主进程把合并后的整份进度推过来，渲染层合并进内存
+  onLanProgress: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('lan:progress', listener);
+    return () => ipcRenderer.removeListener('lan:progress', listener);
+  },
+  // 老版本设置里没有访问码时，主进程会兜底生成一个；设置页负责写回 settings.json
+  onLanToken: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* ignore */
+      }
+    };
+    ipcRenderer.on('lan:token', listener);
+    return () => ipcRenderer.removeListener('lan:token', listener);
+  },
+
   // 字体
   listFonts: () => ipcRenderer.invoke('font:list'),
   installFonts: () => ipcRenderer.invoke('font:install'),

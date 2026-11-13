@@ -760,6 +760,51 @@ input.switch:checked::after {
   font-size: var(--fs-caption);
 }
 
+/* --- 局域网面板 ---------------------------------------------------------- */
+
+.settings-page .lan-url-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-4);
+}
+
+.settings-page .lan-url-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+}
+
+.settings-page .lan-url-row code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--text-soft);
+}
+
+/* 访问码：要一眼能念出来，所以等宽 + 拉大字号 + 拉开字距 */
+.settings-page .lan-token {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  letter-spacing: 0.18em;
+}
+
 /* --- 书源列表（设置页内） ------------------------------------------------ */
 
 .settings-page .settings-inline-search {

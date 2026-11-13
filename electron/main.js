@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { domainToUnicode } from 'url';
 import { createCloudStore } from './cloudstore.js';
 import { createLogger } from './logger.js';
+import { createLanService, lanAddresses } from './lan.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
 
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net, clipboard } = electron;
@@ -878,6 +879,12 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   }
   createWindow();
 
+  // 局域网面板：给冷启动让路，1.2 秒后再监听端口。
+  // 服务起不来（端口被占、没权限）只记日志，不影响桌面端使用。
+  setTimeout(() => {
+    bootLanFromSettings().catch(() => {});
+  }, 1200);
+
   if (dataDirInfo.fallback) {
     logCrash(`数据目录不可写，已改用 ${dataDir}（原：${dataDirInfo.preferred}）`);
     setTimeout(() => {
@@ -1147,7 +1154,122 @@ ipcMain.handle('cloud:prefetch-images-cancel', (_e, { key } = {}) => {
   return true;
 });
 
+/* ---------- 局域网面板 ---------- */
+
+// 同一个 Wi-Fi 下，手机/平板用浏览器打开「http://<本机 IP>:<端口>/?t=<访问码>」
+// 就能看到书架、读到哪了，还能接着往下读 —— 进度写回 progress.json，
+// 桌面端通过 IPC 收到通知后合并进内存状态，两端始终是同一份数据。
+
+const LAN_DEFAULT_PORT = 7788;
+
+function normalizeLanConfig(raw) {
+  const lan = raw && typeof raw === 'object' ? raw : {};
+  const port = Number(lan.port);
+  return {
+    enabled: lan.enabled === true,
+    port: Number.isFinite(port) ? Math.max(1024, Math.min(65535, Math.round(port))) : LAN_DEFAULT_PORT,
+    token: String(lan.token || '').trim().slice(0, 32),
+    allowWrite: lan.allowWrite !== false,
+  };
+}
+
+let lanService = null;
+let lanConfig = normalizeLanConfig(null);
+
+function lanLog(level, message, meta) {
+  const fn = log[level] || log.info;
+  try {
+    fn.call(log, 'lan', message, meta);
+  } catch {
+    /* 日志失败不能影响服务 */
+  }
+}
+
+function ensureLanService() {
+  if (lanService) return lanService;
+  lanService = createLanService({
+    files,
+    booksDir,
+    readJson,
+    writeJson,
+    log: lanLog,
+    getVersion: () => app.getVersion(),
+    // 封面：本地缓存里有就直接发文件，没有就 302 到源站 ——
+    // 不在服务端代下封面，免得把桌面端的抓取队列搬到手机请求上。
+    resolveCover: (book) => {
+      const url = String(book?.cover || '').trim();
+      if (!/^https?:\/\//i.test(url)) return null;
+      const file = existingCoverFile(coverKey(url));
+      return file ? { file, url } : { url };
+    },
+    // 手机写进来的进度：落盘由 lan.js 做，这里把结果推给桌面窗口，
+    // 正在看的书架 / 阅读器立刻跟上。
+    onRemoteProgress: (progress, bookId) => {
+      broadcast('lan:progress', { progress, bookId, at: Date.now() });
+    },
+  });
+  return lanService;
+}
+
+async function applyLanConfig(raw) {
+  lanConfig = normalizeLanConfig(raw);
+  if (!lanConfig.enabled) {
+    if (lanService?.running) await lanService.stop();
+    return lanService ? lanService.status() : { running: false, port: 0, urls: [], token: lanConfig.token, clients: 0 };
+  }
+  const result = await ensureLanService().start(lanConfig);
+  // 访问码由主进程兜底生成时（老版本设置里没有这个字段），先告诉渲染层，
+  // 由设置页负责写回 settings.json —— 磁盘上的设置永远只有一个写入方。
+  if (result.ok && !lanConfig.token) {
+    broadcast('lan:token', { token: result.token });
+  }
+  return result;
+}
+
+/** 启动时按磁盘上的设置恢复服务；失败只记日志，绝不拦启动。 */
+async function bootLanFromSettings() {
+  let settings = {};
+  try {
+    settings = readJson(files.settings, {}) || {};
+  } catch {
+    return;
+  }
+  lanConfig = normalizeLanConfig(settings.lan);
+  if (!lanConfig.enabled) return;
+  try {
+    await applyLanConfig(lanConfig);
+  } catch (err) {
+    lanLog('warn', `局域网面板自动启动失败：${err?.message || err}`);
+  }
+}
+
 /* ---------- IPC ---------- */
+
+ipcMain.handle('lan:start', (_e, config) => applyLanConfig(config));
+ipcMain.handle('lan:stop', () => applyLanConfig({ ...lanConfig, enabled: false }));
+ipcMain.handle('lan:status', () => {
+  const base = {
+    running: false,
+    port: 0,
+    urls: [],
+    token: lanConfig.token,
+    allowWrite: lanConfig.allowWrite,
+    clients: 0,
+    addresses: lanAddresses(),
+  };
+  if (!lanService) return base;
+  return { ...base, ...lanService.status() };
+});
+ipcMain.handle('lan:open', async (_e, url) => {
+  const target = String(url || '');
+  if (!/^https?:\/\//i.test(target)) return { ok: false };
+  try {
+    await shell.openExternal(target);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) };
+  }
+});
 
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
@@ -1463,6 +1585,14 @@ ipcMain.handle('store:set-books', (_e, books) => {
   const safe = Array.isArray(books) ? books : [];
   const result = writeJson(files.books, safe);
   if (!safe.length) markExplicitlyCleared(files.books);
+  // 书架变了就通知局域网面板重拉一次（新增/移出书都会走到这里）
+  if (lanService?.running) {
+    try {
+      lanService.publish('books', { at: Date.now(), count: safe.length });
+    } catch {
+      /* 推送失败不影响落盘 */
+    }
+  }
   return result;
 });
 ipcMain.handle('store:get-progress', () => readJson(files.progress, {}));
@@ -1470,10 +1600,29 @@ ipcMain.handle('store:set-progress', (_e, progress) => {
   const safe = progress && typeof progress === 'object' ? progress : {};
   const result = writeJson(files.progress, safe);
   if (!Object.keys(safe).length) markExplicitlyCleared(files.progress);
+  // 桌面端读完一段，手机上正开着的那一页也要更新
+  if (lanService?.running) {
+    try {
+      lanService.publish('progress', { progress: safe, origin: 'desktop', at: Date.now() });
+    } catch {
+      /* 推送失败不影响落盘 */
+    }
+  }
   return result;
 });
 ipcMain.handle('store:get-settings', () => readJson(files.settings, null));
-ipcMain.handle('store:set-settings', (_e, settings) => writeJson(files.settings, settings));
+ipcMain.handle('store:set-settings', (_e, settings) => {
+  const result = writeJson(files.settings, settings);
+  // 网络配置变了（开关 / 端口 / 访问码 / 只读）就立刻生效，不用重启应用。
+  // 放到 setImmediate 里做：起停服务要几十毫秒，不能拖慢设置本身的保存。
+  const next = normalizeLanConfig(settings?.lan);
+  if (JSON.stringify(next) !== JSON.stringify(lanConfig)) {
+    setImmediate(() => {
+      applyLanConfig(next).catch((err) => lanLog('warn', `应用网络配置失败：${err?.message || err}`));
+    });
+  }
+  return result;
+});
 
 /* ---------- 书源 ---------- */
 

@@ -13,6 +13,8 @@ release*/
 .logtest/
 .shots/
 *.tsbuildinfo
+# 局域网面板的冒烟截图（tools/_lan-ui.png、_lan-panel-*.png）
+tools/_lan-*.png
 
 # 编辑器 / 系统
 .vscode/

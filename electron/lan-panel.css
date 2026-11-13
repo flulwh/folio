@@ -1,0 +1,612 @@
+/* ------------------------------------------------------------------
+   Folio 局域网面板
+   配色由桌面端主题注入（--bg / --text / --accent …），这里只定义结构。
+   没有外部字体、没有图片资源，弱网环境下也能秒开。
+   ------------------------------------------------------------------ */
+
+:root {
+  --bg: #faf8f4;
+  --surface: #fffefb;
+  --sunken: #f1ede4;
+  --text: #1c1815;
+  --soft: #5c554c;
+  --faint: #857d73;
+  --line: rgba(28, 24, 19, 0.13);
+  /* 主题注入只写 --line，强调描边跟着它走，深色主题下才不会突兀 */
+  --line-strong: var(--line);
+  --accent: #b1402c;  --accent-soft: rgba(177, 64, 44, 0.085);
+  --radius: 14px;
+  --shadow-card: 0 1px 2px rgba(28, 24, 19, 0.05), 0 6px 16px -10px rgba(28, 24, 19, 0.22);
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+  --font-read: "Songti SC", "Noto Serif SC", "Source Han Serif SC", "Georgia", "STSong", serif;
+}
+
+html[data-tone="dark"] {
+  --surface: #232019;
+  --sunken: #1a1814;
+  --soft: #c9c1b6;
+  --faint: #9a9187;
+  --line: rgba(250, 245, 236, 0.14);
+  --line-strong: var(--line);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 22px -12px rgba(0, 0, 0, 0.7);
+}
+
+[hidden] { display: none !important; }
+
+body.reading { overflow: hidden; }
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+
+/* ---------------- 顶栏 ---------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px clamp(16px, 5vw, 40px) 12px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.6) blur(14px);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.25s ease;
+}
+
+.topbar.scrolled { border-bottom-color: var(--line); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex: none;
+}
+
+.brand-name {
+  font-family: var(--font-read);
+  font-size: 19px;
+  letter-spacing: 0.02em;
+}
+
+.brand-tag {
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--soft);
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+.icon-btn.text { width: 38px; font-size: 13px; letter-spacing: 0.02em; }
+
+.icon-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.icon-btn:active { transform: scale(0.94); }
+
+.sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  position: relative;
+  flex: none;
+}
+
+.sync-dot[data-state="live"] { background: #3f8f5f; }
+.sync-dot[data-state="live"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  color: #3f8f5f;
+  opacity: 0.5;
+  animation: pulse 2.4s ease-out infinite;
+}
+.sync-dot[data-state="saving"] { background: var(--accent); }
+.sync-dot[data-state="off"] { background: #b0603f; }
+
+@keyframes pulse {
+  0% { transform: scale(0.7); opacity: 0.5; }
+  70% { transform: scale(1.5); opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* ---------------- 书架 ---------------- */
+
+.shelf-view {
+  flex: 1;
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 8px clamp(16px, 5vw, 40px) 48px;
+}
+
+.hero {
+  margin: 10px 0 32px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(150deg, var(--accent-soft), transparent 62%), var(--surface);
+  padding: clamp(16px, 3vw, 24px);
+  display: flex;
+  gap: clamp(16px, 3vw, 26px);
+  align-items: center;
+  box-shadow: var(--shadow-card);
+}
+
+.hero-cover {
+  position: relative; /* 没有它，里面的 .cover-fallback（absolute inset:0）会铺满整屏 */
+  width: 84px;
+  aspect-ratio: 2 / 3;
+  border-radius: 8px;
+  flex: none;
+  overflow: hidden;
+  background: var(--sunken);
+  box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.6);
+}
+
+.hero-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* hero 里的封面只有 84px 宽，默认字号会把书名挤成三四行 */
+.hero-cover .cover-fallback {
+  padding: 8px;
+  font-size: 13px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.hero-body { min-width: 0; flex: 1; }
+
+.hero-kicker {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.hero-title {
+  font-family: var(--font-read);
+  font-size: clamp(19px, 3.4vw, 24px);
+  line-height: 1.35;
+  margin: 0 0 6px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.hero-sub {
+  color: var(--faint);
+  font-size: 13px;
+  margin-bottom: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hero-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.mini-bar {
+  flex: 1;
+  min-width: 90px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.mini-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fffefb;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: transform 0.18s ease, filter 0.18s ease;
+}
+
+.btn:hover { filter: brightness(1.06); }
+.btn:active { transform: scale(0.97); }
+.btn.ghost {
+  background: transparent;
+  color: var(--soft);
+  border: 1px solid var(--line);
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.section-head h2 {
+  font-family: var(--font-read);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+.count {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--faint);
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+.section-note {
+  font-size: 11px;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: clamp(14px, 2.6vw, 26px) clamp(12px, 2.2vw, 20px);
+}
+
+.card {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+  animation: rise 0.42s cubic-bezier(0.23, 1, 0.32, 1) backwards;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.cover {
+  position: relative;
+  /* 显式 width 是给 aspect-ratio 一个确定依据：在 flex column（.card）里，
+     仅靠 stretch 得到的宽度算不出高度，封面会塌成 0。 */
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--sunken);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.28s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.28s ease;
+}
+
+.cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.cover-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  font-family: var(--font-read);
+  font-size: 15px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.94);
+  background: linear-gradient(160deg, hsl(var(--hue, 24) 34% 46%), hsl(calc(var(--hue, 24) + 26) 30% 32%));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card:hover .cover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06), 0 16px 30px -18px rgba(0, 0, 0, 0.55); }
+.card:active .cover { transform: translateY(-1px) scale(0.99); }
+
+.card-title {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+
+.card-sub {
+  font-size: 11px;
+  color: var(--faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.card-bar {
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.card-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.5s ease;
+}
+
+.card-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(6px);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.empty {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--soft);
+}
+
+.empty .muted { color: var(--faint); font-size: 13px; margin-top: 6px; }
+
+/* ---------------- 阅读 ---------------- */
+
+.reader-view {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: fade 0.24s ease;
+}
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.reader-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top)) clamp(10px, 4vw, 28px) 8px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.reader-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+  padding-left: 2px;
+}
+
+.reader-book {
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.reader-chapter {
+  font-size: 11px;
+  color: var(--faint);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.reader-tools { display: flex; gap: 2px; }
+
+.reader-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+}
+
+.paper {
+  width: min(38em, 100%);
+  margin: 0 auto;
+  padding: clamp(22px, 5vw, 44px) clamp(20px, 6vw, 34px) 30vh;
+  font-family: var(--font-read);
+  font-size: var(--reading-size, 18px);
+  line-height: 1.95;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.paper p {
+  margin: 0 0 0.85em;
+  text-align: justify;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  /* 一本 1MB 的 txt 能有上万段。content-visibility 让视口外的段落不进渲染树，
+     滚动照样顺畅；不支持的浏览器退化成全量渲染，只是慢一点。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.2em;
+}
+
+.paper p.gap {
+  height: 0.9em;
+  margin: 0;
+  content-visibility: visible;
+}
+
+.paper p:first-child { margin-top: 0; }
+
+.reader-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px clamp(16px, 5vw, 34px) calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--faint);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.foot-bar {
+  flex: 1;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.foot-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: inherit;
+}
+
+.foot-state {
+  min-width: 52px;
+  text-align: right;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.foot-state[data-show="1"] { opacity: 1; }
+
+/* ---------------- 提示与页脚 ---------------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 12px);
+  max-width: min(86vw, 420px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.23, 1, 0.32, 1);
+  z-index: 60;
+  text-align: center;
+}
+
+.toast[data-show="1"] { opacity: 1; transform: translate(-50%, 0); }
+
+.foot {
+  padding: 0 16px calc(22px + env(safe-area-inset-bottom));
+  text-align: center;
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: 0.03em;
+}
+
+/* ---------------- 窄屏 ---------------- */
+
+@media (max-width: 520px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(103px, 1fr)); gap: 16px 12px; }
+  .hero { gap: 14px; padding: 14px; border-radius: 16px; }
+  .hero-cover { width: 68px; }
+  .hero-sub { margin-bottom: 10px; }
+  .paper { font-size: var(--reading-size, 17px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Folio · 输入访问码</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #f7f4ee;
+    color: #1c1815;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: min(360px, 100%);
+    background: #fffefb;
+    border: 1px solid rgba(28, 24, 19, 0.12);
+    border-radius: 18px;
+    padding: 28px 24px 24px;
+    box-shadow: 0 18px 40px -28px rgba(28, 24, 19, 0.5);
+    text-align: center;
+  }
+  .mark {
+    width: 38px; height: 38px; margin: 0 auto 14px;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: rgba(177, 64, 44, 0.09);
+    color: #b1402c;
+  }
+  h1 {
+    font-family: "Songti SC", "Noto Serif SC", Georgia, serif;
+    font-size: 20px; font-weight: 600; letter-spacing: 0.02em;
+    margin: 0 0 6px;
+  }
+  p { margin: 0 0 20px; font-size: 13px; line-height: 1.6; color: #6b6459; }
+  input {
+    width: 100%;
+    padding: 13px 14px;
+    font-size: 22px;
+    letter-spacing: 0.32em;
+    text-align: center;
+    text-transform: uppercase;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: inherit;
+    background: #f7f4ee;
+    border: 1px solid rgba(28, 24, 19, 0.16);
+    border-radius: 12px;
+    outline: none;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  input:focus {
+    border-color: #b1402c;
+    box-shadow: 0 0 0 3px rgba(177, 64, 44, 0.12);
+  }
+  button {
+    width: 100%; margin-top: 12px;
+    padding: 12px;
+    font-size: 14px; font-weight: 500; color: #fffefb;
+    background: #b1402c;
+    border: 0; border-radius: 12px;
+    cursor: pointer;
+  }
+  button:active { transform: scale(0.99); }
+  .hint { margin: 18px 0 0; font-size: 11.5px; color: #8a8378; line-height: 1.6; }
+  .bad { color: #b1402c; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #14120f; color: #eae4d9; }
+    .card { background: #1d1a16; border-color: rgba(234, 228, 217, 0.14); }
+    p { color: #a89f92; }
+    input { background: #14120f; border-color: rgba(234, 228, 217, 0.18); }
+    .hint { color: #8d8578; }
+  }
+</style>
+</head>
+<body>
+  <form class="card" method="post" action="/auth">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="10" width="16" height="10" rx="2.5" />
+        <path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
+      </svg>
+    </div>
+    <h1>Folio 局域网面板</h1>
+    <p>输入桌面端显示的访问码，看看书架读到哪了。</p>
+    <input name="code" inputmode="text" maxlength="12" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" autofocus aria-label="访问码" placeholder="••••••" />
+    <button type="submit">进入书架</button>
+    <p class="hint">{{HINT}}</p>
+  </form>
+</body>
+</html>

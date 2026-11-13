@@ -26,6 +26,7 @@ import {
   IconDatabase,
   IconSearch,
   IconSettings,
+  IconShare,
   IconType,
 } from './Icons.jsx';
 
@@ -40,10 +41,23 @@ const SECTIONS = [
   { key: 'appearance', label: '外观', Icon: IconType },
   { key: 'reading', label: '阅读', Icon: IconBook },
   { key: 'sources', label: '书源', Icon: IconCloud },
+  { key: 'network', label: '网络', Icon: IconShare },
   { key: 'storage', label: '存储', Icon: IconDatabase },
   { key: 'shortcuts', label: '快捷键', Icon: IconCommand },
   { key: 'about', label: '关于', Icon: IconSettings },
 ];
+
+// 访问码字符集与主进程 electron/lan.js 保持一致，去掉 0/O/1/I/L 这类易混字符
+const LAN_TOKEN_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function makeLanToken(length = 6) {
+  const bytes = new Uint8Array(length);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
+  else for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  let out = '';
+  for (let i = 0; i < length; i += 1) out += LAN_TOKEN_CHARS[bytes[i] % LAN_TOKEN_CHARS.length];
+  return out;
+}
 
 function Slider({ label, hint, value, min, max, step, unit, onChange }) {
   return (
@@ -97,6 +111,10 @@ export default function SettingsPage({ onClose }) {
     notify,
     saveCustomTheme,
     removeCustomTheme,
+    lanStart,
+    lanStop,
+    lanStatus: getLanStatus,
+    lanOpen,
   } = useAppActions();
 
   // 排版预览的字体栈：与阅读器保持一致（用户字体优先）
@@ -141,6 +159,91 @@ export default function SettingsPage({ onClose }) {
   const [cache, setCache] = useState({ cloudBooks: 0, chapters: 0 });
   const [cacheBusy, setCacheBusy] = useState(false);
   const [themeDraft, setThemeDraft] = useState(null);
+
+  /* ---------------- 局域网面板 ---------------- */
+  // settings.lan 可能是老版本留下的 undefined，统一兜一层
+  const lanSettings = settings.lan || {};
+  const [lanStatus, setLanStatus] = useState(null);
+  const [lanBusy, setLanBusy] = useState(false);
+  const [lanPortDraft, setLanPortDraft] = useState(String(lanSettings.port || 7788));
+
+  useEffect(() => setLanPortDraft(String(lanSettings.port || 7788)), [lanSettings.port]);
+
+  const refreshLan = useCallback(async () => {
+    const status = await getLanStatus().catch(() => null);
+    if (status) setLanStatus(status);
+    return status;
+  }, [getLanStatus]);
+
+  // 进设置页先问一次状态。老版本设置里没有访问码时主进程会兜底生成一个，
+  // 这里把它补写回 settings.json —— 否则下次启动又换一张新码，已连上的设备全被踢。
+  useEffect(() => {
+    let cancelled = false;
+    const current = settings.lan || {};
+    (async () => {
+      const status = await getLanStatus().catch(() => null);
+      if (cancelled || !status) return;
+      setLanStatus(status);
+      if (status.token && status.token !== current.token) {
+        patchSettings({ lan: { ...current, token: status.token } });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getLanStatus, patchSettings, settings.lan]);
+
+  useEffect(() => {
+    if (section === 'network') refreshLan();
+  }, [section, refreshLan]);
+
+  /**
+   * 开关 / 改端口 / 换访问码都走这里：先让主进程真的启停服务，拿到结果再落设置。
+   * 顺序反过来会让主进程读到旧配置，出现「设置写着开着、端口却没监听」的假象。
+   */
+  const applyLan = useCallback(
+    async (next) => {
+      setLanBusy(true);
+      try {
+        const result = next.enabled ? await lanStart(next) : await lanStop();
+        if (result) setLanStatus(result);
+        if (result && result.ok === false) {
+          notify(result.error || '局域网面板没能启动', 'error');
+        }
+        patchSettings({ lan: { ...next, token: result?.token || next.token || '' } });
+        if (result?.ok) notify(next.enabled ? '局域网面板已开启' : '局域网面板已关闭');
+      } catch (err) {
+        notify(`操作失败：${err?.message || err}`, 'error');
+      } finally {
+        setLanBusy(false);
+      }
+    },
+    [lanStart, lanStop, notify, patchSettings]
+  );
+
+  const copyToClipboard = useCallback(
+    async (text, label) => {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        notify(`${label}已复制`);
+      } catch {
+        notify('复制失败，请手动选中复制', 'error');
+      }
+    },
+    [notify]
+  );
+
+  const commitLanPort = useCallback(() => {
+    const port = Number(lanPortDraft);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      notify('端口要填 1024–65535 之间的数字', 'error');
+      setLanPortDraft(String(lanSettings.port || 7788));
+      return;
+    }
+    if (port === Number(lanSettings.port || 7788)) return;
+    applyLan({ ...lanSettings, port, enabled: lanSettings.enabled === true });
+  }, [applyLan, lanPortDraft, lanSettings, notify]);
 
   useEffect(() => {
     window.readerAPI?.appInfo?.().then(setInfo).catch(() => {});
@@ -811,6 +914,136 @@ export default function SettingsPage({ onClose }) {
                   {filteredSources.length === 0 && (
                     <p className="settings-hint">没有匹配的书源。</p>
                   )}
+                </section>
+              </>
+            )}
+
+            {section === 'network' && (
+              <>
+                <section className="settings-group">
+                  <h3 className="settings-group-title">局域网面板</h3>
+                  <label className="switch-row">
+                    <span>
+                      开启面板
+                      <small>同一 Wi-Fi 下的手机、平板用浏览器打开就能看书架和读到哪了</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="switch"
+                      checked={!!lanSettings.enabled}
+                      disabled={lanBusy}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        applyLan({
+                          ...lanSettings,
+                          enabled,
+                          // 第一次开启时顺手生成访问码，用户不用先去点「换一张」
+                          token: lanSettings.token || (enabled ? makeLanToken() : ''),
+                        });
+                      }}
+                    />
+                  </label>
+                  <label className="switch-row">
+                    <span>
+                      允许写入阅读进度
+                      <small>关掉就是纯只读面板：手机上只能看，不能接着往下读</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      className="switch"
+                      checked={lanSettings.allowWrite !== false}
+                      disabled={lanBusy || !lanSettings.enabled}
+                      onChange={(event) =>
+                        applyLan({ ...lanSettings, enabled: true, allowWrite: event.target.checked })
+                      }
+                    />
+                  </label>
+                  <Row title="端口" hint="默认 7788；被别的程序占用时会自动往后顺延">
+                    <div className="proxy-row">
+                      <input
+                        className="text-input"
+                        value={lanPortDraft}
+                        inputMode="numeric"
+                        aria-label="面板端口"
+                        onChange={(event) => setLanPortDraft(event.target.value.replace(/[^\d]/g, '').slice(0, 5))}
+                        onBlur={commitLanPort}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') commitLanPort();
+                        }}
+                      />
+                      <button className="btn ghost small" disabled={lanBusy} onClick={commitLanPort}>
+                        应用
+                      </button>
+                    </div>
+                  </Row>
+                </section>
+
+                <section className="settings-group">
+                  <h3 className="settings-group-title">
+                    访问方式
+                    <span className="regex-badge">{lanStatus?.clients || 0} 台在线</span>
+                  </h3>
+                  {lanStatus?.running ? (
+                    <>
+                      <p className="settings-hint">在手机上打开下面任一地址，输入访问码即可。</p>
+                      <div className="lan-url-list">
+                        {(lanStatus.urls || []).map((url) => (
+                          <div className="lan-url-row" key={url}>
+                            <code>{url}</code>
+                            <button className="btn ghost small" onClick={() => copyToClipboard(url, '地址')}>
+                              复制
+                            </button>
+                          </div>
+                        ))}
+                        {!(lanStatus.urls || []).length && (
+                          <p className="settings-hint">没找到局域网地址，确认这台电脑连着 Wi-Fi 或网线。</p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="settings-hint">面板没在运行。打开上面的开关就会生成地址与访问码。</p>
+                  )}
+                  <Row title="访问码" hint="换一张会让已经连上的设备失效，需要重新输入">
+                    <div className="proxy-row">
+                      <code className="lan-token">{lanSettings.token || lanStatus?.token || '——'}</code>
+                      <button
+                        className="btn ghost small"
+                        onClick={() => copyToClipboard(lanSettings.token || lanStatus?.token, '访问码')}
+                      >
+                        复制
+                      </button>
+                      <button
+                        className="btn ghost small"
+                        disabled={lanBusy}
+                        onClick={() => applyLan({ ...lanSettings, enabled: true, token: makeLanToken() })}
+                      >
+                        换一张
+                      </button>
+                    </div>
+                  </Row>
+                  {lanStatus?.running && lanSettings.token ? (
+                    <Row title="在本机浏览器打开" hint="不想复制地址的话，直接开个窗口看效果">
+                      <button
+                        className="btn ghost small"
+                        onClick={() => lanOpen(`http://127.0.0.1:${lanStatus.port}/?t=${lanSettings.token}`)}
+                      >
+                        打开
+                      </button>
+                    </Row>
+                  ) : null}
+                </section>
+
+                <section className="settings-group">
+                  <h3 className="settings-group-title">说明</h3>
+                  <p className="settings-hint">
+                    面板只在局域网内可见，数据不经过任何服务器 —— 手机读的就是本机的 books.json 与 progress.json。
+                  </p>
+                  <p className="settings-hint">
+                    第一次开启时 Windows 可能会弹防火墙提示，要允许「专用网络」，否则手机连不上。
+                  </p>
+                  <p className="settings-hint">
+                    云端书需要书源引擎抓正文，手机上只显示阅读进度；本地 txt 可以直接读。
+                  </p>
                 </section>
               </>
             )}
