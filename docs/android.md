@@ -88,7 +88,7 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 cd android
 ./gradlew assembleDebug      # 调试包，包名带 .debug 后缀，可与正式包共存
 ./gradlew assembleRelease    # 发布包
-./gradlew testDebugUnitTest  # 32 项测试
+./gradlew testDebugUnitTest  # 39 项测试
 ```
 
 签名：默认用 debug 签名，方便直接安装。正式签名走环境变量：
@@ -113,7 +113,8 @@ cd android && ./gradlew testDebugUnitTest
 | --- | --- | --- |
 | `ProgressMergerTest` | 7 | updatedAt 胜负、字段浅合并、整份合并 |
 | `TextParserTest` | 10 | 切段、硬换行合并、中英文章节、章节归属 |
-| `ProgressCodecTest` | 9 | 进度/书架 JSON 与桌面端字段对齐 |
+| `ProgressCodecTest` | 8 | 进度/书架 JSON 与桌面端字段对齐 |
+| `ChapterFallbackTest` | 6 | 断网时退到最近的已缓存章节 |
 | `LanIntegrationTest` | 8 | **真的起一个桌面端服务**，用客户端代码走 HTTP 与 UDP |
 
 `LanIntegrationTest` 会启动 `tools/_lan-fixture.mjs`（真实 `createLanService`），

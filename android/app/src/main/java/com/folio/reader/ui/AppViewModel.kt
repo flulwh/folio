@@ -226,12 +226,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (text == null) {
             if (allowFallback) {
                 val cached = offline.cachedCloudChapters(book.id)
-                val nearest = cached.minByOrNull { kotlin.math.abs(it - chapterNo) }
-                val fallbackIndex = if (nearest != null) toc.indexOfFirst { it.index == nearest } else -1
-                if (fallbackIndex >= 0) {
-                    loadChapter(book, fallbackIndex, null, allowFallback = false)
-                    _reader.update { it.copy(offline = true, error = null) }
-                    return
+                if (com.folio.reader.core.ChapterFallback.shouldFallback(cached, chapterNo)) {
+                    val nearest = com.folio.reader.core.ChapterFallback.nearest(cached, chapterNo)
+                    val fallbackIndex = if (nearest != null) toc.indexOfFirst { it.index == nearest } else -1
+                    if (fallbackIndex >= 0) {
+                        loadChapter(book, fallbackIndex, null, allowFallback = false)
+                        _reader.update { it.copy(offline = true, error = null) }
+                        return
+                    }
                 }
             }
             _reader.update {
