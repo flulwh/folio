@@ -96,11 +96,13 @@ function rebuildInUtc(commit, utcParentSha) {
 
   const lines = header.split('\n');
   const out = [];
-  let epoch = 0;
+  // author 与 committer 的时间戳可能不同（amend、cherry-pick 之后尤其明显）。
+  // 必须分开记 —— 用同一个 epoch 填两行，GitHub 算出来的 sha 就和本地对不上。
+  const epoch = { author: 0, committer: 0 };
   for (const line of lines) {
     const m = line.match(/^(author|committer) (.*) (\d+) ([+-]\d{4})$/);
     if (m) {
-      epoch = Number(m[3]);
+      epoch[m[1]] = Number(m[3]);
       out.push(`${m[1]} ${m[2]} ${m[3]} +0000`);
     } else if (line.startsWith('parent ')) {
       out.push(`parent ${utcParentSha}`);
@@ -152,13 +154,16 @@ async function pushCommit(commit, utcParent) {
     throw new Error(`tree sha 不一致：本地 ${localTree} / 远端 ${tree.sha}`);
   }
 
-  const who = git('log', '-1', '--format=%an%n%ae', commit).split('\n');
+  const who = {
+    author: git('log', '-1', '--format=%an%n%ae', commit).split('\n'),
+    committer: git('log', '-1', '--format=%cn%n%ce', commit).split('\n'),
+  };
   const created = await api('/git/commits', 'POST', {
     message: local.message,
     tree: tree.sha,
     parents: [utcParentSha],
-    author: { name: who[0], email: who[1], date: isoOf(local.epoch) },
-    committer: { name: who[0], email: who[1], date: isoOf(local.epoch) },
+    author: { name: who.author[0], email: who.author[1], date: isoOf(local.epoch.author) },
+    committer: { name: who.committer[0], email: who.committer[1], date: isoOf(local.epoch.committer) },
   });
   if (created.sha !== local.sha) {
     throw new Error(`commit sha 不一致：本地 ${local.sha} / 远端 ${created.sha}`);
