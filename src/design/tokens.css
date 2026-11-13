@@ -1,0 +1,227 @@
+/* ==========================================================================
+   Folio — Editorial design tokens
+   --------------------------------------------------------------------------
+   「纸本」：暖纸底、墨色文字、朱砂一点。阴影让位给发丝线，圆角收敛，
+   一切为长文阅读服务。这一层必须最后加载，且优先级高于 index.css /
+   apple.css（apple.css 的 !important 已移除，见 scripts/design-audit）。
+   ========================================================================== */
+
+:root {
+  /* --- 字体：正文用宋（阅读），界面用黑，数字/元信息用等宽 -------------
+     注意：Noto Serif SC 是实测可用的真实宋体（tools/_fontcheck.mjs 验证）。
+     Songti SC / STSong / SimSun 在 Chromium 下会静默回退成无衬线，故排在后面
+     仅作兜底，不能让它们挡在 Noto Serif SC 前面。 */
+  --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong',
+    'SimSun', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-sans: 'Microsoft YaHei', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
+    'Segoe UI Variable Text', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  --font-serif: var(--font-display);
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, 'SFMono-Regular', 'Consolas',
+    monospace;
+  --font-kai: 'KaiTi', 'STKaiti', 'Kaiti SC', 'Noto Serif SC', serif;
+
+  /* --- macOS 风格窗口边框 -------------------------------------------
+     交通灯的三色是 macOS 的系统色，不随主题变化（主题换了交通灯也不换），
+     所以放在 :root 而不是各主题块里。 */
+  --traffic-close: #ff5f57;
+  --traffic-minimize: #febc2e;
+  --traffic-maximize: #28c840;
+  --traffic-idle: var(--text-ghost);
+  --traffic-glyph: rgba(0, 0, 0, 0.62);
+  --traffic-size: 12px;
+  --traffic-gap: 8px;
+  /* 交通灯整体左上角偏移，和 macOS trafficLightPosition 对齐 */
+  --traffic-inset-x: 18px;
+  --traffic-inset-y: 20px;
+  /* 标题栏内容要让开交通灯的最小左留白：
+     左偏移 + 3 个圆点 + 2 个间隙 = 70px，再留一个 --sp-5 的呼吸位 = 94px。
+     凡是左上角有按钮的标题栏（设置页 / 漫画页 / 云端 gate）都用它。 */
+  --traffic-reserve: calc(
+    var(--traffic-inset-x) + 3 * var(--traffic-size) + 2 * var(--traffic-gap) + var(--sp-5)
+  );
+
+  /* --- 尺度：4px 基准，界面节奏靠它统一 -------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* --- 字号：克制的 1.2 模数，标题用宋体拉开对比 ----------------------- */
+  --fs-micro: 10.5px;
+  --fs-caption: 11.5px;
+  --fs-small: 12.5px;
+  --fs-body: 13.5px;
+  --fs-body-lg: 15px;
+  --fs-title: 17px;
+  --fs-heading: 22px;
+  --fs-display: 30px;
+  --fs-mega: 44px;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.45;
+  --lh-body: 1.6;
+
+  /* 图片封面上的文字：照片背景不随主题变，四套主题统一反白 */
+  --on-art: #ffffff;
+
+  /* --- 圆角：纸是方的，只留极小圆角 ------------------------------------ */
+  --r-xs: 3px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 10px;
+  --r-pill: 999px;
+
+  /* --- 动效：短、准、不弹 --------------------------------------------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 0.14s;
+  --dur-base: 0.22s;
+  --dur-slow: 0.38s;
+
+  /* --- 布局 ------------------------------------------------------------ */
+  --rail: 60px;             /* 左侧书脊导航（若启用） */
+  --content-max: 1180px;    /* 书架内容最大宽度 */
+  --measure: 68ch;          /* 正文最佳行长 */
+}
+
+/* --------------------------------------------------------------------------
+   Paper — 默认：暖白纸 + 墨 + 朱砂
+   -------------------------------------------------------------------------- */
+[data-theme='paper'] {
+  --bg: #faf8f4;
+  --bg-elevated: #fffefb;
+  --bg-sunken: #f1ede4;
+  --bg-hover: rgba(28, 24, 19, 0.045);
+  --text: #1c1815;
+  --text-soft: #5c554c;
+  --text-faint: #736c63;
+  --text-ghost: rgba(28, 24, 19, 0.34);   /* 仅装饰：分隔符/占位/底纹，不承载信息 */
+  --line: rgba(28, 24, 19, 0.13);
+  --line-strong: rgba(28, 24, 19, 0.24);
+
+  --accent: #b1402c;          /* 朱砂 */
+  --accent-soft: rgba(177, 64, 44, 0.085);
+  --accent-contrast: #fffefb;
+  --accent-ink: #8d3021;
+
+  /* 危险色：比朱砂更深一档，只在删除/移除这类不可逆操作上出现 */
+  --danger: #a33524;
+  --danger-soft: rgba(163, 53, 36, 0.09);
+  --danger-line: rgba(163, 53, 36, 0.34);
+
+  --shadow-soft: 0 1px 2px rgba(28, 24, 19, 0.05);
+  --shadow-card: 0 2px 10px -6px rgba(28, 24, 19, 0.16);
+  --scrim: rgba(28, 24, 19, 0.28);
+  --sheet-bg: rgba(255, 254, 251, 0.92);
+  --toolbar-bg: rgba(250, 248, 244, 0.88);
+
+  --paper-grain: 0.021;
+  --tint: 28 24 19;
+}
+
+/* --------------------------------------------------------------------------
+   Sepia — 陈纸：微黄、偏暖、低对比
+   -------------------------------------------------------------------------- */
+[data-theme='sepia'] {
+  --bg: #f2e9d8;
+  --bg-elevated: #fbf4e6;
+  --bg-sunken: #e8dcc6;
+  --bg-hover: rgba(74, 54, 28, 0.055);
+  --text: #2a2119;
+  --text-soft: #6b5b47;
+  --text-faint: #726247;
+  --text-ghost: rgba(74, 54, 28, 0.34);   /* 仅装饰：分隔符/占位/底纹，不承载信息 */
+  --line: rgba(74, 54, 28, 0.16);
+  --line-strong: rgba(74, 54, 28, 0.3);
+
+  --accent: #9c4a1a;
+  --accent-soft: rgba(156, 74, 26, 0.09);
+  --accent-contrast: #fbf4e6;
+  --accent-ink: #7c3a13;
+
+  --danger: #963418;
+  --danger-soft: rgba(150, 52, 24, 0.1);
+  --danger-line: rgba(150, 52, 24, 0.36);
+
+  --shadow-soft: 0 1px 2px rgba(74, 54, 28, 0.06);
+  --shadow-card: 0 2px 10px -6px rgba(74, 54, 28, 0.18);
+  --scrim: rgba(46, 34, 18, 0.3);
+  --sheet-bg: rgba(251, 244, 230, 0.94);
+  --toolbar-bg: rgba(242, 233, 216, 0.9);
+
+  --paper-grain: 0.032;
+  --tint: 74 54 28;
+}
+
+/* --------------------------------------------------------------------------
+   Night — 夜读：近黑、低饱和、护眼朱砂
+   -------------------------------------------------------------------------- */
+[data-theme='night'] {
+  --bg: #121114;
+  --bg-elevated: #1a191d;
+  --bg-sunken: #0c0b0e;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --text: #e6e2da;
+  --text-soft: #9c968c;
+  --text-faint: #8a847b;
+  --text-ghost: rgba(230, 226, 218, 0.30);   /* 仅装饰：分隔符/占位/底纹，不承载信息 */
+  --line: rgba(230, 226, 218, 0.13);
+  --line-strong: rgba(230, 226, 218, 0.24);
+
+  --accent: #d4644c;
+  --accent-soft: rgba(212, 100, 76, 0.14);
+  --accent-contrast: #121114;
+  --accent-ink: #e0856f;
+
+  --danger: #e07660;
+  --danger-soft: rgba(224, 118, 96, 0.13);
+  --danger-line: rgba(224, 118, 96, 0.32);
+
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 2px 12px -6px rgba(0, 0, 0, 0.7);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --sheet-bg: rgba(26, 25, 29, 0.92);
+  --toolbar-bg: rgba(18, 17, 20, 0.9);
+
+  --paper-grain: 0.014;
+  --tint: 230 226 218;
+}
+
+/* --------------------------------------------------------------------------
+   Forest — 冷灰：青灰纸 + 墨绿
+   -------------------------------------------------------------------------- */
+[data-theme='forest'] {
+  --bg: #f2f4f3;
+  --bg-elevated: #fbfcfb;
+  --bg-sunken: #e7ebe8;
+  --bg-hover: rgba(24, 40, 34, 0.05);
+  --text: #1a221f;
+  --text-soft: #586560;
+  --text-faint: #66706a;
+  --text-ghost: rgba(24, 40, 34, 0.34);   /* 仅装饰：分隔符/占位/底纹，不承载信息 */
+  --line: rgba(24, 40, 34, 0.13);
+  --line-strong: rgba(24, 40, 34, 0.24);
+
+  --accent: #2f6b52;
+  --accent-soft: rgba(47, 107, 82, 0.09);
+  --accent-contrast: #fbfcfb;
+  --accent-ink: #245441;
+
+  --danger: #a33524;
+  --danger-soft: rgba(163, 53, 36, 0.09);
+  --danger-line: rgba(163, 53, 36, 0.34);
+
+  --shadow-soft: 0 1px 2px rgba(20, 36, 30, 0.05);
+  --shadow-card: 0 2px 10px -6px rgba(20, 36, 30, 0.16);
+  --scrim: rgba(16, 28, 24, 0.28);
+  --sheet-bg: rgba(251, 252, 251, 0.92);
+  --toolbar-bg: rgba(242, 244, 243, 0.9);
+
+  --paper-grain: 0.018;
+  --tint: 24 40 34;
+}

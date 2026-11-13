@@ -1,0 +1,45 @@
+{
+  "id": "reading-presets",
+  "name": "排版预设",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "一键切换紧凑、舒适、大字三种排版，不用再逐个拖滑块。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": [
+    "ui",
+    "settings",
+    "notify"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "打开排版预设"
+      },
+      {
+        "id": "compact",
+        "title": "切到紧凑排版"
+      },
+      {
+        "id": "comfort",
+        "title": "切到舒适排版"
+      },
+      {
+        "id": "large",
+        "title": "切到大字排版"
+      }
+    ],
+    "ui": {
+      "panels": [
+        {
+          "id": "presets",
+          "title": "排版切换",
+          "slot": "settings",
+          "width": "normal",
+          "icon": "Aa"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,685 @@
+/* ==========================================================================
+   Miuix Console · 视觉层（精确移植 bmbxwbh/miuix-console 的 design token）
+   ────────────────────────────────────────────────────────────────────────
+   由 miui.css 作用域化而来：所有规则挂在 [data-skin='miui'] 下，
+   与 apple.css 的 Apple 风格并存，由「设置 → 外观 → 界面风格」切换。
+   不要直接改这个文件；改 src/miui.css 后重新执行 tools/_scope-skin.mjs。
+   ========================================================================== */
+
+/* ==========================================================================
+   Miuix Console · 视觉层（精确移植 bmbxwbh/miuix-console 的 design token）
+   ────────────────────────────────────────────────────────────────────────
+   在 index.css 与 apple.css 之后加载，用 !important 反向覆盖 iOS 扁平风。
+   Token 直接来自 miuix-console 的 core/tokens.css：
+   主色蓝 #3482FF（深 #277AF7）· 平滑圆角 16px · 柔和弥散阴影 · 弹簧动效 ·
+   MiSans 字体 · 深色优先（5 级 Surface）。
+   正文阅读区（.reader 排版）保持克制。
+   ========================================================================== */
+
+/* ------------------------------- tokens --------------------------------- */:root{
+  /* Primary（来自 Miuix lightColorScheme） */
+  --mi-primary: #3482ff;
+  --mi-primary-hover: #5d9bff;
+  --mi-primary-active: #277af7;
+  --mi-primary-glow: rgba(52, 130, 255, 0.12);
+  --mi-tertiary-container: #eaf2ff;
+
+  /* Error */
+  --mi-error: #e94634;
+  --mi-error-container: #fdf6f4;
+
+  /* Radius（Miuix smooth corner 近似） */
+  --mi-r: 16px;
+  --mi-r-sm: 12px;
+  --mi-r-xs: 8px;
+  --mi-r-pill: 9999px;
+
+  /* Shadow（Miuix multi-layer soft shadow） */
+  --mi-sh1: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --mi-sh2: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --mi-sh3: 0 8px 32px rgba(0, 0, 0, 0.08);
+
+  /* Motion */
+  --mi-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mi-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --mi-font: 'MiSans', 'Mi Sans', -apple-system, 'PingFang SC', 'Noto Sans SC',
+    'Microsoft YaHei', sans-serif;
+}
+
+/* 浅色主题（paper / sepia）：Miuix lightColorScheme */[data-skin='miui'] [data-theme='paper'],
+[data-skin='miui'] [data-theme='sepia']{
+  --accent: #3482ff;
+  --accent-soft: rgba(52, 130, 255, 0.12);
+  --accent-glow: rgba(52, 130, 255, 0.25);
+  --bg: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #f7f7f7;
+  --text: #000000;
+  --text-soft: rgba(0, 0, 0, 0.6);
+  --text-faint: rgba(0, 0, 0, 0.4);
+  --line: #e0e0e0;
+  --mi-border: #d9d9d9;
+  --mi-s3: #e8e8e8;
+  --mi-s4: #e8e8e8;
+  --mi-s-hover: rgba(0, 0, 0, 0.04);
+  --mi-s-active: rgba(0, 0, 0, 0.07);
+  --mi-shadow: var(--mi-sh1);
+  --mi-shadow-lg: var(--mi-sh3);
+}
+
+/* 深色主题（night / forest）：Miuix darkColorScheme（5 级 Surface） */[data-skin='miui'] [data-theme='night'],
+[data-skin='miui'] [data-theme='forest']{
+  --accent: #277af7;
+  --accent-soft: rgba(39, 122, 247, 0.15);
+  --accent-glow: rgba(39, 122, 247, 0.3);
+  --bg: #161616;
+  --bg-elevated: #1c1c1c;
+  --bg-sunken: #0c0c0c;
+  --text: #f2f2f2;
+  --text-soft: rgba(255, 255, 255, 0.6);
+  --text-faint: rgba(255, 255, 255, 0.4);
+  --line: #404040;
+  --mi-border: #484848;
+  --mi-s3: #242424;
+  --mi-s4: #2c2c2c;
+  --mi-s-hover: rgba(255, 255, 255, 0.04);
+  --mi-s-active: rgba(255, 255, 255, 0.07);
+  --mi-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  --mi-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------- base ----------------------------------- */[data-skin='miui'] :focus-visible{
+  outline: 2.5px solid var(--mi-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}[data-skin='miui'] ::-webkit-scrollbar-thumb{
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  border: 3px solid transparent;
+  border-radius: 8px;
+  background-clip: content-box;
+}[data-skin='miui'] ::-webkit-scrollbar-thumb:hover{
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  background-clip: content-box;
+}
+
+/* 恢复氛围层：极淡的蓝色光晕 */[data-skin='miui'] .app::before{
+  content: '' !important;
+  display: block !important;
+  background:
+    radial-gradient(50% 42% at 12% -8%, rgba(52, 130, 255, 0.06), transparent 70%),
+    radial-gradient(42% 38% at 88% -4%, rgba(39, 122, 247, 0.04), transparent 72%) !important;
+}
+
+/* ------------------------------ buttons --------------------------------- */[data-skin='miui'] .btn{
+  height: 36px;
+  padding: 0 18px;
+  border-radius: var(--mi-r-sm);
+  border: 1px solid transparent;
+  background: var(--mi-s3);
+  color: var(--text);
+  font-family: var(--mi-font);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  box-shadow: none;
+  transition: all 0.1s var(--mi-ease);
+}[data-skin='miui'] .btn:hover{
+  background: var(--mi-s4);
+  transform: translateY(-1px);
+}[data-skin='miui'] .btn:active{
+  transform: scale(0.95) translateY(0);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.12);
+  opacity: 1;
+}[data-skin='miui'] .btn.primary{
+  background: var(--mi-primary) !important;
+  color: #fff;
+  border-color: transparent;
+  text-shadow: none;
+  box-shadow: 0 2px 8px rgba(76, 139, 245, 0.2) !important;
+}[data-skin='miui'] .btn.primary:hover{
+  background: var(--mi-primary-hover) !important;
+  box-shadow: 0 4px 14px rgba(76, 139, 245, 0.3) !important;
+}[data-skin='miui'] .btn.primary:active{
+  transform: scale(0.95) translateY(0);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}[data-skin='miui'] .btn.ghost{
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-soft);
+}[data-skin='miui'] .btn.ghost:hover{
+  background: var(--mi-s-hover);
+  color: var(--text);
+}[data-skin='miui'] .btn.danger{
+  background: var(--mi-error);
+  color: #fff;
+}[data-skin='miui'] .btn.danger:hover{
+  filter: brightness(1.1);
+  box-shadow: 0 4px 14px rgba(233, 70, 52, 0.25);
+}[data-skin='miui'] .btn.small{
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  border-radius: var(--mi-r-xs);
+}[data-skin='miui'] .btn:disabled,
+[data-skin='miui'] .btn[disabled]{
+  opacity: 0.4 !important;
+  box-shadow: none !important;
+  transform: none !important;
+  cursor: not-allowed;
+  background: var(--mi-s3) !important;
+  color: var(--text-faint) !important;
+  pointer-events: none;
+}[data-skin='miui'] .icon-btn{
+  width: 36px;
+  height: 36px;
+  border-radius: var(--mi-r-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  transition: transform 0.16s var(--mi-spring), background 0.12s ease, color 0.12s ease;
+}[data-skin='miui'] .icon-btn:hover{
+  background: var(--mi-s-hover);
+  color: var(--text);
+  transform: scale(1.04);
+}[data-skin='miui'] .icon-btn:active{
+  transform: scale(0.94);
+}[data-skin='miui'] .icon-btn.active{
+  background: var(--accent-soft);
+  color: var(--accent);
+}[data-skin='miui'] .icon-btn.danger:hover{
+  color: var(--mi-error);
+  background: var(--mi-error-container);
+}
+
+/* ------------------------------ segmented ------------------------------- */[data-skin='miui'] .segmented{
+  height: 36px;
+  padding: 3px;
+  border-radius: var(--mi-r-sm);
+  background: var(--mi-s3);
+  border: 1px solid var(--mi-border);
+  gap: 2px;
+}[data-skin='miui'] .segmented-item{
+  height: 28px;
+  padding: 0 15px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--mi-font);
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 0;
+  box-shadow: none;
+  transition: background 0.16s ease, color 0.16s ease;
+}[data-skin='miui'] .segmented-item:hover{
+  background: var(--mi-s-hover);
+  color: var(--text);
+}[data-skin='miui'] .segmented-item.active{
+  background: var(--bg-elevated);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Apple 的分段控件滑块在 MIUI 皮肤下不显示：MIUI 自带实色选中块 */[data-skin='miui'] .segmented-thumb{
+  display: none;
+}
+
+/* ------------------------------- search --------------------------------- */[data-skin='miui'] .search{
+  height: 40px;
+  border-radius: var(--mi-r-sm);
+  background: var(--mi-s3);
+  border: 1px solid var(--mi-border);
+  padding: 0 14px;
+  gap: 7px;
+  color: var(--text-faint);
+  box-shadow: none;
+  transition: all 0.2s var(--mi-ease);
+}[data-skin='miui'] .search:focus-within{
+  background: var(--bg-elevated);
+  border-color: var(--mi-primary);
+  box-shadow: 0 0 0 3px var(--mi-primary-glow);
+}[data-skin='miui'] .search input{
+  font-size: 14px;
+}
+
+/* ------------------------------- switch --------------------------------- */[data-skin='miui'] .switch{
+  width: 52px;
+  height: 32px;
+  border-radius: var(--mi-r-pill);
+  background: var(--mi-s3);
+  border: 1px solid var(--mi-border);
+  box-shadow: none;
+}[data-skin='miui'] .switch::after{
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s var(--mi-spring);
+}[data-skin='miui'] .switch:checked{
+  background: var(--mi-primary);
+  border-color: var(--mi-primary);
+}[data-skin='miui'] .switch:checked::after{
+  transform: translateX(20px);
+}[data-skin='miui'] kbd{
+  font-family: var(--mi-font);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--mi-s3);
+  border: 1px solid var(--mi-border);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+  color: var(--text-soft);
+}
+
+/* ------------------------------- shelf ---------------------------------- */[data-skin='miui'] .shelf-header{
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--line);
+}[data-skin='miui'] .brand-mark{
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 11px !important;
+  background: linear-gradient(160deg, #5d9bff 0%, #3482ff 100%) !important;
+  border: none;
+  box-shadow: 0 2px 8px rgba(76, 139, 245, 0.3) !important;
+}[data-skin='miui'] .brand-name{
+  font-family: var(--mi-font) !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .brand-name::after{
+  content: '';
+}[data-skin='miui'] .brand-sub{
+  font-family: var(--mi-font);
+  font-size: 10.5px !important;
+  letter-spacing: 0.06em !important;
+  color: var(--text-faint) !important;
+}[data-skin='miui'] .tool-count{
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+/* --------------------------- continue card ------------------------------ */[data-skin='miui'] .continue-card{
+  margin-top: 20px;
+  padding: 22px;
+  min-height: 168px;
+  border-radius: var(--mi-r) !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: var(--mi-shadow) !important;
+  gap: 20px;
+  transition: box-shadow 0.32s var(--mi-ease), transform 0.18s var(--mi-spring);
+}[data-skin='miui'] .continue-card:hover{
+  transform: translateY(-2px);
+  box-shadow: var(--mi-shadow-lg) !important;
+}[data-skin='miui'] .continue-cover{
+  width: 108px;
+  height: 152px;
+  border-radius: 14px;
+  border: none;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.2);
+}[data-skin='miui'] .continue-eyebrow{
+  font-family: var(--mi-font) !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+  color: var(--accent) !important;
+}[data-skin='miui'] .continue-title{
+  font-family: var(--mi-font) !important;
+  font-size: 25px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.25 !important;
+  margin: 6px 0 12px;
+}[data-skin='miui'] .continue-bar{
+  height: 5px !important;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 8%, transparent) !important;
+  border: none;
+  box-shadow: none;
+  overflow: hidden;
+}[data-skin='miui'] .continue-bar > span{
+  background: var(--mi-primary) !important;
+  border-radius: 99px;
+  box-shadow: 0 0 8px var(--accent-glow) !important;
+}[data-skin='miui'] .continue-cta{
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ------------------------------- heading -------------------------------- */[data-skin='miui'] .shelf-title{
+  font-family: var(--mi-font) !important;
+  font-size: 22px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .shelf-count{
+  background: var(--mi-s3);
+  color: var(--text-soft);
+  border: none;
+  box-shadow: none;
+  font-family: var(--mi-font);
+  font-weight: 500;
+}
+
+/* ------------------------------ book cover ------------------------------ */[data-skin='miui'] .book-grid{
+  gap: 26px 20px;
+}[data-skin='miui'] .book-cover,
+[data-skin='miui'] .market-cover{
+  border-radius: var(--mi-r-sm) !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 12px 24px -12px rgba(0, 0, 0, 0.2) !important;
+  transition: transform 0.18s var(--mi-spring), box-shadow 0.2s ease;
+}[data-skin='miui'] .book-card:hover .book-cover,
+[data-skin='miui'] .book-cover:hover,
+[data-skin='miui'] .market-card:hover .market-cover{
+  transform: translateY(-4px) !important;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14), 0 20px 36px -14px rgba(0, 0, 0, 0.26) !important;
+}[data-skin='miui'] .cover-art,
+[data-skin='miui'] .market-cover-art{
+  background: linear-gradient(160deg, var(--accent-soft), var(--bg-elevated)) !important;
+}[data-skin='miui'] .cover-art img,
+[data-skin='miui'] .market-cover-art img{
+  border-radius: inherit !important;
+}[data-skin='miui'] .cover-shine{
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 60%
+  );
+}[data-skin='miui'] .cover-title{
+  font-family: var(--mi-font);
+  font-weight: 600;
+}[data-skin='miui'] .cover-badge{
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text);
+  border: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  font-family: var(--mi-font);
+  font-weight: 500;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}[data-skin='miui'] .book-name{
+  font-family: var(--mi-font) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+}[data-skin='miui'] .book-progress{
+  height: 4px !important;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 8%, transparent) !important;
+  border: none;
+  box-shadow: none;
+}[data-skin='miui'] .book-progress > span{
+  background: var(--mi-primary) !important;
+  border-radius: 99px;
+}
+
+/* ------------------------------ empty state ----------------------------- */[data-skin='miui'] .empty-shelf h2{
+  font-family: var(--mi-font);
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .empty-book{
+  border: none;
+  box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.25);
+}
+
+/* ------------------------------- panels --------------------------------- */[data-skin='miui'] .panel{
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border-left: 1px solid var(--line);
+  box-shadow: -24px 0 60px -32px rgba(0, 0, 0, 0.3) !important;
+}[data-skin='miui'] .panel-head{
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--line);
+}[data-skin='miui'] .panel-title{
+  font-family: var(--mi-font) !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+}[data-skin='miui'] .panel-eyebrow{
+  font-family: var(--mi-font) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+  color: var(--accent) !important;
+}[data-skin='miui'] .toc-item{
+  border-radius: var(--mi-r-sm);
+  font-family: var(--mi-font);
+}[data-skin='miui'] .toc-item.active,
+[data-skin='miui'] .toc-item.focused{
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+/* ------------------------------- modal ---------------------------------- */[data-skin='miui'] .modal{
+  border-radius: var(--mi-r);
+  background: var(--bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--line);
+  box-shadow: var(--mi-shadow-lg), 0 32px 80px -40px rgba(0, 0, 0, 0.4) !important;
+}[data-skin='miui'] .modal h3{
+  font-family: var(--mi-font);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .drop-box{
+  border: 1.5px dashed var(--accent);
+  background: var(--bg-elevated);
+  box-shadow: var(--mi-shadow);
+  border-radius: var(--mi-r);
+}
+
+/* ------------------------------- toast ---------------------------------- */[data-skin='miui'] .toast{
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--mi-r-sm);
+  background: rgba(28, 28, 30, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.5);
+  font-family: var(--mi-font);
+  font-size: 13px;
+  font-weight: 500;
+}[data-skin='miui'] .toast::after{
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  transform: translateX(-50%) rotate(45deg);
+  background: inherit;
+  border: none;
+}[data-skin='miui'] .toast.error{
+  background: var(--mi-error);
+  color: #fff;
+}[data-skin='miui'] .toast-action{
+  color: #7ab8ff;
+  font-weight: 500;
+}[data-skin='miui'] .toast-close{
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ----------------------------- shortcuts -------------------------------- */[data-skin='miui'] .shortcuts{
+  border-radius: var(--mi-r);
+  background: var(--bg-elevated);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--line);
+  box-shadow: var(--mi-shadow-lg) !important;
+}[data-skin='miui'] .shortcuts-head h2{
+  font-family: var(--mi-font);
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .shortcut-group h4{
+  font-family: var(--mi-font);
+  font-weight: 500;
+  color: var(--text-faint);
+}
+
+/* ---------------------------- 书籍市场（书城） -------------------------- */[data-skin='miui'] .market-title{
+  font-family: var(--mi-font) !important;
+  font-size: 30px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.15 !important;
+  color: var(--text);
+  text-shadow: none;
+}[data-skin='miui'] .market-eyebrow{
+  font-family: var(--mi-font) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: none !important;
+  color: var(--accent) !important;
+}[data-skin='miui'] .market-card-title{
+  font-family: var(--mi-font) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}[data-skin='miui'] .market-kind-tab{
+  height: 32px;
+  padding: 0 15px;
+  border-radius: var(--mi-r-pill);
+  border: 1px solid var(--mi-border);
+  background: var(--mi-s3);
+  font-family: var(--mi-font);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: background 0.16s ease, color 0.16s ease;
+}[data-skin='miui'] .market-kind-tab:hover{
+  background: var(--mi-s4);
+}[data-skin='miui'] .market-kind-tab.active{
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(76, 139, 245, 0.3);
+}[data-skin='miui'] .market-kind-tab.active b{
+  color: rgba(255, 255, 255, 0.8);
+}[data-skin='miui'] .market-search-box{
+  height: 44px;
+  border-radius: var(--mi-r-sm);
+  background: var(--mi-s3);
+  border: 1px solid var(--mi-border);
+  padding: 0 14px;
+  gap: 10px;
+  box-shadow: none;
+}[data-skin='miui'] .market-search-box:focus-within{
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--mi-primary-glow);
+}[data-skin='miui'] .market-search-btn{
+  height: 44px;
+  padding: 0 20px;
+  border-radius: var(--mi-r-sm);
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-family: var(--mi-font);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(76, 139, 245, 0.25);
+  transition: transform 0.16s var(--mi-spring), box-shadow 0.16s ease;
+}[data-skin='miui'] .market-search-btn:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(76, 139, 245, 0.35);
+}[data-skin='miui'] .market-search-btn:active{
+  transform: scale(0.95) translateY(0);
+}
+
+/* --------------------------- 吉祥物（鲸鱼娘） --------------------------- */[data-skin='miui'] .mascot{
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.15));
+  animation: mascotBob 4s ease-in-out infinite;
+  z-index: 2;
+}[data-skin='miui'] .mascot-bubble{
+  position: absolute;
+  left: 50%;
+  top: 78px;
+  transform: translateX(-50%);
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-radius: var(--mi-r-sm);
+  padding: 6px 12px;
+  font-family: var(--mi-font);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  white-space: nowrap;
+  box-shadow: var(--mi-shadow);
+  z-index: 2;
+}[data-skin='miui'] .mascot-bubble::after{
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: inherit;
+  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+}
+
+@keyframes mascotBob {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-7px);
+  }
+}
+
+/* ---------------------------- 深色主题微调 ------------------------------ */[data-skin='miui'] [data-theme='night'] .toast,
+[data-skin='miui'] [data-theme='forest'] .toast{
+  background: #2a2a2e;
+  color: #fff;
+}[data-skin='miui'] [data-theme='night'] .cover-badge,
+[data-skin='miui'] [data-theme='forest'] .cover-badge{
+  background: rgba(40, 40, 44, 0.85);
+  color: #fff;
+}
+
+/* 深色主题卡片内高光（Miuix dark signature depth） */[data-skin='miui'] [data-theme='night'] .continue-card,
+[data-skin='miui'] [data-theme='forest'] .continue-card,
+[data-skin='miui'] [data-theme='night'] .modal,
+[data-skin='miui'] [data-theme='forest'] .modal,
+[data-skin='miui'] [data-theme='night'] .shortcuts,
+[data-skin='miui'] [data-theme='forest'] .shortcuts{
+  box-shadow: var(--mi-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+/* 尊重「减少动效」偏好 */
+@media (prefers-reduced-motion: reduce) {[data-skin='miui'] .mascot{
+    animation: none;
+  }
+}

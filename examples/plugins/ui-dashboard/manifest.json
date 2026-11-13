@@ -1,0 +1,32 @@
+{
+  "id": "ui-dashboard",
+  "name": "阅读面板",
+  "version": "1.0.0",
+  "description": "用插件界面展示书架概览，支持一键刷新和随机推荐。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": [
+    "ui",
+    "books",
+    "notify"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "打开阅读面板"
+      }
+    ],
+    "ui": {
+      "panels": [
+        {
+          "id": "dashboard",
+          "title": "书架概览",
+          "slot": "overlay",
+          "width": "wide",
+          "icon": "📊"
+        }
+      ]
+    }
+  }
+}

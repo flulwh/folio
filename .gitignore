@@ -1,0 +1,25 @@
+node_modules/
+dist/
+release*/
+.DS_Store
+*.log
+.testdata/
+.testprofile/
+.pkgdata/
+.pkgprofile/
+
+# 本地工具产物：测试注入数据、视觉回归截图、临时日志目录
+.e2e-data/
+.logtest/
+.shots/
+*.tsbuildinfo
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+
+# 本地工作区记忆（仅本机，不上传）
+.workbuddy/
+.workbuddy-ai/
+.memory/

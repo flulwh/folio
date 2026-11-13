@@ -1,0 +1,21 @@
+{
+  "id": "daily-quote",
+  "name": "每日书摘",
+  "version": "1.1.0",
+  "description": "随机弹出一句书摘。可以在设置里塞自己的句子，存在插件自己的存储里。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": ["notify"],
+  "settings": [
+    {
+      "key": "quotesText",
+      "label": "自定义书摘",
+      "type": "text",
+      "placeholder": "留空使用内置句子；多条用 | 分隔",
+      "description": "写自己的句子，用竖线分开。"
+    }
+  ],
+  "contributes": {
+    "commands": [{ "id": "quote", "title": "来一句书摘", "description": "随机弹一句书摘" }]
+  }
+}

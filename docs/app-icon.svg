@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Folio">
+  <title>Folio</title>
+  <defs>
+    <linearGradient id="bg" x1="0.1" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#8674FF"/>
+      <stop offset="0.46" stop-color="#5F4BE0"/>
+      <stop offset="1" stop-color="#4330B2"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.22" cy="0.02" r="0.74">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.36"/>
+      <stop offset="0.52" stop-color="#ffffff" stop-opacity="0.07"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="depth" cx="0.5" cy="1.08" r="0.64">
+      <stop offset="0" stop-color="#22105E" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#22105E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="paperL" x1="0.2" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#FFFEF9"/>
+      <stop offset="0.58" stop-color="#F7EFDF"/>
+      <stop offset="1" stop-color="#E7DAC2"/>
+    </linearGradient>
+    <linearGradient id="paperR" x1="0.8" y1="0" x2="0.15" y2="1">
+      <stop offset="0" stop-color="#FFFBF2"/>
+      <stop offset="0.62" stop-color="#F2E8D4"/>
+      <stop offset="1" stop-color="#DFD0B4"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0.1" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#FFDD9C"/>
+      <stop offset="0.5" stop-color="#F2B75F"/>
+      <stop offset="1" stop-color="#D68B27"/>
+    </linearGradient>
+    <filter id="soft" x="-45%" y="-45%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="30"/>
+    </filter>
+    <filter id="ribbonShadow" x="-60%" y="-40%" width="220%" height="200%">
+      <feDropShadow dx="0" dy="9" stdDeviation="11" flood-color="#3A1E00" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <!-- 底板 -->
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#sheen)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#depth)"/>
+  <rect x="9" y="9" width="1006" height="1006" rx="224" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="2"/>
+
+  <!-- 主体：翻开的书 + 金色书签 -->
+  <g transform="translate(512 540) scale(1.14) translate(-512 -540)">
+    <ellipse cx="512" cy="748" rx="286" ry="44" fill="#1A0B57" opacity="0.30" filter="url(#soft)"/>
+
+    <path d="M508 424 C468 390 420 374 362 378 C326 380 296 388 268 400 L268 690 C296 678 326 672 362 672 C420 668 468 686 508 716 Z"
+          fill="url(#paperL)"/>
+    <path d="M516 424 C556 390 604 374 662 378 C698 380 728 388 756 400 L756 690 C728 678 698 672 662 672 C604 668 556 686 516 716 Z"
+          fill="url(#paperR)"/>
+
+    <!-- 页芯 -->
+    <path d="M286 700 C316 690 344 686 372 686 C420 684 458 696 494 720" fill="none" stroke="#DACCB1" stroke-width="7" stroke-linecap="round" opacity="0.9"/>
+    <path d="M738 700 C708 690 680 686 652 686 C604 684 566 696 530 720" fill="none" stroke="#D2C3A6" stroke-width="7" stroke-linecap="round" opacity="0.95"/>
+
+    <!-- 金色书签 -->
+    <g filter="url(#ribbonShadow)">
+      <path d="M622 430 L700 430 L700 620 L661 588 L622 620 Z" fill="url(#ribbon)"/>
+      <path d="M636 430 L650 430 L650 598 L636 586 Z" fill="#ffffff" opacity="0.24"/>
+      <path d="M622 430 L700 430" stroke="#C97F1C" stroke-opacity="0.45" stroke-width="3"/>
+    </g>
+
+    <!-- 中缝 -->
+    <path d="M512 424 L512 716" stroke="#4A34C4" stroke-opacity="0.32" stroke-width="12" stroke-linecap="round"/>
+    <path d="M512 424 L512 716" stroke="#ffffff" stroke-opacity="0.38" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- 文字 -->
+    <g stroke="#8B7AE8" stroke-linecap="round" fill="none">
+      <path d="M330 486 L448 486" stroke-width="15" opacity="0.55"/>
+      <path d="M330 528 L420 528" stroke-width="15" opacity="0.42"/>
+      <path d="M330 570 L440 570" stroke-width="15" opacity="0.30"/>
+      <path d="M566 486 L600 486" stroke-width="15" opacity="0.30"/>
+      <path d="M566 528 L692 528" stroke-width="15" opacity="0.42"/>
+      <path d="M600 570 L692 570" stroke-width="15" opacity="0.55"/>
+    </g>
+  </g>
+</svg>

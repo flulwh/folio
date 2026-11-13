@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folio · 沉浸式阅读器</title>
+    <!--
+      外部字体改成「非阻塞」加载。
+      原来是一张阻塞式 <link rel="stylesheet">：首屏要等 Google Fonts 的 CSS
+      才敢开始渲染，一旦网络不通（桌面版经常离线）就会一直白屏等到超时。
+
+      现在用 media="print" + onload 切回 all 的经典写法：浏览器先把样式表当
+      打印样式下载（不阻塞渲染），下载完再切回 screen 生效。
+      断网时 onload 不会触发，媒体查询也不会变成 all，于是安静降级到
+      tokens.css 里的系统字体栈（Noto Sans SC / Microsoft YaHei / PingFang SC），
+      不会白屏。
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "id": "theme-pack",
+  "name": "配色包",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "两套额外配色：琥珀（暖橙）与墨绿。装上后可在外观里直接切换。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": ["themes"],
+  "contributes": {
+    "themes": true
+  }
+}

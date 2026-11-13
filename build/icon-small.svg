@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Folio">
+  <title>Folio</title>
+  <defs>
+    <linearGradient id="bg" x1="0.1" y1="0" x2="0.92" y2="1">
+      <stop offset="0" stop-color="#8674FF"/>
+      <stop offset="0.46" stop-color="#5F4BE0"/>
+      <stop offset="1" stop-color="#4330B2"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.22" cy="0.02" r="0.74">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#FFFFFB"/>
+      <stop offset="0.7" stop-color="#FBF4E6"/>
+      <stop offset="1" stop-color="#EFE3CB"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#sheen)"/>
+
+  <!-- 小尺寸简化版：更大的书、更明确的中缝、无书签、无细节 -->
+  <g transform="translate(512 528) scale(1.3) translate(-512 -528)">
+    <path d="M498 412 C462 382 416 368 360 372 C326 374 298 382 272 394 L272 692 C298 680 326 674 360 674 C416 670 462 688 498 718 Z"
+          fill="url(#paper)"/>
+    <path d="M526 412 C562 382 608 368 664 372 C698 374 726 382 752 394 L752 692 C726 680 698 674 664 674 C608 670 562 688 526 718 Z"
+          fill="url(#paper)"/>
+    <path d="M498 412 L498 718" stroke="#5B45D6" stroke-width="10" stroke-linecap="round" opacity="0.28"/>
+    <path d="M526 412 L526 718" stroke="#3D2A9E" stroke-width="10" stroke-linecap="round" opacity="0.22"/>
+  </g>
+</svg>

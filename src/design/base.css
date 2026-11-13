@@ -1,0 +1,463 @@
+/* ==========================================================================
+   Folio — Editorial base layer
+   --------------------------------------------------------------------------
+   全局排版、焦点、滚动条、纸张质感、按钮/输入原语。
+   各表面的重构都建立在这一层之上。
+   ========================================================================== */
+
+/* ------------------------------- 纸张质感 -------------------------------- */
+
+/* 极细的噪点，让「纸」不是纯色。用 SVG feTurbulence 生成，不引入图片资源。
+   isolation 让 z-index:-1 停留在 .app 的层叠上下文内：压在背景之上、
+   所有子元素之下，不需要（也不能）改动子元素的定位。 */
+.app {
+  isolation: isolate;
+}
+
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: var(--paper-grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------- 基础排版 -------------------------------- */
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  letter-spacing: -0.003em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* 数字统一等宽对齐：进度、页数、字数不会跳动 */
+.tnum,
+.continue-percent,
+.continue-hint,
+.book-sub,
+.shelf-count,
+.shelf-stat,
+.reader-progress,
+.tool-count,
+.cover-badge,
+.settings-page-version {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.015em;
+}
+
+p {
+  margin: 0;
+}
+
+/* 界面小标题：等宽小字母距的「索引感」标签 */
+.continue-eyebrow,
+.market-eyebrow,
+.panel-eyebrow,
+.settings-group > .label,
+.form-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+/* ------------------------------- 焦点可见 -------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* 鼠标点击时不出焦点环，只在键盘导航时出 */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ------------------------------- 滚动条 ---------------------------------- */
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: var(--r-pill);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text) 30%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+}
+
+/* ------------------------------- 按钮原语 -------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 34px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.btn:active {
+  transform: translateY(0.5px);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 主按钮：墨块。不用品牌色——书页上最重的是墨。 */
+.btn.primary {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.btn.primary:hover {
+  background: color-mix(in srgb, var(--text) 88%, var(--bg));
+  border-color: transparent;
+}
+
+/* 次按钮：只有发丝线，没有底色 */
+.btn.ghost {
+  background: transparent;
+  color: var(--text-soft);
+  border-color: var(--line);
+}
+
+.btn.ghost:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--bg-hover);
+}
+
+/* 危险操作：只在 hover 时露红。色值走 token，四套主题各有一档，
+   不再用 [data-theme='night'] 手写分支（那样 forest 会漏）。 */
+.btn.danger {
+  background: transparent;
+  color: var(--danger);
+  border-color: var(--danger-line);
+}
+
+.btn.danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--accent-ink);
+}
+
+.btn.small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: var(--fs-caption);
+}
+
+.btn.full-width {
+  width: 100%;
+}
+
+/* 图标按钮：正方形、无边框、hover 才浮出底色 */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+  -webkit-app-region: no-drag;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.icon-btn:active {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.icon-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.icon-btn.danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* ------------------------------- 输入原语 -------------------------------- */
+
+.text-input,
+.search input,
+.store-url-input,
+.settings-inline-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  transition: border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.text-input:focus,
+.search input:focus,
+.store-url-input:focus,
+.settings-inline-search input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.text-input::placeholder,
+.search input::placeholder {
+  color: var(--text-faint);
+}
+
+textarea.text-input {
+  height: auto;
+  padding: var(--sp-3);
+  line-height: var(--lh-body);
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+}
+
+select.text-input {
+  cursor: pointer;
+  appearance: none;
+  padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* ------------------------------- kbd ------------------------------------- */
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--bg-elevated);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1;
+}
+
+/* ------------------------------- 分隔元素 -------------------------------- */
+
+.dot {
+  margin: 0 5px;
+  color: var(--text-faint);
+}
+
+/* ------------------------------ 懒加载占位 ------------------------------- */
+
+/* 路由级懒加载（集市 / 设置 / 云端书 / 漫画）下载 chunk 期间的占位。
+   撑满可视区，避免内容出现时把整页往下顶。 */
+.lazy-fallback {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+/* --------------------------- macOS 风格交通灯 ---------------------------- */
+
+/* Windows 上把原生标题栏去掉后，由这里自绘红黄绿三个按钮，
+   位置和 macOS 原生 traffic light 对齐（同一个偏移量，
+   所以两个平台切换时视觉不跳）。 */
+.traffic-lights {
+  position: fixed;
+  top: var(--traffic-inset-y);
+  left: var(--traffic-inset-x);
+  /* 窗口控件属于「窗口外框」，永远在应用内容之上 ——
+     macOS 原生 traffic light 就是这样：弹窗打开时照样能点。
+     所以这个层级要压过 modal / panel / 各类遮罩。 */
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: var(--traffic-gap);
+  /* 这一块是窗口拖拽区：空白处按住可以拖动窗口 */
+  -webkit-app-region: drag;
+}
+.traffic-dot {
+  position: relative;
+  width: var(--traffic-size);
+  height: var(--traffic-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--traffic-idle);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 按钮要能点，所以从拖拽区里挖出来 */
+  -webkit-app-region: no-drag;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* 静止时是灰点，hover 到具体某个按钮时它才亮起自己的颜色。
+   macOS 的行为是「整组一起亮」，这里做成逐个亮，
+   更符合 Windows 用户对按钮的直觉。 */
+.traffic-dot:hover {
+  background: var(--traffic-idle);
+}
+
+.traffic-close:hover {
+  background: var(--traffic-close);
+}
+
+.traffic-minimize:hover {
+  background: var(--traffic-minimize);
+}
+
+.traffic-maximize:hover {
+  background: var(--traffic-maximize);
+}
+
+/* hover 时浮现符号：× / − / + */
+.traffic-glyph {
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--traffic-glyph);
+  pointer-events: none;
+  user-select: none;
+}
+
+.traffic-maximize .traffic-glyph {
+  font-size: 11px;
+}
+
+/* --------------------- macOS 边框：各视图的标题栏留白 --------------------- */
+/* 交通灯占了窗口左上角 x∈[18,70] y∈[20,32] 这一块，任何标题栏内容
+   落在里面都会被压住。这里按视图给出让位方式：
+     - 通栏标题栏、左侧有按钮（阅读器 / 漫画 / 云端 gate / 设置）→ 左侧让开
+     - 居中或抽屉型标题（书架 / 集市 / 目录面板）→ 顶部整体下移
+   留白量统一走 --traffic-reserve 令牌，不写死像素。 */
+
+/* 左侧让开：通栏标题栏把内容推到交通灯右边 */
+html[data-frame='macos'] .reader-header {
+  height: 82px;
+  padding-top: 16px;
+  padding-left: var(--traffic-reserve);
+}
+
+html[data-frame='macos'] .comic-head {
+  padding-left: var(--traffic-reserve);
+}
+
+html[data-frame='macos'] .cloud-gate-head {
+  padding-left: var(--traffic-reserve);
+}
+
+html[data-frame='macos'] .settings-page-head {
+  padding-left: var(--traffic-reserve);
+}
+
+/* 顶部下移：内容整体落到交通灯下方 */
+html[data-frame='macos'] .shelf-header {
+  padding-top: 46px;
+}
+
+html[data-frame='macos'] .market-header {
+  padding-top: 46px;
+}
+
+html[data-frame='macos'] .panel-head {
+  padding-top: 44px;
+}
+
+/* 发丝线：取代卡片的替代手段 */
+.hairline {
+  height: 1px;
+  background: var(--line);
+  border: 0;
+  margin: 0;
+}
+
+/* ------------------------------- 减少动效 -------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+[data-motion='off'] *,
+[data-motion='off'] *::before,
+[data-motion='off'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

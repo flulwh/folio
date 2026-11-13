@@ -1,0 +1,84 @@
+{
+  "name": "immersive-reader",
+  "version": "2.0.0",
+  "description": "A minimalist, immersive e-book reader built with Electron and React.",
+  "license": "MIT",
+  "author": "Folio contributors",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://127.0.0.1:5173 && cross-env NODE_ENV=development node scripts/start-electron.mjs",
+    "start": "node scripts/start-electron.mjs",
+    "check": "node scripts/verify-release.mjs",
+    "check:theme": "node tools/_theme-sync.mjs",
+    "build:vite": "vite build",
+    "build": "vite build && node scripts/build-win.mjs",
+    "build:dir": "node scripts/build-win.mjs --win dir",
+    "build:portable": "node scripts/build-win.mjs --win portable",
+    "build:nsis": "node scripts/build-win.mjs --win nsis",
+    "build:zip": "node scripts/build-win.mjs --win zip",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "framer-motion": "^11.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^30.0.0",
+    "electron-builder": "^25.1.8",
+    "vite": "^5.0.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.example.folio-reader",
+    "productName": "Folio",
+    "copyright": "Copyright © 2026 Folio contributors",
+    "artifactName": "Folio-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable",
+        "zip",
+        "dir"
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "legalTrademarks": "Folio"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Folio",
+      "artifactName": "Folio-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "Folio-Portable-${version}.${ext}",
+      "requestExecutionLevel": "user"
+    }
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true
+  }
+}

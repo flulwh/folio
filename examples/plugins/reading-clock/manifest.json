@@ -1,0 +1,19 @@
+{
+  "id": "reading-clock",
+  "name": "阅读时钟",
+  "version": "1.1.0",
+  "description": "统计今天读了多久、翻了几本书。设置里可以给每天定个目标。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": ["notify"],
+  "settings": [
+    { "key": "dailyGoal", "label": "每日目标（分钟）", "type": "number", "default": 30, "description": "统计命令会显示今天还差多少。" },
+    { "key": "notifyOnSave", "label": "每次保存进度时提示", "type": "boolean", "default": false }
+  ],
+  "contributes": {
+    "commands": [
+      { "id": "today", "title": "今日阅读统计", "description": "今天读了多久、翻了几本书" },
+      { "id": "reset", "title": "清零今天的记录", "description": "把今天的累计清零重新开始" }
+    ]
+  }
+}

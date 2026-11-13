@@ -1,0 +1,949 @@
+/* ==========================================================================
+   Folio — 书架表面：「纸本 / Editorial」
+   --------------------------------------------------------------------------
+   这一层最后加载，负责把 index.css / apple.css 里的「卡片 + 投影 + 玻璃」
+   语言换回纸本：发丝线分区、宋体标题、朱砂只用在进度与主操作上。
+   只改书架 DOM（Bookshelf.jsx）里出现的类名，不碰结构。
+   ========================================================================== */
+
+/* ------------------------------- 版面骨架 -------------------------------- */
+
+.shelf {
+  /* 让 base.css 的纸张颗粒透上来，而不是盖一层实色底 */
+  background: transparent;
+  padding: 0 var(--sp-6);
+}
+
+.shelf-header,
+.shelf-body,
+.shelf-footer {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.shelf-body {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 0 0 var(--sp-7);
+}
+
+/* -------------------------------- 顶栏 ----------------------------------- */
+
+/* 不做「白色卡片条」：一条发丝线 + 留白就够 */
+.shelf-header {
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-5) 0 var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.brand {
+  gap: var(--sp-3);
+}
+
+/* 墨块：纸面上最重的是墨，不是品牌色 */
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-xs);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: none;
+}
+
+.brand-text {
+  gap: 0;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.1;
+  text-transform: none;
+  color: var(--text);
+}
+
+.brand-sub {
+  display: none;
+}
+
+.shelf-tools {
+  gap: var(--sp-2);
+}
+
+/* 搜索：一条下划线，不是灰色胶囊 */
+.shelf-tools .search,
+.shelf-tools .search:hover,
+.shelf-tools .search:focus-within {
+  width: 200px;
+  height: 30px;
+  padding: 0 2px;
+  gap: var(--sp-2);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+.shelf-tools .search:hover {
+  border-bottom-color: var(--line-strong);
+}
+
+.shelf-tools .search:focus-within {
+  border-bottom-color: var(--accent);
+  color: var(--text-soft);
+}
+
+/* 输入框自己不能有边框和底色，否则下划线搜索会变成「带框的盒子」 */
+.shelf-tools .search input,
+.shelf-tools .search input:focus {
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--fs-small);
+  letter-spacing: 0.005em;
+}
+
+.shelf-tools .search input:focus {
+  outline: none;
+}
+
+.shelf-tools .btn svg {
+  flex: none;
+}
+
+.shelf-tools .search-clear {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-xs);
+  color: var(--text-faint);
+}
+
+/* 排序：三个文字标签，选中项靠一条短墨线，而不是滑动的白色药丸 */
+.shelf-tools .segmented {
+  padding: 0;
+  gap: var(--sp-4);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.shelf-tools .segmented-item {
+  position: relative;
+  padding: 0 0 5px;
+  border-radius: 0;
+  font-size: var(--fs-caption);
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  background: transparent;
+  box-shadow: none;
+}
+
+.shelf-tools .segmented-item.active {
+  background: transparent;
+  box-shadow: none;
+}
+
+.shelf-tools .segmented-thumb {
+  inset: auto 0 0 0;
+  height: 1px;
+  border-radius: 0;
+  background: var(--text);
+  box-shadow: none;
+}
+
+/* 顶栏按钮：压低高度，主操作仍是墨块 */
+.shelf-tools .btn {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.01em;
+}
+
+.shelf-tools .btn.ghost {
+  border-color: transparent;
+  color: var(--text-soft);
+}
+
+.shelf-tools .btn.ghost:hover {
+  background: var(--bg-hover);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.shelf-tools .btn.primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg);
+}
+
+.shelf-tools .btn.primary:hover {
+  background: color-mix(in srgb, var(--text) 88%, var(--bg));
+}
+
+/* 纯图标按钮：正方形，不再有文字内边距（需压过 .shelf-tools .btn 的特异性） */
+.shelf-tools .shelf-log-btn,
+.shelf-tools .shelf-settings-btn {
+  width: 30px;
+  padding: 0;
+  color: var(--text-soft);
+}
+
+.tool-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* --------------------------- 继续阅读（头条） ---------------------------- */
+
+/* 编辑式头条：没有卡片、没有投影，靠上下发丝线与字号层级分区 */
+.continue-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: var(--sp-6) 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+  transition: none;
+}
+
+.continue-card:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: none;
+}
+
+/* 夜间主题给主视觉铺了一层渐变底：这里统一压平（选择器需带上 html 才能赢） */
+html[data-theme] .continue-card {
+  background: none;
+  box-shadow: none;
+  border-width: 0 0 1px;
+  border-style: solid;
+  border-color: var(--line);
+}
+
+.continue-card::before,
+.continue-card::after {
+  display: none;
+  content: none;
+}
+
+/* 水印留给标题本身，不要叠大字 */
+.continue-watermark,
+.continue-cover-glow {
+  display: none;
+}
+
+.continue-cover {
+  position: relative;
+  flex: none;
+  width: 104px;
+  height: 156px;
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: flex-end;
+  border-radius: var(--r-sm);
+  background: linear-gradient(150deg, var(--cover-a), var(--cover-b));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--scrim) 45%, transparent);
+  overflow: hidden;
+  transition: transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+/* 书脊：左侧一道渐深的暗部 */
+.continue-cover::before {
+  width: 7px;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--tint) / 0.26),
+    rgb(var(--tint) / 0.04) 70%,
+    rgb(var(--tint) / 0)
+  );
+}
+
+/* 压印线：内缩一圈细边框 */
+.continue-cover::after {
+  inset: 8px;
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 24%, transparent);
+  border-radius: 1px;
+}
+
+.continue-cover.has-art::after {
+  background: none;
+  border-color: color-mix(in srgb, var(--bg) 30%, transparent);
+}
+
+.continue-card:hover .continue-cover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px -16px var(--scrim), 0 1px 2px color-mix(in srgb, var(--scrim) 40%, transparent);
+}
+
+.continue-cover-title {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: var(--cover-ink);
+  max-height: 3.9em;
+  overflow: hidden;
+  text-shadow: none;
+}
+
+.continue-cover.has-art .continue-cover-title {
+  text-shadow: 0 1px 8px rgb(var(--tint) / 0.7);
+}
+
+.continue-info {
+  gap: var(--sp-2);
+  width: 100%;
+  max-width: none;
+}
+
+/* 眉标：等宽小字 + 一小段朱砂线，索引感 */
+.continue-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.continue-eyebrow::before {
+  content: '';
+  width: 16px;
+  height: 1px;
+  background: var(--accent);
+}
+
+.continue-title {
+  margin: var(--sp-1) 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  line-height: 1.16;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 进度：极细线，不要粗条 */
+.continue-progress {
+  width: 100%;
+  max-width: 260px;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+}
+
+.continue-bar {
+  flex: 1;
+  height: 2px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--line) 78%, transparent);
+  box-shadow: none;
+}
+
+.continue-bar > span {
+  border-radius: 0;
+  background: var(--accent);
+}
+
+.continue-percent {
+  flex: none;
+  min-width: 38px;
+  margin-left: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.02em;
+  text-align: left;
+  color: var(--text-faint);
+}
+
+/* 元信息行：上方一条发丝线，行内用点分隔 */
+.continue-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+}
+
+.continue-chapter {
+  max-width: 300px;
+  color: var(--text-soft);
+}
+
+.continue-hint .dot {
+  opacity: 0.5;
+}
+
+.continue-cta {
+  margin-left: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.continue-card:hover .continue-cta {
+  transform: none;
+  color: var(--accent-ink);
+}
+
+/* ------------------------------ 分区标题 --------------------------------- */
+
+.shelf-section-head {
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin: var(--sp-6) 0 var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.shelf-title {
+  gap: var(--sp-3);
+  font-family: var(--font-display);
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  color: var(--text);
+}
+
+.shelf-count {
+  display: inline;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.shelf-stat {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+/* -------------------------------- 书卡 ----------------------------------- */
+
+.book-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--sp-6) var(--sp-5);
+}
+
+.book-card {
+  gap: 0;
+}
+
+.book-cover {
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: var(--r-sm);
+  /* 无封面图时：柔和纸面渐变，而不是灰白块 */
+  background: linear-gradient(150deg, var(--cover-a), var(--cover-b));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--scrim) 40%, transparent);
+  transition: transform var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+
+/* 顶部微光 + 底部压暗：让平铺的渐变像一张印刷封面 */
+.book-cover::after {
+  background: linear-gradient(
+    180deg,
+    rgb(var(--tint) / 0.05),
+    rgb(var(--tint) / 0) 42%,
+    rgb(var(--tint) / 0.16)
+  );
+}
+
+.book-cover::before {
+  box-shadow: inset 3px 0 7px -5px rgb(var(--tint) / 0.5);
+}
+
+/* 夜间主题给封面加了一圈光晕投影：压回纸本的极轻投影 */
+html[data-theme] .book-cover {
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--scrim) 40%, transparent);
+}
+
+.book-card:hover .book-cover,
+.book-cover:hover,
+html[data-theme] .book-card:hover .book-cover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -18px var(--scrim), 0 1px 2px color-mix(in srgb, var(--scrim) 40%, transparent);
+}
+
+/* 有真实封面时以图片为准；照片上的字两套主题都要反白，故不取主题色 */
+.book-cover.has-art .cover-title,
+.continue-cover.has-art .continue-cover-title {
+  color: var(--on-art);
+}
+
+.book-cover.has-art .cover-frame {
+  border-color: color-mix(in srgb, var(--bg) 26%, transparent);
+}
+
+/* 书脊：左侧一道内阴影 + 一条压槽线 */
+.cover-spine {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 3;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--tint) / 0.22),
+    rgb(var(--tint) / 0.03) 72%,
+    rgb(var(--tint) / 0)
+  );
+  pointer-events: none;
+}
+
+.cover-spine::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(var(--tint) / 0.1);
+}
+
+/* 压印框：一圈比纸面深一点的细线 */
+.cover-frame {
+  display: block;
+  inset: 9px;
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 20%, transparent);
+  border-radius: 1px;
+  z-index: 1;
+}
+
+/* 书名排在封面上：宋体、收敛字距、最多三行 */
+.cover-title {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  font-family: var(--font-display);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.015em;
+  text-align: left;
+  color: var(--cover-ink);
+  text-shadow: none;
+  -webkit-line-clamp: 3;
+  z-index: 2;
+}
+
+.cover-shine {
+  display: block;
+  z-index: 2;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    color-mix(in srgb, var(--cover-a) 45%, var(--bg-elevated)) 50%,
+    transparent 62%
+  );
+  opacity: 0.5;
+  transform: translateX(-130%);
+}
+
+.book-card:hover .cover-shine {
+  transform: translateX(130%);
+}
+
+.cover-art {
+  z-index: 0;
+  /* 无图时不应出现灰底；有图时被 img 完全覆盖 */
+  background: linear-gradient(150deg, var(--cover-a), var(--cover-b));
+}
+
+.cover-art img {
+  border-radius: inherit;
+}
+
+.cover-cloud,
+html[data-theme] .cover-cloud {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  top: var(--sp-2);
+  left: var(--sp-2);
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 16%, transparent);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: none;
+  z-index: 4;
+}
+
+.cover-badge,
+html[data-theme] .cover-badge {
+  top: var(--sp-2);
+  right: var(--sp-2);
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--cover-ink) 16%, transparent);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-elevated) 74%, transparent);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: none;
+  z-index: 4;
+}
+
+.cover-badge.finished,
+html[data-theme] .cover-badge.finished {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+
+/* 书名与元信息：界面字，字号层级按令牌 */
+.book-meta {
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  min-height: 36px;
+}
+
+.book-meta-text {
+  gap: 3px;
+}
+
+.book-name {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.book-sub {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+}
+
+.book-sub .dot {
+  opacity: 0.45;
+}
+
+.book-actions {
+  gap: 0;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.book-card:hover .book-actions,
+.book-card:focus-within .book-actions {
+  opacity: 1;
+}
+
+.book-delete {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-xs);
+  color: var(--text-faint);
+}
+
+.book-progress {
+  height: 2px;
+  margin-top: var(--sp-2);
+  border-radius: 0;
+  background: var(--line);
+}
+
+.book-progress span {
+  border-radius: 0;
+  background: var(--accent);
+}
+
+/* ------------------------------- 空书架 ---------------------------------- */
+
+.empty-shelf {
+  padding: var(--sp-8) var(--sp-5) var(--sp-7);
+  gap: var(--sp-3);
+}
+
+.empty-illustration {
+  width: 190px;
+  /* 比书高出一截，给鲸鱼和气泡留出上方空间，避免压住书脊 */
+  height: 160px;
+  margin-bottom: var(--sp-6);
+}
+
+.empty-glow {
+  display: none;
+}
+
+.empty-book {
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: linear-gradient(150deg, var(--bg-sunken), var(--bg-elevated));
+  box-shadow: 0 14px 24px -20px var(--scrim);
+}
+
+.empty-book::after {
+  background: var(--line);
+}
+
+.empty-book.b2 {
+  background: linear-gradient(150deg, var(--accent-soft), var(--bg-elevated));
+}
+
+.mascot {
+  position: absolute;
+  right: -6px;
+  bottom: 0;
+  font-size: 22px;
+  line-height: 1;
+  filter: grayscale(0.15);
+  opacity: 0.85;
+}
+
+.mascot-bubble {
+  position: absolute;
+  right: 4px;
+  top: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: var(--bg-elevated);
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.empty-shelf h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-heading);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+
+.empty-shelf p {
+  max-width: 46ch;
+  margin: var(--sp-2) 0 var(--sp-6);
+  font-size: var(--fs-small);
+  line-height: var(--lh-body);
+  letter-spacing: 0.01em;
+  color: var(--text-soft);
+}
+
+.empty-actions {
+  gap: var(--sp-3);
+}
+
+.empty-search {
+  gap: var(--sp-4);
+  padding: 16vh var(--sp-5);
+  color: var(--text-soft);
+  font-size: var(--fs-body);
+}
+
+.empty-search p {
+  font-family: var(--font-display);
+  font-size: var(--fs-body-lg);
+  letter-spacing: 0.01em;
+  color: var(--text-soft);
+}
+
+.empty-search svg {
+  opacity: 0.4;
+}
+
+/* -------------------------------- 页脚 ----------------------------------- */
+
+.shelf-footer {
+  margin: 0;
+  padding: var(--sp-4) 0 var(--sp-5);
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.shelf-footer-keys {
+  gap: var(--sp-2);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+
+.shelf-footer kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  line-height: 1.4;
+  box-shadow: none;
+}
+
+/* ------------------------------- 拖拽遮罩 -------------------------------- */
+
+.drop-overlay {
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.drop-box {
+  gap: var(--sp-2);
+  padding: var(--sp-8) var(--sp-8);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--bg-elevated);
+  box-shadow: none;
+}
+
+.drop-box svg {
+  color: var(--accent);
+}
+
+.drop-box p {
+  margin-top: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-body-lg);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+.drop-box span {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* ------------------------------- 窄窗口 ---------------------------------- */
+
+@media (max-width: 1120px) {
+  .shelf {
+    padding: 0 var(--sp-4);
+  }
+
+  .shelf-tools .search,
+  .shelf-tools .search:hover,
+  .shelf-tools .search:focus-within {
+    width: auto;
+    flex: 1 1 180px;
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 900px) {
+  .continue-card {
+    gap: var(--sp-5);
+    padding: var(--sp-5) 0;
+  }
+
+  .continue-cover {
+    width: 88px;
+    height: 132px;
+  }
+
+  .continue-title {
+    font-size: var(--fs-heading);
+  }
+
+  .book-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--sp-5) var(--sp-4);
+  }
+}
+
+@media (max-width: 640px) {
+  .shelf-header {
+    gap: var(--sp-3);
+  }
+
+  .continue-cover {
+    width: 76px;
+    height: 114px;
+  }
+
+  .continue-title {
+    font-size: var(--fs-title);
+  }
+
+  .continue-hint {
+    gap: var(--sp-1) var(--sp-2);
+  }
+
+  .continue-cta {
+    margin-left: 0;
+  }
+}

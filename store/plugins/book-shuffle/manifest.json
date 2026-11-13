@@ -1,0 +1,18 @@
+{
+  "id": "book-shuffle",
+  "name": "随机抽书",
+  "version": "1.0.0",
+  "description": "从书架里随机抽一本，选择困难的时候用。",
+  "author": "Folio",
+  "main": "main.js",
+  "permissions": ["notify", "books"],
+  "settings": [
+    { "key": "onlyUnfinished", "label": "只抽没读完的", "type": "boolean", "default": true }
+  ],
+  "contributes": {
+    "commands": [
+      { "id": "shuffle", "title": "随机抽一本", "description": "从书架里随机挑一本" },
+      { "id": "three", "title": "抽三本备选", "description": "一次给出三个候选" }
+    ]
+  }
+}
