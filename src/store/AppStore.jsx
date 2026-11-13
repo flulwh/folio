@@ -347,7 +347,7 @@ const api = {
 };
 
 export const DEFAULT_SETTINGS = {
-  theme: 'paper', // 内置主题 id，或 customThemes / 插件主题的 id
+  theme: 'paper', // 内置主题 id，或 customThemes 里的自定义主题 id
   customThemes: [], // 用户自定义主题（{id,label,tone,tokens}）
   fontSize: 18,
   lineHeight: 1.85,

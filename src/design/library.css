@@ -494,20 +494,6 @@ input.switch:checked::after {
   font-weight: 500;
 }
 
-.settings-page .theme-badge {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  padding: 0 3px;
-  border-radius: var(--r-xs);
-  background: var(--bg-elevated);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--text-soft);
-}
-
 .settings-page .theme-remove {
   top: -7px;
   right: -7px;
@@ -591,6 +577,12 @@ input.switch:checked::after {
 .settings-page .theme-editor-actions {
   justify-content: flex-end;
   gap: var(--sp-2);
+}
+
+.settings-page .theme-error {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--danger);
 }
 
 /* --- 滑块行 -------------------------------------------------------------- */

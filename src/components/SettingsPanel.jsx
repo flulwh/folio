@@ -130,7 +130,7 @@ export default function SettingsPanel({
                       key={theme.id}
                       className={`theme-swatch${settings.theme === theme.id ? ' active' : ''}`}
                       onClick={() => onChange({ theme: theme.id })}
-                      title={theme.owner ? `来自插件 ${theme.owner}` : theme.label}
+                      title={theme.label}
                     >
                       <span
                         className="theme-preview"
