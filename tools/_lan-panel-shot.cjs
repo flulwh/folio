@@ -15,11 +15,6 @@ const CDP = Number(process.env.CDP_PORT || 9222);
 const DATA_DIR = process.env.FOLIO_DATA_DIR || path.join(__dirname, '..', '.folio-test-data');
 const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 
-// 每次从固定位置开始：否则上次运行留下的进度会改变排序和「未读」筛选结果。
-fs.writeFileSync(PROGRESS_FILE, JSON.stringify({
-  'lan-demo': { paraIndex: 18, percent: 12, chapterTitle: '第二章 灯火', updatedAt: Date.now() },
-}, null, 2), 'utf8');
-
 const getJson = (p) =>
   new Promise((resolve, reject) => {
     http
@@ -97,6 +92,16 @@ const ok = (name, cond, extra = '') => {
     })}).then((s) => JSON.stringify(s))`
   );
   await sleep(500);
+
+  /* ---------- 先把旧面板页面卸载，再落夹具 ---------- */
+  // 上一轮跑完后浏览器里可能还开着面板。它在 pagehide 时会补存一次进度，
+  // 如果夹具先写、页面后卸载，补存就会把夹具覆盖掉，导致断言读到上一轮的位置。
+  // 所以顺序必须是：先导航走（触发补存），再写夹具。
+  await call('Page.navigate', { url: 'about:blank' });
+  await sleep(900);
+  fs.writeFileSync(PROGRESS_FILE, JSON.stringify({
+    'lan-demo': { paraIndex: 18, percent: 12, chapterTitle: '第二章 灯火', updatedAt: Date.now() },
+  }, null, 2), 'utf8');
 
   /* ---------- 面板：桌面宽度 ---------- */
   await call('Emulation.setDeviceMetricsOverride', { width: 1180, height: 820, deviceScaleFactor: 1, mobile: false });
@@ -285,6 +290,39 @@ const ok = (name, cond, extra = '') => {
   );
   ok('百分比跟着变', Math.abs(Number(entryAfter.percent) - Number(entryBefore.percent)) > 1, String(entryAfter.percent));
 
+  /* ---------- 视口变化后仍能写回进度 ---------- */
+  // 旋转手机会触发 resize，面板会进入「钉住段落」状态。
+  // 早退逻辑一旦没能解锁（后台页面里 rAF 被节流），之后所有滚动都不会写回 ——
+  // 真机表现就是「切后台再回来，进度永远不更新」。这里守住它。
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 844,
+    height: 390,
+    deviceScaleFactor: 2,
+    mobile: true,
+  });
+  await sleep(900);
+  const beforeResize = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'))['lan-demo'] || {};
+  await js(`(() => {
+    const sc = document.getElementById('readerScroll');
+    sc.scrollTop = Math.round(sc.scrollHeight * 0.4);
+    sc.dispatchEvent(new Event('scroll'));
+    return true;
+  })()`);
+  await sleep(2200);
+  const afterResize = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'))['lan-demo'] || {};
+  ok(
+    '视口变化后滚动仍然写回进度',
+    Number(afterResize.updatedAt) > Number(beforeResize.updatedAt || 0),
+    `${beforeResize.updatedAt} → ${afterResize.updatedAt}`
+  );
+  await call('Emulation.setDeviceMetricsOverride', {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 2,
+    mobile: true,
+  });
+  await sleep(500);
+
   /* ---------- 回到桌面端，看它有没有接住 ---------- */
   await call('Emulation.clearDeviceMetricsOverride');
   await call('Page.navigate', { url: 'http://127.0.0.1:5173/' });
@@ -303,12 +341,38 @@ const ok = (name, cond, extra = '') => {
   );
   // 面板离开页面时 pagehide 还会补存一次（同一个位置，但页面宽度切回桌面后
   // 段落会重排，段落号可能差几段，百分比才是稳的口径）。
+  // 比对对象要用磁盘上的最新一条，而不是中间某次滚动的快照 ——
+  // 中间还有视口变化带来的另一次写回。
+  const finalSaved = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'))['lan-demo'] || {};
   ok(
     '桌面端拿到的是手机写进去的位置',
-    Math.abs(Number(progressInApp.percent) - Number(entryAfter.percent)) <= 2 &&
-      Number(progressInApp.updatedAt) >= Number(entryAfter.updatedAt),
-    `百分比 ${Number(progressInApp.percent).toFixed(1)} vs ${Number(entryAfter.percent).toFixed(1)}, at ${progressInApp.updatedAt} vs ${entryAfter.updatedAt}`
+    Math.abs(Number(progressInApp.percent) - Number(finalSaved.percent)) <= 2 &&
+      Number(progressInApp.updatedAt) >= Number(finalSaved.updatedAt),
+    `百分比 ${Number(progressInApp.percent).toFixed(1)} vs ${Number(finalSaved.percent).toFixed(1)}, at ${progressInApp.updatedAt} vs ${finalSaved.updatedAt}`
   );
+
+  /* ---------- 桌面端读正文：路径大小写 ---------- */
+  // Windows 路径大小写不敏感，但字符串比较是敏感的。
+  // 用错大小写去读自家书架里的书，旧版会判成「不在书架目录里」直接拒绝。
+  const readProbe = JSON.parse(
+    (await js(`(() => {
+      const base = ${JSON.stringify(path.join(DATA_DIR, 'books', 'lan-demo.txt'))};
+      const variants = [base, base.replace(/^[A-Za-z]:/, (m) => m.toLowerCase())];
+      return Promise.all(variants.map((p) =>
+        window.readerAPI.readBookText(p).then((r) => String(r.content || '').length)
+      )).then((sizes) => JSON.stringify(sizes));
+    })()`)) || '[]'
+  );
+  ok(
+    '桌面端能读出正文（路径大小写不同也一样）',
+    Array.isArray(readProbe) && readProbe.length === 2 && readProbe.every((n) => Number(n) > 500),
+    JSON.stringify(readProbe)
+  );
+
+  const outsideProbe = await js(
+    `window.readerAPI.readBookText('C:\\\\Windows\\\\System32\\\\drivers\\\\etc\\\\hosts').then((r) => String(r.error || ''))`
+  );
+  ok('书架目录外的文件仍然拒绝读取', String(outsideProbe || '').includes('不在书架目录里'), String(outsideProbe));
 
   console.log(`\n${failed ? '✗' : '✓'} ${failed} 项失败`);
   ws.close();
