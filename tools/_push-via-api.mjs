@@ -176,6 +176,13 @@ async function main() {
   }
   if (!commits.length) {
     console.log('没有待推送的提交');
+    // 仍可能需要打标签（例如只发版不推代码）
+    const tag = process.env.FOLIO_TAG;
+    if (tag) {
+      const head = git('rev-parse', 'HEAD');
+      await api('/git/refs', 'POST', { ref: `refs/tags/${tag}`, sha: head });
+      console.log(`远端标签 ${tag} → ${head}`);
+    }
     return;
   }
   console.log(`待推送 ${commits.length} 个提交：`);
@@ -203,6 +210,16 @@ async function main() {
     git('update-ref', `refs/heads/${branch}`, head);
     git('update-ref', `refs/remotes/origin/${branch}`, head);
     console.log(`本地 ${branch} → ${head}`);
+  }
+
+  // 标签同样走 API：git 协议推不动，但 refs 接口可以
+  const tag = process.env.FOLIO_TAG;
+  if (tag) {
+    await api(`/git/refs`, 'POST', {
+      ref: `refs/tags/${tag}`,
+      sha: head,
+    });
+    console.log(`远端标签 ${tag} → ${head}`);
   }
 }
 
