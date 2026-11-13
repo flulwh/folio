@@ -8,6 +8,7 @@ import { domainToUnicode } from 'url';
 import { createCloudStore } from './cloudstore.js';
 import { createLogger } from './logger.js';
 import { createLanService, lanAddresses } from './lan.js';
+import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
 
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net, clipboard } = electron;
@@ -1432,10 +1433,13 @@ ipcMain.handle('book:add-content', async (_e, payload) => {
 /** 只允许读 books/ 里的副本，或 books.json 里登记过的 filePath（防渲染层读任意文件）。 */
 function isKnownBookPath(filePath) {
   const target = path.resolve(String(filePath || ''));
-  const root = path.resolve(booksDir) + path.sep;
-  if (target.startsWith(root)) return true;
+  if (isInside(booksDir, target)) return true;
   const list = readJson(files.books, []);
-  return Array.isArray(list) && list.some((book) => book?.filePath && path.resolve(book.filePath) === target);
+  return Array.isArray(list) && list.some((book) => {
+    if (!book?.filePath) return false;
+    // 同盘符比较要忽略大小写，Windows 上 C:\ 和 c:\ 是同一个目录
+    return samePath(book.filePath, target);
+  });
 }
 
 ipcMain.handle('book:read', async (_e, filePath) => {
@@ -1461,8 +1465,7 @@ ipcMain.handle('book:delete-file', async (_e, filePath) => {
   // 只删 books/ 里的副本，避免误删用户的原文件
   try {
     const target = path.resolve(String(filePath || ''));
-    const root = path.resolve(booksDir) + path.sep;
-    if (!target.startsWith(root)) return { ok: false, reason: 'not-in-books-dir' };
+    if (!isInside(booksDir, target)) return { ok: false, reason: 'not-in-books-dir' };
     if (fs.existsSync(target)) fs.unlinkSync(target);
     return { ok: true };
   } catch (err) {

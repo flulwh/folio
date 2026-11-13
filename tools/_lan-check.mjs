@@ -47,6 +47,14 @@ const files = {
 const localText = '第一章 测试\n\n这是第一段正文，用来验证手机端能不能读到。\n\n第二段：结束。\n';
 fs.writeFileSync(path.join(booksDir, 'local1.txt'), localText, 'utf8');
 
+/*
+ * local2 的 filePath 与真实文件只差大小写 —— 模拟「从别的机器拷来的 books.json」
+ * 里盘符/目录大小写和本机不一致的情况。Windows 上这必须照样能读到正文。
+ */
+const caseVariant =
+  process.platform === 'win32' ? booksDir.replace(/\\/g, '/').toLowerCase().replace(/\//g, '\\') : booksDir;
+const local2Path = path.join(caseVariant, 'local1.txt');
+
 fs.writeFileSync(
   files.books,
   JSON.stringify([
@@ -58,6 +66,15 @@ fs.writeFileSync(
       filePath: path.join(booksDir, 'local1.txt'),
       hue: 210,
       addedAt: 1,
+    },
+    {
+      id: 'local2',
+      kind: 'local',
+      name: '大小写不同的路径',
+      author: '作者：某人',
+      filePath: local2Path,
+      hue: 120,
+      addedAt: 3,
     },
     {
       id: 'cloud1',
@@ -175,7 +192,7 @@ async function main() {
 
   const stateRes = await fetch(`${base}/api/state`, { headers: { cookie } });
   const stateData = await stateRes.json();
-  ok('/api/state 返回两本书', stateData.ok && stateData.books.length === 2);
+  ok('/api/state 返回三本书', stateData.ok && stateData.books.length === 3, `实际 ${stateData.books?.length}`);
   ok('不把本地路径送出去', stateData.books.every((b) => !('filePath' in b)));
   ok('封面改成面板自己的地址', stateData.books.find((b) => b.id === 'cloud1').cover === '/api/cover/cloud1');
   ok('带回主题（跟随桌面端）', stateData.theme?.id === 'night');
@@ -191,6 +208,14 @@ async function main() {
 
   const missingRes = await fetch(`${base}/api/book/nope`, { headers: { cookie } });
   ok('不存在的书 → 404', missingRes.status === 404);
+
+  const caseRes = await fetch(`${base}/api/book/local2`, { headers: { cookie } });
+  const caseData = await caseRes.json();
+  ok(
+    '路径大小写不同也能读到正文（不误判越界）',
+    caseRes.status === 200 && caseData.ok === true && String(caseData.text || '').includes('第一段正文'),
+    `status=${caseRes.status}`
+  );
 
   const coverRes = await fetch(`${base}/api/cover/cloud1`, { headers: { cookie }, redirect: 'manual' });
   ok('封面没有缓存时 302 到源站', coverRes.status === 302);

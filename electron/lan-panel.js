@@ -52,7 +52,7 @@
     current: null, mode: 'local', paragraphs: [], toc: null, tocTotal: 0, chapter: 0, chapterTitle: '',
     chapterLoading: false, readerSeq: 0, localHeadings: new Set(), dirty: false, saving: false, leaving: false,
     lastIndex: 0, saveTimer: null, toastTimer: null, hintAt: 0, stream: null, remoteEntry: null,
-    scrubbing: false, resizing: false, resizeTimer: null, prefRaf: 0, tocReturnFocus: null, prefsReturnFocus: null,
+    scrubbing: false, resizing: false, resizeTimer: null, resizeUnlock: null, prefRaf: 0, tocReturnFocus: null, prefsReturnFocus: null,
     gesture: null,
   };
 
@@ -969,11 +969,20 @@
     state.resizing = true;
     const index = state.lastIndex;
     clearTimeout(state.resizeTimer);
+    clearTimeout(state.resizeUnlock);
     state.resizeTimer = setTimeout(() => {
       const node = el.paper.querySelector(`[data-i="${index}"]`);
       if (node) el.readerScroll.scrollTop = Math.max(0, node.offsetTop - 86);
       updateFoot(index);
-      requestAnimationFrame(() => { state.resizing = false; });
+      // 解锁不能只靠 rAF：页面在后台时浏览器会节流甚至不触发 rAF，
+      // 一旦漏掉这一帧，state.resizing 会永久为 true，
+      // 之后所有滚动都被 onScroll 提前 return 掉 —— 进度再也不写回。
+      // 所以定时器负责兜底解锁，rAF 只用来提前一点结束等待。
+      requestAnimationFrame(() => {
+        clearTimeout(state.resizeUnlock);
+        state.resizing = false;
+      });
+      state.resizeUnlock = setTimeout(() => { state.resizing = false; }, 400);
     }, 180);
   });
   window.addEventListener('scroll', () => el.topbar.classList.toggle('scrolled', window.scrollY > 4), { passive: true });

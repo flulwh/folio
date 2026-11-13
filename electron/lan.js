@@ -20,6 +20,7 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { isInside } from './paths.js';
 
 const MAX_BODY = 512 * 1024; // 请求体上限：进度条目再多也到不了这个量级
 const MAX_TEXT = 12 * 1024 * 1024; // 单本正文上限：超过就不往手机上推了
@@ -353,8 +354,11 @@ export function createLanService(opts) {
     const file = String(book.filePath || '');
     if (!file) return { error: '这本书没有正文副本', status: 404, book };
     const target = path.resolve(file);
-    const root = path.resolve(booksDir) + path.sep;
-    if (!target.startsWith(root)) return { error: '正文不在书架目录里', status: 403, book };
+    // Windows 路径大小写不敏感，用 path.relative 判断包含关系，
+    // 避免 C:\Users 与 c:\Users 被误判成越界。
+    if (!isInside(booksDir, target)) {
+      return { error: '正文不在书架目录里', status: 403, book };
+    }
     return { book, target };
   }
 
