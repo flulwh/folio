@@ -19,6 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import dgram from 'node:dgram';
 import { fileURLToPath } from 'url';
 import { isInside } from './paths.js';
 
@@ -27,6 +28,9 @@ const MAX_TEXT = 12 * 1024 * 1024; // 单本正文上限：超过就不往手机
 const MAX_COVER = 4 * 1024 * 1024;
 const SSE_PING = 25000;
 const COOKIE_NAME = 'folio_lan';
+// 手机端的「搜索桌面端」走一次 UDP 广播，平时不广播、不占线程。
+const DISCOVERY_PORT = 45678;
+const DISCOVERY_MAGIC = 'folio-discover';
 
 /* ------------------------------------------------------------------ */
 /*  访问码与地址                                                        */
@@ -236,6 +240,7 @@ export function createLanService(opts) {
   let token = '';
   let allowWrite = true;
   let startedAt = 0;
+  let discovery = null;
   const clients = new Set();
   const sockets = new Set();
 
@@ -728,6 +733,66 @@ export function createLanService(opts) {
     return host ? `访问码在桌面端「设置 → 网络」里，本机地址 ${host}` : '访问码在桌面端「设置 → 网络」里';
   }
 
+  /* ---------------- 局域网发现（UDP） ---------------- */
+
+  /**
+   * 选一个手机能连上的本机地址：优先跟请求方同网段的那个。
+   * 手机发的是广播，来源地址只能说明对方网段，不能直接拿来当自己的地址。
+   */
+  function pickHostFor(remote) {
+    const list = lanAddresses();
+    if (!list.length) return remote;
+    const prefix = String(remote || '').split('.').slice(0, 2).join('.');
+    const hit = list.find((item) => String(item.address).split('.').slice(0, 2).join('.') === prefix);
+    return (hit || list[0]).address;
+  }
+
+  /**
+   * 桌面端发现服务：手机在设置里点「搜索桌面端」时广播一次，
+   * 桌面端回一条地址。平时不广播、不轮询，也不常驻线程。
+   */
+  function startDiscovery() {
+    if (discovery) return;
+    const socket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+    socket.on('error', (err) => {
+      log('warn', `局域网发现不可用：${err?.message || err}`);
+      try {
+        socket.close();
+      } catch {
+        /* ignore */
+      }
+      if (discovery === socket) discovery = null;
+    });
+    socket.on('message', (msg, rinfo) => {
+      if (String(msg).trim() !== DISCOVERY_MAGIC) return;
+      if (!running || !actualPort) return;
+      const payload = JSON.stringify({
+        name: 'Folio',
+        host: pickHostFor(rinfo.address),
+        port: actualPort,
+        version: getVersion(),
+      });
+      socket.send(payload, rinfo.port, rinfo.address, (err) => {
+        if (err) log('warn', `发现回复失败：${err.message}`);
+      });
+    });
+    socket.bind(DISCOVERY_PORT, () => {
+      discovery = socket;
+      log('info', `局域网发现端口 ${DISCOVERY_PORT} 已监听`);
+    });
+  }
+
+  function stopDiscovery() {
+    const socket = discovery;
+    discovery = null;
+    if (!socket) return;
+    try {
+      socket.close();
+    } catch {
+      /* ignore */
+    }
+  }
+
   /* ---------------- 生命周期 ---------------- */
 
   function listen(port, host) {
@@ -776,6 +841,7 @@ export function createLanService(opts) {
         actualPort = port;
         running = true;
         startedAt = Date.now();
+        startDiscovery();
         log('info', `局域网面板已启动：http://${lanAddresses()[0]?.address || '127.0.0.1'}:${port}`);
         return { ok: true, ...status() };
       } catch (err) {
@@ -796,6 +862,7 @@ export function createLanService(opts) {
   }
 
   async function stop() {
+    stopDiscovery();
     for (const res of clients) {
       try {
         res.end();

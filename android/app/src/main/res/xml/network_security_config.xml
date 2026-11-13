@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  桌面端的局域网面板是纯 HTTP 服务（http://192.168.x.x:端口），
+  Android 默认禁止明文流量，这里对局域网地址放开明文。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

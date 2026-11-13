@@ -1,6 +1,6 @@
 {
   "name": "immersive-reader",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "A minimalist, immersive e-book reader built with Electron and React.",
   "license": "MIT",
   "author": "Folio contributors",
