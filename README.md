@@ -424,3 +424,6 @@ Windows 10/11 与 macOS 自带 `curl`，Linux 装 `curl` 即可；同时它也�
 ## License
 
 MIT
+
+<!-- camotest -->
+![测试](https://github.com/flulwh/folio/releases/download/docs-media/shelf-empty.png)
