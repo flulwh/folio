@@ -18,11 +18,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,22 +25,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.folio.reader.core.ReaderMark
-import com.folio.reader.ui.FolioHairline
-import com.folio.reader.ui.FolioKicker
-import com.folio.reader.ui.FolioSheet
-import com.folio.reader.ui.FolioStat
+import com.folio.reader.ui.miuix.HyperSheet
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 书签与笔记抽屉：三条统计 + 整宽反白主操作 + 按段落升序的痕迹列表。
- *
- * 点整行跳转；行内「跳转 / 笔记 / 删除」是等宽小字文本按钮，不做 Material 胶囊。
+ * 书签与笔记面板（HyperOS）：统计 + 主操作 + 痕迹列表。
+ * 点整行跳转；行内「跳转 / 笔记 / 删除」是小号文字按钮。
  */
 @Composable
 fun MarksSheet(
@@ -60,87 +57,54 @@ fun MarksSheet(
 ) {
     var editing by remember { mutableStateOf<ReaderMark?>(null) }
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
+    val scheme = MiuixTheme.colorScheme
 
-    FolioSheet(
+    HyperSheet(
         onDismiss = onDismiss,
         title = "书签与笔记",
-        kicker = "MARKS / ${marks.size}",
+        subtitle = "${marks.size} 条痕迹",
     ) {
+        // 三条统计
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 16.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 18.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            FolioStat(
-                value = "${marks.count { it.isBookmark }}",
-                label = "书签数",
-                modifier = Modifier.weight(1f),
-            )
-            FolioStat(
-                value = "${marks.count { !it.isBookmark }}",
-                label = "划线条数",
-                modifier = Modifier.weight(1f),
-            )
-            FolioStat(
-                value = if (isBookmarked) "有" else "无",
-                label = "P.${currentPara + 1} 书签",
-                modifier = Modifier.weight(1f),
-                alignEnd = true,
-            )
+            StatCell("${marks.count { it.isBookmark }}", "书签", Modifier.weight(1f))
+            StatCell("${marks.count { !it.isBookmark }}", "划线", Modifier.weight(1f))
+            StatCell(if (isBookmarked) "有" else "无", "P.${currentPara + 1}", Modifier.weight(1f))
         }
-        FolioHairline(Modifier.padding(horizontal = 20.dp))
 
-        Box(
+        Button(
+            onClick = onToggleBookmark,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 14.dp, bottom = 12.dp)
-                .height(44.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.onSurface,
-                    shape = RoundedCornerShape(2.dp),
-                )
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onToggleBookmark,
-                ),
-            contentAlignment = Alignment.Center,
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            cornerRadius = 16.dp,
         ) {
             Text(
                 text = if (isBookmarked) "取消本页书签" else "给当前位置加书签",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.background,
+                fontSize = 15.sp,
+                color = scheme.onPrimary,
             )
         }
 
         if (marks.isEmpty()) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 56.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = "NO MARKS",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(8.dp))
+                Text(text = "还没有痕迹", fontSize = 14.sp, color = scheme.onSurface)
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = "点顶栏书签图标，或在段落上划线",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    color = scheme.onSurfaceVariantSummary,
                 )
             }
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.56f),
-            ) {
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
                 items(marks, key = { it.id }) { mark ->
                     MarkRow(
                         mark = mark,
@@ -156,7 +120,7 @@ fun MarksSheet(
 
     val noteMark = editing
     if (noteMark != null) {
-        NoteDialog(
+        NoteEditor(
             mark = noteMark,
             onDismiss = { editing = null },
             onConfirm = { text ->
@@ -168,6 +132,22 @@ fun MarksSheet(
 }
 
 @Composable
+private fun StatCell(value: String, label: String, modifier: Modifier = Modifier) {
+    val scheme = MiuixTheme.colorScheme
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.secondary)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(text = value, fontSize = 18.sp, color = scheme.onSurface)
+        Spacer(Modifier.height(2.dp))
+        Text(text = label, fontSize = 11.sp, color = scheme.onSurfaceVariantSummary, maxLines = 1)
+    }
+}
+
+@Composable
 private fun MarkRow(
     mark: ReaderMark,
     dateLabel: String,
@@ -175,6 +155,7 @@ private fun MarkRow(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val scheme = MiuixTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -189,36 +170,32 @@ private fun MarkRow(
     ) {
         Text(
             text = "P.${mark.paraIndex + 1}",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+            color = scheme.onSurfaceVariantSummary,
             modifier = Modifier.widthIn(min = 40.dp),
         )
         Column(Modifier.weight(1f)) {
             Text(
                 text = mark.excerpt.ifBlank { "（无摘录）" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 14.5.sp,
+                color = scheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             if (mark.note.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                ) {
+                Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                     Box(
                         Modifier
                             .width(2.dp)
                             .fillMaxHeight()
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(scheme.primary)
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = mark.note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.5.sp,
+                        color = scheme.onSurfaceVariantSummary,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -228,29 +205,26 @@ private fun MarkRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = buildString {
-                        append(
-                            mark.chapterTitle.ifBlank { "第 ${mark.chapterIndex + 1} 章" }
-                        )
+                        append(mark.chapterTitle.ifBlank { "第 ${mark.chapterIndex + 1} 章" })
                         append(" · ")
                         append(dateLabel)
                     },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                    color = scheme.onSurfaceVariantSummary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                MarkAction("跳转", MaterialTheme.colorScheme.onSurfaceVariant, onJump)
-                MarkAction("笔记", MaterialTheme.colorScheme.onSurfaceVariant, onEdit)
-                MarkAction("删除", MaterialTheme.colorScheme.primary, onRemove)
+                MarkAction("跳转", scheme.onSurfaceVariantSummary, onJump)
+                MarkAction("笔记", scheme.onSurfaceVariantSummary, onEdit)
+                MarkAction("删除", scheme.primary, onRemove)
             }
         }
     }
 }
 
-/** 行内等宽文字按钮：无涟漪、无底色，只有字。 */
 @Composable
-private fun MarkAction(text: String, color: Color, onClick: () -> Unit) {
+private fun MarkAction(text: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
     Text(
         text = text,
         modifier = Modifier
@@ -260,38 +234,49 @@ private fun MarkAction(text: String, color: Color, onClick: () -> Unit) {
                 onClick = onClick,
             )
             .padding(horizontal = 8.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.labelSmall,
+        fontSize = 11.sp,
         color = color,
         maxLines = 1,
     )
 }
 
 @Composable
-private fun NoteDialog(
+private fun NoteEditor(
     mark: ReaderMark,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    // 每条标记各自持有一份草稿，切换条目时不会串词
     var text by remember(mark.id) { mutableStateOf(mark.note) }
+    val scheme = MiuixTheme.colorScheme
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("笔记") },
-        text = {
-            OutlinedTextField(
+    HyperSheet(onDismiss = onDismiss, title = "笔记") {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            TextField(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                placeholder = { Text("写点什么") },
+                label = "写点什么",
+                useLabelAsPlaceholder = true,
+                minLines = 4,
+                cornerRadius = 16.dp,
             )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(text) }) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        },
-    )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TextButton(
+                    text = "取消",
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { onConfirm(text) },
+                    modifier = Modifier.weight(1f),
+                    cornerRadius = 16.dp,
+                ) {
+                    Text(text = "保存", fontSize = 14.sp, color = scheme.onPrimary)
+                }
+            }
+        }
+    }
 }

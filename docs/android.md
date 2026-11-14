@@ -193,6 +193,27 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
 `cacheDir` 下没有 Folio 的文件 —— 这是红线，不是巧合。从 2.5 升上来时 `Migration` 会把老
 `library/books.json` 的 `{"books":[...]}` 迁成顶层数组，并删掉 `offline/` 里那批章节副本。
 
+## UI 架构（3.4.0 / Miuix）
+
+界面层统一用 [Miuix](https://github.com/miuix-kotlin-multiplatform/miuix)（HyperOS 风格的 Compose 组件库），
+`FolioTheme` 同时提供 `MiuixTheme` 与 `MaterialTheme`：组件用 Miuix，色板仍是纸 / 墨 / 朱，
+圆角 10–28dp，强调色只出现在进度、开关与当前项。
+
+| 文件 | 职责 |
+| --- | --- |
+| `ui/miuix/HyperKit.kt` | HyperOS 底部面板（弹簧上滑、下拉关闭）、分组卡片、行、开关、滑杆、胶囊分段、动作格 |
+| `ui/ReaderScreen.kt` | 阅读页：浮动 HUD、点击 / 音量键翻页、滚动与翻页双模式切换 |
+| `ui/reader/ReaderPager.kt` | 翻页模式：按章用 `TextMeasurer` 分页，超长段落按行切分，页脚显示页码 |
+| `ui/reader/*Sheet.kt` | 目录 / 搜索 / 痕迹 / 排版四套面板，全部基于 `HyperSheet` |
+| `ui/ShelfScreen.kt` | 书架：大标题、胶囊筛选、圆角书卡、底部浮动工具条 |
+| `ui/SettingsScreen.kt` | 设置：分组卡片 + 开关 / 滑杆 / 分段 |
+| `ui/SyncStatusScreen.kt` | 同步报告：状态卡、逐本账本、等宽诊断 |
+| `ui/ComicReaderScreen.kt` | 漫画：深色图片区 + 浮动顶底栏 + 话目录面板 |
+
+阅读方式存在 `folio_settings.xml` 的 `reading_mode`（`scroll` / `paged`），默认滚动。
+翻页模式只对「当前章」分页，四十多万段的长篇也不会在打开时整本排版；
+分页随字号 / 行距 / 页边距 / 屏幕尺寸变化自动重算。
+
 ## 已知限制
 
 - **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。

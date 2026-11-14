@@ -1,21 +1,21 @@
 package com.folio.reader.ui.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,18 +24,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.folio.reader.ui.FolioHairline
-import com.folio.reader.ui.FolioKicker
-import com.folio.reader.ui.FolioListRow
-import com.folio.reader.ui.FolioSheet
+import androidx.compose.ui.unit.sp
+import com.folio.reader.ui.miuix.HyperSheet
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 目录抽屉：等宽章号索引 + 章节过滤 + 当前章朱红标记。
+ * 目录面板（HyperOS）：胶囊搜索框 + 章节列表，当前章用朱砂块标出来。
  *
- * 本机书的章来自正则切分，云端书的章来自 `/api/toc`，两者在这一层长得一样，
- * UI 只认 [labels] 与 [currentIndex]。
+ * 本机书的章来自正则切分，云端书的章来自 `/api/toc`，这一层只认 [labels] 与 [currentIndex]。
  */
 @Composable
 fun TocSheet(
@@ -46,6 +47,7 @@ fun TocSheet(
 ) {
     var keyword by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val scheme = MiuixTheme.colorScheme
 
     val filtered = if (keyword.isBlank()) {
         labels.indices.toList()
@@ -53,96 +55,83 @@ fun TocSheet(
         labels.indices.filter { labels[it].contains(keyword.trim(), ignoreCase = true) }
     }
 
-    // 打开时把当前章滚进视野，用户不用自己找
     LaunchedEffect(currentIndex, labels.size) {
         val at = filtered.indexOf(currentIndex)
         if (at >= 0) listState.scrollToItem(at)
     }
 
-    FolioSheet(
+    HyperSheet(
         onDismiss = onDismiss,
         title = "目录",
-        kicker = "INDEX / ${labels.size} 章",
+        subtitle = "${labels.size} 章",
     ) {
-        Row(
+        TextField(
+            value = keyword,
+            onValueChange = { keyword = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 14.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FolioKicker("FIND")
-            Spacer(Modifier.width(12.dp))
-            BasicTextField(
-                value = keyword,
-                onValueChange = { keyword = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier.weight(1f),
-                decorationBox = { inner ->
-                    Box {
-                        if (keyword.isEmpty()) {
-                            Text(
-                                text = "搜章节标题",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        inner()
-                    }
-                },
-            )
-        }
-        FolioHairline(Modifier.padding(horizontal = 20.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            label = "搜索章节",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            cornerRadius = 16.dp,
+        )
 
         if (filtered.isEmpty()) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 56.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = "NO MATCH",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "没有找到「${keyword.trim()}」",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text(text = "没有找到", fontSize = 14.sp, color = scheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text(text = "换个更短的关键词试试", fontSize = 12.sp, color = scheme.onSurfaceVariantSummary)
             }
         } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .fillMaxHeight(0.66f),
+                    .weight(1f, fill = false)
+                    .padding(top = 4.dp),
             ) {
                 itemsIndexed(filtered, key = { _, chapterIndex -> chapterIndex }) { _, chapterIndex ->
                     val selected = chapterIndex == currentIndex
-                    Box(Modifier.fillMaxWidth()) {
-                        FolioListRow(
-                            index = String.format("%03d", chapterIndex + 1),
-                            title = labels[chapterIndex].ifBlank { "第 ${chapterIndex + 1} 章" },
-                            selected = selected,
-                            onClick = { onSelect(chapterIndex) },
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (selected) scheme.primaryContainer else scheme.surface)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onSelect(chapterIndex) },
+                            )
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = (chapterIndex + 1).toString().padStart(2, '0'),
+                            fontSize = 11.sp,
+                            color = if (selected) scheme.primary else scheme.onSurfaceVariantSummary,
+                            maxLines = 1,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = labels[chapterIndex].ifBlank { "第 ${chapterIndex + 1} 章" },
+                            modifier = Modifier.weight(1f),
+                            fontSize = 15.sp,
+                            color = if (selected) scheme.primary else scheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         if (selected) {
-                            // 朱红竖条压在左边线上，像排版软件里的当前段落标记
-                            Box(Modifier.matchParentSize()) {
-                                Box(
-                                    Modifier
-                                        .fillMaxHeight()
-                                        .width(2.dp)
-                                        .background(MaterialTheme.colorScheme.primary)
-                                )
-                            }
+                            Box(
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(scheme.primary)
+                            )
                         }
                     }
                 }

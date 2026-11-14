@@ -3,7 +3,6 @@ package com.folio.reader.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.MaterialTheme
@@ -34,15 +33,29 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.HyperGroup
+import com.folio.reader.ui.miuix.HyperRow
+import com.folio.reader.ui.miuix.HyperSectionTitle
+import com.folio.reader.ui.miuix.HyperSegmented
+import com.folio.reader.ui.miuix.HyperSliderRow
+import com.folio.reader.ui.miuix.HyperSwitchRow
 import java.util.Locale
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 漫画阅读方向两档。 */
 private val DirectionChoices = listOf(
@@ -54,11 +67,8 @@ private val DirectionChoices = listOf(
 private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 
 /**
- * 设置页：按一份排好的版面组织，而不是 Material 卡片堆。
- *
- * 01 桌面端 / 02 同步 / 03 排版 / 04 底色 / 05 漫画 / 06 存储 / 07 关于，
- * 每区的编号、标题、实墨线都由 [FolioSectionHeader] 统一给出。
- * 数字与地址全部等宽，输入框只有一条底部发丝线。
+ * 设置页（HyperOS）：分组卡片 + 开关 + 滑杆 + 胶囊分段。
+ * 桌面端 / 同步 / 排版 / 底色 / 漫画 / 存储 / 关于，顺序与旧版一致。
  */
 @Composable
 fun SettingsScreen(
@@ -68,9 +78,9 @@ fun SettingsScreen(
 ) {
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
+    val scheme = MiuixTheme.colorScheme
     var showDiagnostics by remember { mutableStateOf(false) }
 
-    // 输入态放在本地：每次重组不把光标顶到行尾；外部（局域网发现）填入时同步回本地。
     var urlText by remember { mutableStateOf(state.serverUrl) }
     var tokenText by remember { mutableStateOf(state.token) }
     LaunchedEffect(state.serverUrl) {
@@ -80,11 +90,7 @@ fun SettingsScreen(
         if (state.token != tokenText) tokenText = state.token
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
+    Column(Modifier.fillMaxSize().background(scheme.background)) {
         SettingsHeader(
             appVersion = state.appVersion,
             serverVersion = state.serverVersion,
@@ -96,209 +102,205 @@ fun SettingsScreen(
                 .fillMaxWidth()
                 .weight(1f)
                 .navigationBarsPadding(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 48.dp),
+            contentPadding = PaddingValues(bottom = 40.dp),
         ) {
             /* ---------------- 01 桌面端 ---------------- */
             item("desktop") {
-                FolioSectionHeader("01", "桌面端")
-                FolioField(
-                    label = "URL",
-                    value = urlText,
-                    placeholder = "http://192.168.1.20:7788",
-                    onValueChange = { value ->
-                        urlText = value
-                        vm.updateServerUrl(value)
-                    },
-                )
-                FolioField(
-                    label = "访问码",
-                    value = tokenText,
-                    placeholder = "桌面端「设置 → 网络」里的访问码",
-                    onValueChange = { value ->
-                        tokenText = value
-                        vm.updateToken(value)
-                    },
-                )
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FolioButton(
-                        text = "测试连接",
-                        onClick = { vm.testConnection() },
-                        enabled = !state.searching,
-                    )
-                    if (state.searching) {
-                        FolioButton(
-                            text = "取消",
-                            onClick = { vm.cancelDiscover() },
-                            filled = false,
-                        )
-                    } else if (state.connection != ConnectionState.UNKNOWN) {
-                        FolioButton(
-                            text = "断开",
-                            onClick = { vm.disconnect() },
-                            filled = false,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    FolioTextAction(
-                        text = if (state.searching) "搜索中…（5 秒）" else "搜索桌面端",
-                        onClick = { vm.discover { } },
-                        enabled = !state.searching,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .background(
-                                if (state.connection.healthy) {
-                                    Color(0xFF2E7D32)
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                }
-                            )
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = if (state.connection.healthy) {
-                            state.connectionDetail.ifBlank { state.connection.label }
-                        } else {
-                            state.connection.label
+                HyperSectionTitle("桌面端")
+                HyperGroup {
+                    TextField(
+                        value = urlText,
+                        onValueChange = {
+                            urlText = it
+                            vm.updateServerUrl(it)
                         },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                        label = "http://192.168.1.20:7788",
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        cornerRadius = 14.dp,
                     )
-                }
-                if (state.discovered.isNotEmpty()) {
-                    Spacer(Modifier.height(12.dp))
-                    FolioKicker("找到 ${state.discovered.size} 个桌面端")
-                    state.discovered.forEach { url ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    urlText = url
-                                    vm.updateServerUrl(url)
-                                }
-                                .padding(vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                    TextField(
+                        value = tokenText,
+                        onValueChange = {
+                            tokenText = it
+                            vm.updateToken(it)
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                        label = "访问码（桌面端「设置 → 网络」）",
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        cornerRadius = 14.dp,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Button(
+                            onClick = { vm.testConnection() },
+                            enabled = !state.searching,
+                            cornerRadius = 14.dp,
+                            minHeight = 40.dp,
                         ) {
-                            Text(
-                                text = url,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace,
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            FolioKicker("填入", color = MaterialTheme.colorScheme.primary)
+                            Text("测试连接", fontSize = 13.sp, color = scheme.onPrimary)
                         }
-                        FolioHairline()
+                        if (state.searching) {
+                            TextButton(
+                                text = "取消",
+                                onClick = { vm.cancelDiscover() },
+                                cornerRadius = 14.dp,
+                                minHeight = 40.dp,
+                            )
+                        } else if (state.connection != ConnectionState.UNKNOWN) {
+                            TextButton(
+                                text = "断开",
+                                onClick = { vm.disconnect() },
+                                cornerRadius = 14.dp,
+                                minHeight = 40.dp,
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = if (state.searching) "搜索中…" else "搜索桌面端",
+                            modifier = Modifier
+                                .clickable(enabled = !state.searching) { vm.discover { } }
+                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                            fontSize = 12.5.sp,
+                            color = if (state.searching) scheme.disabledOnSurface else scheme.primary,
+                            maxLines = 1,
+                        )
                     }
-                } else {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "桌面端要开着「局域网面板」。地址里的端口在桌面端「设置 → 网络」里。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (state.connection.healthy) Color(0xFF2E7D32) else scheme.primary
+                                )
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = if (state.connection.healthy) {
+                                state.connectionDetail.ifBlank { state.connection.label }
+                            } else {
+                                state.connection.label
+                            },
+                            modifier = Modifier.weight(1f),
+                            fontSize = 11.5.sp,
+                            color = scheme.onSurfaceVariantSummary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    if (state.discovered.isNotEmpty()) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
+                            Text(
+                                text = "找到 ${state.discovered.size} 个桌面端",
+                                fontSize = 11.5.sp,
+                                color = scheme.primary,
+                            )
+                            state.discovered.forEach { url ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            urlText = url
+                                            vm.updateServerUrl(url)
+                                        }
+                                        .padding(vertical = 10.dp, horizontal = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = url,
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 12.5.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = scheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(text = "填入", fontSize = 11.5.sp, color = scheme.primary)
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "桌面端要开着「局域网面板」；地址里的端口在桌面端「设置 → 网络」里。",
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                            fontSize = 11.5.sp,
+                            color = scheme.onSurfaceVariantSummary,
+                        )
+                    }
+                    HyperRow(title = "同步状态", summary = "逐本查看", onClick = onOpenSyncStatus)
+                    HyperSwitchRow(
+                        title = "未连接时隐藏在线书",
+                        summary = "免得点进去只看到一句报错",
+                        checked = state.hideRemoteWhenOffline,
+                        onCheckedChange = vm::updateHideRemote,
                     )
                 }
-                Spacer(Modifier.height(10.dp))
-                FolioHairline()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onOpenSyncStatus)
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "同步状态 →",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
-                    )
-                    FolioKicker("逐本查看")
-                }
-                FolioHairline()
-                FolioSwitchRow(
-                    label = "未连接时隐藏在线书",
-                    checked = state.hideRemoteWhenOffline,
-                    onCheckedChange = vm::updateHideRemote,
-                    description = "把「只能连桌面端读」的书先藏起来，免得点进去报错",
-                )
             }
 
             /* ---------------- 02 同步 ---------------- */
             item("sync") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("02", "同步")
-                FolioSwitchRow(
-                    label = "自动同步",
-                    checked = state.autoSync,
-                    onCheckedChange = vm::updateAutoSync,
-                    description = "连上桌面端时自动对齐书架与进度",
-                )
-                FolioHairline()
-                FolioSwitchRow(
-                    label = "自动上传 20MB 以内的书",
-                    checked = state.autoTransferUnder20MB,
-                    onCheckedChange = vm::updateAutoTransfer,
-                    description = "更大的书留在书架里等你点「下载到手机」",
-                )
-                FolioHairline()
-                FolioSwitchRow(
-                    label = "仅在 Wi-Fi 下传输",
-                    checked = state.wifiOnly,
-                    onCheckedChange = vm::updateWifiOnly,
-                    description = "按流量计费的网络里打开它",
-                )
-                Spacer(Modifier.height(14.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FolioButton(
-                        text = if (shelf.syncing) "正在同步…" else "立即同步",
-                        onClick = { vm.syncNow() },
-                        enabled = !shelf.syncing,
+                HyperSectionTitle("同步")
+                HyperGroup {
+                    HyperSwitchRow(
+                        title = "自动同步",
+                        summary = "连上桌面端时自动对齐书架与进度",
+                        checked = state.autoSync,
+                        onCheckedChange = vm::updateAutoSync,
                     )
-                    Spacer(Modifier.width(14.dp))
-                    FolioKicker(
-                        text = lastSyncLabel(state.lastSyncAt),
-                        modifier = Modifier.weight(1f),
+                    HyperSwitchRow(
+                        title = "自动上传 20MB 以内的书",
+                        summary = "更大的书等你点「下载到手机」",
+                        checked = state.autoTransferUnder20MB,
+                        onCheckedChange = vm::updateAutoTransfer,
                     )
-                }
-                if (state.conflictCount > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    Box(
-                        modifier = Modifier
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = RoundedCornerShape(1.dp),
-                            )
-                            .clickable(onClick = onOpenSyncStatus)
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                    HyperSwitchRow(
+                        title = "仅在 Wi-Fi 下传输",
+                        summary = "按流量计费的网络里打开它",
+                        checked = state.wifiOnly,
+                        onCheckedChange = vm::updateWifiOnly,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Button(
+                            onClick = { vm.syncNow() },
+                            enabled = !shelf.syncing,
+                            cornerRadius = 14.dp,
+                            minHeight = 40.dp,
+                        ) {
+                            Text(
+                                text = if (shelf.syncing) "正在同步…" else "立即同步",
+                                fontSize = 13.sp,
+                                color = scheme.onPrimary,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
                         Text(
-                            text = "${state.conflictCount} 处冲突 →",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            text = lastSyncLabel(state.lastSyncAt),
+                            fontSize = 11.5.sp,
+                            color = scheme.onSurfaceVariantSummary,
+                            maxLines = 1,
+                        )
+                    }
+                    if (state.conflictCount > 0) {
+                        HyperRow(
+                            title = "${state.conflictCount} 处冲突",
+                            summary = "同名不同内容，需要你选保留哪一版",
+                            onClick = onOpenSyncStatus,
+                            trailing = {
+                                Text(text = "处理 →", fontSize = 12.sp, color = scheme.primary)
+                            },
                         )
                     }
                 }
@@ -306,124 +308,141 @@ fun SettingsScreen(
 
             /* ---------------- 03 排版 ---------------- */
             item("style") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("03", "排版")
-                FolioSliderRow(
-                    label = "字号",
-                    valueLabel = "${state.fontSizeSp.roundToInt()}sp",
-                    value = state.fontSizeSp.coerceIn(12f, 32f),
-                    onValueChange = vm::updateFontSize,
-                    valueRange = 12f..32f,
-                    steps = 19,
-                )
-                FolioSliderRow(
-                    label = "行距",
-                    valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
-                    value = state.lineHeight.coerceIn(1.3f, 2.4f),
-                    onValueChange = vm::updateLineHeight,
-                    valueRange = 1.3f..2.4f,
-                    steps = 10,
-                )
-                FolioSliderRow(
-                    label = "字距",
-                    valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
-                    value = state.letterSpacingEm.coerceIn(0f, 0.12f),
-                    onValueChange = vm::updateLetterSpacing,
-                    valueRange = 0f..0.12f,
-                    steps = 11,
-                )
-                FolioSliderRow(
-                    label = "段距",
-                    valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
-                    value = state.paragraphSpacing.coerceIn(0f, 2f),
-                    onValueChange = vm::updateParagraphSpacing,
-                    valueRange = 0f..2f,
-                    steps = 19,
-                )
-                Spacer(Modifier.height(6.dp))
-                FolioHairline()
-                FolioSwitchRow(
-                    label = "首行缩进",
-                    checked = state.firstLineIndent,
-                    onCheckedChange = vm::updateFirstLineIndent,
-                    description = "每段首行缩进两个字符",
-                )
-                FolioHairline()
-                LabeledSegmented(
-                    label = "字体",
-                    options = listOf("宋体", "黑体"),
-                    selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
-                    onSelect = { index ->
-                        vm.updateFontFamily(
-                            if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF,
+                HyperSectionTitle("排版")
+                HyperGroup {
+                    Column(Modifier.padding(10.dp)) {
+                        HyperSegmented(
+                            options = listOf("上下滚动", "左右翻页"),
+                            selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
+                            onSelect = {
+                                vm.updateReadingMode(
+                                    if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                                )
+                            },
                         )
-                    },
-                )
-                FolioSliderRow(
-                    label = "页边距",
-                    valueLabel = "${state.pagePadding}dp",
-                    value = state.pagePadding.toFloat().coerceIn(12f, 48f),
-                    onValueChange = { vm.updatePagePadding(it.roundToInt()) },
-                    valueRange = 12f..48f,
-                    steps = 35,
-                )
-                LabeledSegmented(
-                    label = "自动滚动速度",
-                    options = AutoScrollChoices,
-                    selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
-                    onSelect = { index -> vm.updateAutoScrollSpeed(index) },
-                )
-                Spacer(Modifier.height(4.dp))
-                FolioSwitchRow(
-                    label = "保持常亮",
-                    checked = state.keepScreenOn,
-                    onCheckedChange = vm::updateKeepScreenOn,
-                    description = "阅读时不熄屏",
-                )
+                    }
+                    HyperSliderRow(
+                        title = "字号",
+                        valueLabel = "${state.fontSizeSp.roundToInt()}sp",
+                        value = state.fontSizeSp.coerceIn(12f, 32f),
+                        onValueChange = vm::updateFontSize,
+                        minValue = 12f,
+                        maxValue = 32f,
+                        decimalPlaces = 0,
+                    )
+                    HyperSliderRow(
+                        title = "行距",
+                        valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
+                        value = state.lineHeight.coerceIn(1.3f, 2.4f),
+                        onValueChange = vm::updateLineHeight,
+                        minValue = 1.3f,
+                        maxValue = 2.4f,
+                        decimalPlaces = 2,
+                    )
+                    HyperSliderRow(
+                        title = "字距",
+                        valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
+                        value = state.letterSpacingEm.coerceIn(0f, 0.12f),
+                        onValueChange = vm::updateLetterSpacing,
+                        minValue = 0f,
+                        maxValue = 0.12f,
+                        decimalPlaces = 3,
+                    )
+                    HyperSliderRow(
+                        title = "段距",
+                        valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
+                        value = state.paragraphSpacing.coerceIn(0f, 2f),
+                        onValueChange = vm::updateParagraphSpacing,
+                        minValue = 0f,
+                        maxValue = 2f,
+                        decimalPlaces = 2,
+                    )
+                    HyperSliderRow(
+                        title = "页边距",
+                        valueLabel = "${state.pagePadding}dp",
+                        value = state.pagePadding.toFloat().coerceIn(12f, 48f),
+                        onValueChange = { vm.updatePagePadding(it.roundToInt()) },
+                        minValue = 12f,
+                        maxValue = 48f,
+                        decimalPlaces = 0,
+                    )
+                    HyperSwitchRow(
+                        title = "首行缩进",
+                        summary = "每段首行缩进两个字符",
+                        checked = state.firstLineIndent,
+                        onCheckedChange = vm::updateFirstLineIndent,
+                    )
+                    HyperSwitchRow(
+                        title = "保持常亮",
+                        summary = "阅读时不熄屏",
+                        checked = state.keepScreenOn,
+                        onCheckedChange = vm::updateKeepScreenOn,
+                    )
+                    Column(Modifier.padding(10.dp)) {
+                        HyperSegmented(
+                            options = listOf("宋体", "黑体"),
+                            selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
+                            onSelect = { index ->
+                                vm.updateFontFamily(
+                                    if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                                )
+                            },
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        HyperSegmented(
+                            options = AutoScrollChoices,
+                            selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
+                            onSelect = { vm.updateAutoScrollSpeed(it) },
+                        )
+                    }
+                }
             }
 
             /* ---------------- 04 底色 ---------------- */
             item("theme") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("04", "底色")
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    READING_PALETTES.forEach { palette ->
-                        val selected = state.themePreset == palette.id
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { vm.updateThemePreset(palette.id) },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Box(
+                HyperSectionTitle("底色")
+                HyperGroup {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        READING_PALETTES.forEach { palette ->
+                            val selected = state.themePreset == palette.id
+                            Column(
                                 modifier = Modifier
-                                    .size(44.dp)
-                                    .background(palette.bg)
-                                    .border(
-                                        width = 2.dp,
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            palette.line
-                                        },
-                                        shape = RoundedCornerShape(0.dp),
-                                    ),
-                                contentAlignment = Alignment.Center,
+                                    .weight(1f)
+                                    .clickable { vm.updateThemePreset(palette.id) },
+                                horizontalAlignment = Alignment.CenterHorizontally,
                             ) {
-                                if (selected) {
-                                    Box(
-                                        Modifier
-                                            .size(6.dp)
-                                            .background(MaterialTheme.colorScheme.primary)
-                                    )
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(palette.bg)
+                                        .border(
+                                            width = 2.dp,
+                                            color = if (selected) scheme.primary else scheme.dividerLine,
+                                            shape = RoundedCornerShape(12.dp),
+                                        ),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (selected) {
+                                        Box(
+                                            Modifier
+                                                .size(7.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(scheme.primary)
+                                        )
+                                    }
                                 }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = palette.label,
+                                    fontSize = 11.sp,
+                                    color = if (selected) scheme.primary else scheme.onSurfaceVariantSummary,
+                                    maxLines = 1,
+                                )
                             }
-                            Spacer(Modifier.height(8.dp))
-                            FolioKicker(palette.label)
                         }
                     }
                 }
@@ -431,121 +450,96 @@ fun SettingsScreen(
 
             /* ---------------- 05 漫画 ---------------- */
             item("comic") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("05", "漫画")
-                LabeledSegmented(
-                    label = "阅读方向",
-                    options = DirectionChoices.map { it.first },
-                    selectedIndex = DirectionChoices
-                        .indexOfFirst { it.second == state.comicDirection }
-                        .coerceAtLeast(0),
-                    onSelect = { index -> vm.updateComicDirection(DirectionChoices[index].second) },
-                )
+                HyperSectionTitle("漫画")
+                HyperGroup {
+                    Column(Modifier.padding(10.dp)) {
+                        HyperSegmented(
+                            options = DirectionChoices.map { it.first },
+                            selectedIndex = DirectionChoices
+                                .indexOfFirst { it.second == state.comicDirection }
+                                .coerceAtLeast(0),
+                            onSelect = { index -> vm.updateComicDirection(DirectionChoices[index].second) },
+                        )
+                    }
+                }
             }
 
             /* ---------------- 06 存储 ---------------- */
             item("storage") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("06", "存储")
-                Spacer(Modifier.height(4.dp))
-                ValueRow("本机正文", formatSize(state.localBytes))
-                FolioHairline()
-                ValueRow("内存缓存", formatSize(state.memoryBytes))
-                FolioHairline()
-                ValueRow(
-                    label = "磁盘缓存",
-                    value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
-                    valueColor = if (state.cacheIsZero) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "3.0 的缓存全在内存里，磁盘上不留正文副本。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(14.dp))
-                FolioButton(
-                    text = "清空内存缓存",
-                    onClick = { vm.clearMemoryCache() },
-                    filled = false,
-                )
+                HyperSectionTitle("存储")
+                HyperGroup {
+                    HyperRow(title = "本机正文", trailing = { Value(formatSize(state.localBytes)) })
+                    HyperRow(title = "内存缓存", trailing = { Value(formatSize(state.memoryBytes)) })
+                    HyperRow(
+                        title = "磁盘缓存",
+                        trailing = {
+                            Value(
+                                text = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
+                                color = if (state.cacheIsZero) scheme.primary else scheme.onSurfaceVariantSummary,
+                            )
+                        },
+                    )
+                    Text(
+                        text = "3.0 的缓存全在内存里，磁盘上不留正文副本。",
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                        fontSize = 11.5.sp,
+                        color = scheme.onSurfaceVariantSummary,
+                    )
+                    TextButton(
+                        text = "清空内存缓存",
+                        onClick = { vm.clearMemoryCache() },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                        cornerRadius = 14.dp,
+                    )
+                }
             }
 
             /* ---------------- 07 关于 ---------------- */
             item("about") {
-                Spacer(Modifier.height(24.dp))
-                FolioSectionHeader("07", "关于")
-                Spacer(Modifier.height(4.dp))
-                ValueRow("本机版本", state.appVersion)
-                FolioHairline()
-                ValueRow("桌面端", state.serverVersion.ifBlank { "未连接" })
-                FolioHairline()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showDiagnostics = !showDiagnostics }
-                        .padding(vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "诊断信息",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
+                HyperSectionTitle("关于")
+                HyperGroup {
+                    HyperRow(title = "本机版本", trailing = { Value(state.appVersion) })
+                    HyperRow(
+                        title = "桌面端",
+                        trailing = { Value(state.serverVersion.ifBlank { "未连接" }) },
                     )
-                    FolioKicker(
-                        text = if (showDiagnostics) "收起" else "展开",
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                if (showDiagnostics) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                shape = RoundedCornerShape(1.dp),
+                    HyperRow(
+                        title = "诊断信息",
+                        summary = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                        onClick = { showDiagnostics = !showDiagnostics },
+                        trailing = {
+                            Text(
+                                text = if (showDiagnostics) "收起" else "展开",
+                                fontSize = 12.sp,
+                                color = scheme.primary,
                             )
-                            .padding(12.dp),
-                    ) {
-                        Text(
-                            text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
-                            style = MaterialTheme.typography.bodySmall.copy(
+                        },
+                    )
+                    if (showDiagnostics) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
+                            Text(
+                                text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                                fontSize = 11.5.sp,
                                 fontFamily = FontFamily.Monospace,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "连接状态：${state.connection.label}",
-                            style = MaterialTheme.typography.bodySmall.copy(
+                                color = scheme.onSurfaceVariantSummary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = "连接状态：${state.connection.label}",
+                                fontSize = 11.5.sp,
                                 fontFamily = FontFamily.Monospace,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = "本地存储：正文与设置写在应用私有目录，缓存只留在内存，磁盘上不留副本。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                                color = scheme.onSurfaceVariantSummary,
+                            )
+                        }
                     }
                 }
-
                 val message = state.message ?: shelf.message
                 if (!message.isNullOrBlank()) {
-                    Spacer(Modifier.height(20.dp))
-                    FolioHairline()
                     Text(
                         text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 10.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        fontSize = 12.sp,
+                        color = scheme.primary,
                     )
                 }
             }
@@ -556,219 +550,61 @@ fun SettingsScreen(
 /* ---------------- 页头 ---------------- */
 
 @Composable
-private fun SettingsHeader(
-    appVersion: String,
-    serverVersion: String,
-    onBack: () -> Unit,
-) {
+private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: () -> Unit) {
+    val scheme = MiuixTheme.colorScheme
     Column(
-        modifier = Modifier
+        Modifier
             .fillMaxWidth()
+            .background(scheme.background)
             .statusBarsPadding()
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = 18.dp),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FolioIconAction(
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                onClick = onBack,
-            )
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    modifier = Modifier.size(20.dp),
+                    tint = scheme.onSurface,
+                )
+            }
             Spacer(Modifier.weight(1f))
-            FolioKicker("SETTINGS")
+            Text(text = "SETTINGS", fontSize = 11.sp, color = scheme.primary)
         }
         Text(
             text = "设置",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = 6.dp, bottom = 14.dp),
+            modifier = Modifier.padding(top = 4.dp),
+            fontSize = 30.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = scheme.onSurface,
         )
-        FolioRule()
-        FolioKicker(
+        Text(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+            fontSize = 11.5.sp,
+            color = scheme.onSurfaceVariantSummary,
         )
     }
 }
 
-/* ---------------- 小组件 ---------------- */
-
-/** 只有底部一条发丝线的输入框，避免 Material 输入框的药丸轮廓。 */
 @Composable
-private fun FolioField(
-    label: String,
-    value: String,
-    placeholder: String,
-    onValueChange: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FolioKicker(label, Modifier.width(56.dp))
-            Spacer(Modifier.width(10.dp))
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 6.dp),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (value.isEmpty()) {
-                            Text(
-                                text = placeholder,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        innerTextField()
-                    }
-                },
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        FolioHairline()
-    }
-}
-
-/** 反白主操作 / 方框次操作，二选一。 */
-@Composable
-private fun FolioButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    filled: Boolean = true,
-    enabled: Boolean = true,
-) {
-    val ink = MaterialTheme.colorScheme.onSurface
-    val paper = MaterialTheme.colorScheme.background
-    val background = when {
-        !filled -> Color.Transparent
-        enabled -> ink
-        else -> ink.copy(alpha = 0.28f)
-    }
-    val foreground = when {
-        !filled -> if (enabled) ink else ink.copy(alpha = 0.32f)
-        else -> if (enabled) paper else paper.copy(alpha = 0.7f)
-    }
-    Box(
-        modifier = modifier
-            .height(40.dp)
-            .background(background, RoundedCornerShape(2.dp))
-            .border(
-                width = 1.dp,
-                color = if (enabled) ink else ink.copy(alpha = 0.28f),
-                shape = RoundedCornerShape(2.dp),
-            )
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = foreground,
-            maxLines = 1,
-        )
-    }
-}
-
-/** 无边框文字操作，用在「搜索桌面端」这类次级入口。 */
-@Composable
-private fun FolioTextAction(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Box(
-        modifier = modifier
-            .height(36.dp)
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 4.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (enabled) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
-            },
-            maxLines = 1,
-        )
-    }
-}
-
-/** 等宽小标题 + 反白分段控件。 */
-@Composable
-private fun LabeledSegmented(
-    label: String,
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-) {
-    FolioKicker(
-        text = label,
-        modifier = Modifier.padding(top = 14.dp, bottom = 8.dp),
+private fun Value(text: String, color: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
     )
-    FolioSegmented(
-        options = options,
-        selectedIndex = selectedIndex,
-        onSelect = onSelect,
-    )
-}
-
-/** 表格行：左侧等宽标签、右侧等宽数值。 */
-@Composable
-private fun ValueRow(
-    label: String,
-    value: String,
-    valueColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FolioKicker(label, Modifier.weight(1f))
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelLarge,
-            color = valueColor,
-            maxLines = 1,
-        )
-    }
 }
 
 /** 「上次同步 3 分钟前」；从没同步过就直说。 */

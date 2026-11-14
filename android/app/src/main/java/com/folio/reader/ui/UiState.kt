@@ -414,6 +414,8 @@ data class SettingsUiState(
     val volumeKeysTurn: Boolean = true,
     /** 页边距（dp，12–48）。 */
     val pagePadding: Int = 24,
+    /** 阅读方式：`scroll` 上下滚动 / `paged` 左右翻页。 */
+    val readingMode: String = "scroll",
     /** 漫画阅读方向：`vertical` / `horizontal`。 */
     val comicDirection: String = "vertical",
     val accent: Long = 0xFFC4251C,

@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -12,7 +11,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,22 +26,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -57,39 +51,46 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.HyperActionCell
+import com.folio.reader.ui.miuix.HyperMeta
+import com.folio.reader.ui.miuix.HyperRoundIcon
 import com.folio.reader.ui.reader.MarksSheet
+import com.folio.reader.ui.reader.ReaderPager
 import com.folio.reader.ui.reader.ReaderStyleSheet
 import com.folio.reader.ui.reader.SearchSheet
 import com.folio.reader.ui.reader.TocSheet
 import java.util.Locale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 小说阅读器（现代主义网格版）。
+ * 小说阅读器（HyperOS 版）。
  *
- * 三个要点：
- *  1. 正文是 [LazyColumn]，只组合可见段落 —— 一千章的长篇也不会一次性布局十万个 Text；
- *  2. 顶栏 / 底栏点正文中央显隐，沉浸阅读时屏幕上只有字；
- *  3. 云端书零缓存：正文由 `CloudChapterSource` 按章取，最近 3 章留内存，
- *     断网翻章直接提示「连接已断开 · 重试」，不假装还能读。
- *
- * 视觉上只保留三样东西：纸底、墨字、一点正红；层级全部交给 1dp 发丝线，
- * 不用阴影、不用圆角胶囊。
+ * - **双阅读模式**：上下滚动（LazyColumn）/ 左右翻页（[ReaderPager]，按章分页）；
+ * - **沉浸 HUD**：点正文中央显隐，顶栏与底栏都是浮动圆角卡片，不挤压正文；
+ * - **一套手势**：点按左右 30% 翻页、中间切换 HUD，音量键同一个入口；翻页模式带触感反馈；
+ * - **零缓存**：云端书正文只进内存，断网翻章提示「连接已断开 · 重试」。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderScreen(
     vm: AppViewModel,
@@ -98,9 +99,9 @@ fun ReaderScreen(
 ) {
     val reader by vm.reader.collectAsState()
     val settings by vm.settingsState.collectAsState()
-    val listState = rememberLazyListState()
     val scrollTarget by vm.scrollTarget.collectAsState()
     val pageTurn by vm.pageTurn.collectAsState()
+    val listState = rememberLazyListState()
 
     var scrubbing by remember { mutableStateOf(false) }
     var sliderValue by remember { mutableFloatStateOf(0f) }
@@ -108,6 +109,7 @@ fun ReaderScreen(
     val book = reader.book
     val density = LocalDensity.current
     val view = LocalView.current
+    val palette = MiuixTheme.colorScheme
 
     val fontSize = settings.fontSizeSp.sp
     val lineHeight = (settings.fontSizeSp * settings.lineHeight).sp
@@ -119,9 +121,9 @@ fun ReaderScreen(
     }
     val paragraphGap = (settings.fontSizeSp * settings.paragraphSpacing).dp
     val blankGap = (settings.fontSizeSp * 0.5f).dp
+    val paged = settings.readingMode == SettingsStore.MODE_PAGED
 
-    // 云端书的痕迹只锚定到「当前这一章」：段落号是章内下标，
-    // 不按章号过滤的话，别的章的书签会落在这一章同号的段落上。
+    // 云端书的痕迹只锚定到「当前这一章」
     val visibleMarks = remember(reader.marks, reader.isCloud, reader.toc, reader.chapterIndex) {
         if (!reader.isCloud) {
             reader.marks
@@ -130,14 +132,12 @@ fun ReaderScreen(
             reader.marks.filter { it.chapterNo == chapterNo }
         }
     }
-    // 痕迹集合只随 marks 变化重算一次，item 里只做 O(1) 查询。
     val bookmarkedParas = remember(visibleMarks) {
         visibleMarks.asSequence().filter { it.isBookmark }.map { it.paraIndex }.toSet()
     }
     val highlightedParas = remember(visibleMarks) {
         visibleMarks.asSequence().filterNot { it.isBookmark }.map { it.paraIndex }.toSet()
     }
-    // 章节首发段落 → (章序号, 标题)，用于正文里的标题块。
     val chapterHeads = remember(reader.chapters) {
         reader.chapters
             .mapIndexed { index, chapter -> chapter.paraIndex to (index to chapter.title) }
@@ -149,33 +149,25 @@ fun ReaderScreen(
         fontSize = fontSize,
         lineHeight = lineHeight,
         letterSpacing = letterSpacing,
-        textIndent = if (settings.firstLineIndent) {
-            TextIndent(firstLine = 2.em)
-        } else {
-            TextIndent.None
-        },
+        textIndent = if (settings.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent.None,
     )
 
-    // 打开 / 换章时回到该读的位置
-    LaunchedEffect(book?.id, reader.chapterIndex, reader.paragraphs.size) {
+    // ---------- 滚动模式的位置同步 ----------
+    LaunchedEffect(book?.id, reader.chapterIndex, reader.paragraphs.size, paged) {
+        if (paged) return@LaunchedEffect
         val index = reader.paraIndex
         if (index > 0 && reader.paragraphs.isNotEmpty() && !scrubbing) {
             listState.scrollToItem(index.coerceIn(0, reader.paragraphs.size - 1))
         }
     }
-
-    // 目录 / 痕迹 / 搜索跳转：ViewModel 只发目标位置，滚动交给列表
-    LaunchedEffect(scrollTarget) {
-        if (scrollTarget >= 0) {
+    LaunchedEffect(scrollTarget, paged) {
+        if (scrollTarget >= 0 && !paged) {
             listState.scrollToItem(scrollTarget.coerceAtLeast(0))
             vm.clearScrollTarget()
         }
     }
-
-    // 翻页：一屏的 88%，刚好让上一屏的最后一行留在视野里当锚点。
-    // 已经到头 / 到顶就顺势换章 —— 翻页手势在章节末尾不该「什么都点不动」。
-    LaunchedEffect(pageTurn.seq) {
-        if (pageTurn.seq == 0L) return@LaunchedEffect
+    LaunchedEffect(pageTurn.seq, paged) {
+        if (paged || pageTurn.seq == 0L) return@LaunchedEffect
         val info = listState.layoutInfo
         val viewport = info.viewportEndOffset - info.viewportStartOffset
         if (viewport <= 0) return@LaunchedEffect
@@ -188,16 +180,16 @@ fun ReaderScreen(
             if (consumed > -step * 0.1f && reader.hasPrevChapter) vm.prevChapter()
         }
     }
-
-    LaunchedEffect(listState, book?.id) {
+    LaunchedEffect(listState, book?.id, paged) {
+        if (paged) return@LaunchedEffect
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .collect { index -> if (!scrubbing) vm.updatePosition(index) }
     }
 
-    // 自动滚动：按帧累加像素，走到末尾就自己停。
-    LaunchedEffect(reader.autoScroll, settings.autoScrollSpeed) {
-        if (!reader.autoScroll) return@LaunchedEffect
+    // 自动滚动只在滚动模式有意义
+    LaunchedEffect(reader.autoScroll, settings.autoScrollSpeed, paged) {
+        if (!reader.autoScroll || paged) return@LaunchedEffect
         val speed = SettingsStore.AUTO_SCROLL_SPEEDS[
             settings.autoScrollSpeed.coerceIn(0, SettingsStore.AUTO_SCROLL_SPEEDS.lastIndex)
         ]
@@ -217,10 +209,20 @@ fun ReaderScreen(
         }
     }
 
-    // 阅读时常亮；离开阅读器立刻恢复。
     DisposableEffect(view, settings.keepScreenOn, book?.id) {
         view.keepScreenOn = settings.keepScreenOn && book != null
         onDispose { view.keepScreenOn = false }
+    }
+
+    // 进度条：拖动时先改本地值，停手 280ms 再真正 seek（Miuix Slider 没有 finished 回调）
+    LaunchedEffect(reader.percent, scrubbing) {
+        if (!scrubbing) sliderValue = reader.percent.toFloat() / 100f
+    }
+    LaunchedEffect(scrubbing, sliderValue) {
+        if (!scrubbing) return@LaunchedEffect
+        delay(280)
+        scrubbing = false
+        vm.seekToPercent((sliderValue * 100f).toDouble())
     }
 
     val needConnect = reader.error == CLOUD_NEED_CONNECT
@@ -228,122 +230,69 @@ fun ReaderScreen(
     val percentLabel = String.format(Locale.US, "%.1f%%", shownPercent)
     val remainingLabel = remainderLabel(reader.minutesLeft(reader.paraIndex))
     val chapterLabel = if (reader.chapterCount > 0) {
-        buildString {
-            append("第 ")
-            append(reader.chapterIndex + 1)
-            append(" / ")
-            append(reader.chapterCount)
-            append(" 章")
-            if (reader.isCloud) append(" · 仅在线")
-        }
+        "第 ${reader.chapterIndex + 1} / ${reader.chapterCount} 章"
     } else {
         "—"
     }
 
     val bottomContentPadding = when {
-        reader.controls -> 208.dp
-        reader.error != null -> 76.dp
-        else -> 104.dp
+        reader.controls -> 220.dp
+        reader.error != null -> 82.dp
+        else -> 84.dp
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        // 正文：左 30% 上一页 / 右 30% 下一页 / 中间切换顶底栏
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(book?.id, settings.tapToTurn) {
-                    detectTapGestures(onTap = { offset ->
-                        if (!settings.tapToTurn) {
-                            vm.toggleControls()
-                        } else {
-                            val edge = size.width * 0.3f
-                            when {
-                                offset.x < edge -> vm.requestPageTurn(-1)
-                                offset.x > size.width - edge -> vm.requestPageTurn(1)
-                                else -> vm.toggleControls()
+    Box(Modifier.fillMaxSize().background(palette.background)) {
+        when {
+            reader.loading -> LoadingState()
+
+            reader.error != null && reader.paragraphs.isEmpty() && !needConnect -> ErrorState(
+                message = reader.error.orEmpty(),
+                onRetry = vm::retryChapter,
+            )
+
+            paged -> ReaderPager(
+                paragraphs = reader.paragraphs,
+                chapters = reader.chapters,
+                chapterIndex = reader.chapterIndex,
+                chapterTitle = reader.chapterTitle,
+                bodyStyle = bodyStyle,
+                kickerStyle = MaterialTheme.typography.labelSmall,
+                headingStyle = MaterialTheme.typography.headlineMedium,
+                paragraphGap = paragraphGap,
+                blankGap = blankGap,
+                pagePadding = settings.pagePadding,
+                bookmarkedParas = bookmarkedParas,
+                highlightedParas = highlightedParas,
+                startPara = reader.paraIndex,
+                pageTurn = pageTurn,
+                tapToTurn = settings.tapToTurn,
+                jumpPara = scrollTarget,
+                onJumpHandled = vm::clearScrollTarget,
+                onTapCenter = vm::toggleControls,
+                onPosition = vm::updatePosition,
+                onPrevChapter = vm::prevChapter,
+                onNextChapter = vm::nextChapter,
+            )
+
+            else -> Column(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(book?.id, settings.tapToTurn) {
+                        detectTapGestures(onTap = { offset ->
+                            if (!settings.tapToTurn) {
+                                vm.toggleControls()
+                            } else {
+                                val edge = size.width * 0.3f
+                                when {
+                                    offset.x < edge -> vm.requestPageTurn(-1)
+                                    offset.x > size.width - edge -> vm.requestPageTurn(1)
+                                    else -> vm.toggleControls()
+                                }
                             }
-                        }
-                    })
-                },
-        ) {
-            when {
-                reader.loading -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            text = "正在排版…",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        FolioKicker("正在切分章节")
-                        Spacer(Modifier.height(16.dp))
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .width(88.dp)
-                                .height(2.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.outlineVariant,
-                        )
-                    }
-                }
-
-                // 只有「一个字都没有」才整屏报错；翻章失败时下面单独挂一条提示，
-                // 已经读到的正文不能被抢走。
-                reader.error != null && reader.paragraphs.isEmpty() && !needConnect -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 32.dp),
-                    ) {
-                        Text(
-                            text = "ERROR",
-                            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = reader.error.orEmpty(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(Modifier.height(22.dp))
-                        Box(
-                            modifier = Modifier
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    shape = RoundedCornerShape(2.dp),
-                                )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { vm.retryChapter() },
-                                )
-                                .padding(horizontal = 24.dp, vertical = 10.dp),
-                        ) {
-                            Text(
-                                text = "重试",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
-                }
-
-                else -> LazyColumn(
+                        })
+                    },
+            ) {
+                LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -377,126 +326,90 @@ fun ReaderScreen(
             }
         }
 
-        // 顶栏
+        // ---------------- 顶栏 ----------------
         AnimatedVisibility(
             visible = reader.controls,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Column(
+            Row(
                 modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f)),
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(palette.surface.copy(alpha = 0.94f))
+                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(56.dp)
-                        .padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FolioIconAction(
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "返回",
-                        onClick = onBack,
-                        size = 40.dp,
-                        iconSize = 18.dp,
+                HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
+                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    Text(
+                        text = book?.title.orEmpty(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = palette.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 6.dp),
-                    ) {
-                        Text(
-                            text = book?.title.orEmpty(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Spacer(Modifier.height(1.dp))
-                        Text(
-                            text = reader.chapterTitle.ifBlank { "—" },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    val bookmarked = reader.paraIndex in bookmarkedParas
-                    FolioIconAction(
-                        icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = if (bookmarked) "取消书签" else "加书签",
-                        onClick = { vm.toggleBookmark() },
-                        tint = if (bookmarked) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        size = 42.dp,
-                        iconSize = 19.dp,
-                    )
-                    FolioIconAction(
-                        icon = Icons.Default.Search,
-                        contentDescription = "搜索",
-                        onClick = { vm.toggleSearch() },
-                        size = 42.dp,
-                        iconSize = 19.dp,
+                    Text(
+                        text = reader.chapterTitle.ifBlank { "—" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                FolioRule()
+                val bookmarked = reader.paraIndex in bookmarkedParas
+                HyperRoundIcon(
+                    icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = if (bookmarked) "取消书签" else "加书签",
+                    onClick = { vm.toggleBookmark() },
+                    tint = if (bookmarked) palette.primary else palette.onSurface,
+                )
+                HyperRoundIcon(Icons.Default.Search, "搜索", { vm.toggleSearch() })
             }
         }
 
-        // 翻章失败：正文留着，底下挂一条提示 + 重试
+        // 翻章失败：正文留着，底部一条提示
         if (reader.error != null && reader.paragraphs.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = if (reader.controls) 208.dp else 14.dp)
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = if (reader.controls) 224.dp else 18.dp)
                     .fillMaxWidth()
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = RoundedCornerShape(2.dp),
-                    )
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.98f))
-                    .padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(palette.surface.copy(alpha = 0.97f))
+                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = reader.error.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = palette.onSurfaceVariantSummary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Box(
+                MiuixText(
+                    text = "重试",
                     modifier = Modifier
-                        .height(38.dp)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                             onClick = { vm.retryChapter() },
                         )
-                        .padding(horizontal = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "重试",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.primary,
+                )
             }
         }
 
-        // 底栏
+        // ---------------- 底栏 ----------------
         AnimatedVisibility(
             visible = reader.controls && reader.paragraphs.isNotEmpty(),
             enter = fadeIn(),
@@ -505,168 +418,99 @@ fun ReaderScreen(
         ) {
             Column(
                 modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
-                    .navigationBarsPadding(),
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(palette.surface.copy(alpha = 0.94f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
-                FolioHairline()
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 10.dp),
-                ) {
-                    // 进度元信息
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = percentLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                        )
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = remainingLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-
-                    // 2dp 轨道 / 12dp 滑块；拖动只改本地值，松手才 seek。
-                    Slider(
-                        value = shownPercent / 100f,
-                        onValueChange = {
-                            scrubbing = true
-                            sliderValue = it
-                        },
-                        onValueChangeFinished = {
-                            scrubbing = false
-                            vm.seekToPercent((sliderValue * 100f).toDouble())
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(26.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.outlineVariant,
-                        ),
-                        thumb = {
-                            Box(
-                                Modifier
-                                    .size(12.dp)
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                            )
-                        },
-                        track = {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(2.dp)
-                                    .background(MaterialTheme.colorScheme.outlineVariant),
-                            ) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth(shownPercent.coerceIn(0f, 100f) / 100f)
-                                        .height(2.dp)
-                                        .background(MaterialTheme.colorScheme.primary),
-                                )
-                            }
-                        },
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = percentLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = palette.primary,
                     )
-                    Spacer(Modifier.height(2.dp))
-
-                    // 章导航
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ChapterNavAction(
-                            label = "上一章",
-                            enabled = reader.hasPrevChapter,
-                            onClick = { vm.prevChapter() },
-                        )
-                        Text(
-                            text = chapterLabel,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        ChapterNavAction(
-                            label = "下一章",
-                            enabled = reader.hasNextChapter,
-                            onClick = { vm.nextChapter() },
-                        )
-                    }
-
-                    FolioHairline()
-                    Spacer(Modifier.height(8.dp))
-
-                    // 5 格动作条
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                    ) {
-                        val cells = listOf(
-                            ReaderAction(
-                                label = "目录",
-                                status = if (reader.chapterCount > 0) reader.chapterCount.toString() else "—",
-                                active = reader.showToc,
-                                onClick = { vm.toggleToc() },
-                            ),
-                            ReaderAction(
-                                label = "痕迹",
-                                status = reader.marks.size.toString(),
-                                active = reader.showMarks,
-                                onClick = { vm.toggleMarks() },
-                            ),
-                            ReaderAction(
-                                label = "搜索",
-                                status = if (reader.search.open) "开" else "关",
-                                active = reader.search.open,
-                                onClick = { vm.toggleSearch() },
-                            ),
-                            ReaderAction(
-                                label = "排版",
-                                status = "${settings.fontSizeSp.toInt()} 号",
-                                active = reader.showStyle,
-                                onClick = { vm.toggleStyle() },
-                            ),
-                            ReaderAction(
-                                label = "自动",
-                                status = if (reader.autoScroll) "开" else "关",
-                                active = reader.autoScroll,
-                                onClick = { vm.toggleAutoScroll() },
-                            ),
-                        )
-                        cells.forEachIndexed { index, cell ->
-                            if (index > 0) {
-                                Box(
-                                    Modifier
-                                        .width(1.dp)
-                                        .height(28.dp)
-                                        .align(Alignment.CenterVertically)
-                                        .background(MaterialTheme.colorScheme.outlineVariant),
-                                )
-                            }
-                            ReaderActionCell(
-                                label = cell.label,
-                                status = cell.status,
-                                active = cell.active,
-                                modifier = Modifier.weight(1f),
-                                onClick = cell.onClick,
+                    Spacer(Modifier.weight(1f))
+                    HyperMeta(remainingLabel)
+                    Spacer(Modifier.width(10.dp))
+                    HyperMeta(if (paged) "翻页" else "滚动")
+                }
+                Slider(
+                    progress = shownPercent.coerceIn(0f, 100f) / 100f,
+                    onProgressChange = {
+                        scrubbing = true
+                        sliderValue = it
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    height = 26.dp,
+                    decimalPlaces = 3,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ChapterNavAction("上一章", reader.hasPrevChapter) { vm.prevChapter() }
+                    Text(
+                        text = chapterLabel,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.onSurfaceVariantSummary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    ChapterNavAction("下一章", reader.hasNextChapter) { vm.nextChapter() }
+                }
+                Spacer(Modifier.height(2.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    HyperActionCell(
+                        label = "目录",
+                        icon = { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.MenuBook, null, modifier = Modifier.size(20.dp)) },
+                        active = reader.showToc,
+                        onClick = { vm.toggleToc() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    HyperActionCell(
+                        label = "痕迹",
+                        icon = {
+                            androidx.compose.material3.Icon(
+                                if (reader.paraIndex in bookmarkedParas) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                                null,
+                                modifier = Modifier.size(20.dp),
                             )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                        },
+                        active = reader.showMarks,
+                        onClick = { vm.toggleMarks() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    HyperActionCell(
+                        label = "搜索",
+                        icon = { androidx.compose.material3.Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) },
+                        active = reader.search.open,
+                        onClick = { vm.toggleSearch() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    HyperActionCell(
+                        label = "排版",
+                        icon = { androidx.compose.material3.Icon(Icons.Default.Tune, null, modifier = Modifier.size(20.dp)) },
+                        active = reader.showStyle,
+                        onClick = { vm.toggleStyle() },
+                        modifier = Modifier.weight(1f),
+                    )
+                    HyperActionCell(
+                        label = "自动",
+                        icon = {
+                            androidx.compose.material3.Icon(
+                                if (reader.autoScroll) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                null,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        },
+                        active = reader.autoScroll,
+                        onClick = { vm.toggleAutoScroll() },
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
         }
@@ -681,37 +525,24 @@ fun ReaderScreen(
                     .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(end = 16.dp, bottom = 20.dp)
-                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        shape = RoundedCornerShape(2.dp),
-                    )
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(palette.surface.copy(alpha = 0.92f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "AUTO $speed",
+                    text = "自动 $speed",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
+                    color = palette.onSurface,
                 )
                 Spacer(Modifier.width(6.dp))
-                Box(
-                    Modifier
-                        .size(5.dp)
-                        .background(MaterialTheme.colorScheme.primary),
-                )
+                Box(Modifier.size(5.dp).background(palette.primary))
             }
         }
     }
 
     if (reader.showToc) {
-        val labels = if (reader.isCloud) {
-            reader.toc.map { it.title }
-        } else {
-            reader.chapters.map { it.title }
-        }
+        val labels = if (reader.isCloud) reader.toc.map { it.title } else reader.chapters.map { it.title }
         TocSheet(
             labels = labels,
             currentIndex = reader.chapterIndex,
@@ -738,6 +569,7 @@ fun ReaderScreen(
             onKeepScreenOn = vm::updateKeepScreenOn,
             onTapToTurn = vm::updateTapToTurn,
             onVolumeKeysTurn = vm::updateVolumeKeysTurn,
+            onReadingMode = vm::updateReadingMode,
             onDismiss = { vm.toggleStyle() },
         )
     }
@@ -766,68 +598,115 @@ fun ReaderScreen(
     }
 
     if (needConnect) {
-        AlertDialog(
+        androidx.compose.material3.AlertDialog(
             onDismissRequest = onBack,
             title = { Text("需要连接桌面端") },
             text = { Text("云端书需要连接桌面端才能阅读。") },
             confirmButton = {
-                Button(onClick = {
+                androidx.compose.material3.TextButton(onClick = {
                     onBack()
                     onOpenSettings()
                 }) { Text("去连接") }
             },
             dismissButton = {
-                TextButton(onClick = onBack) { Text("返回") }
+                androidx.compose.material3.TextButton(onClick = onBack) { Text("返回") }
             },
         )
     }
 }
 
-/** 一章的标题块：16dp 留白 + 2dp 实墨线 + 等宽章号 + 标题。 */
 @Composable
-private fun ChapterHeadingBlock(
-    number: Int,
-    title: String,
-    bottomGap: Dp,
-) {
+private fun LoadingState() {
+    val palette = MiuixTheme.colorScheme
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Spacer(Modifier.height(14.dp))
+            Text(
+                text = "正在排版…",
+                style = MaterialTheme.typography.titleSmall,
+                color = palette.onSurface,
+            )
+            Spacer(Modifier.height(4.dp))
+            HyperMeta("正在切分章节")
+        }
+    }
+}
+
+@Composable
+private fun ErrorState(message: String, onRetry: () -> Unit) {
+    val palette = MiuixTheme.colorScheme
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(horizontal = 36.dp),
+        ) {
+            Text(
+                text = "读不了这一章",
+                style = MaterialTheme.typography.titleMedium,
+                color = palette.onSurface,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = palette.onSurfaceVariantSummary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = onRetry, cornerRadius = 14.dp) {
+                MiuixText(text = "重试", fontSize = 14.sp, color = palette.onPrimary)
+            }
+        }
+    }
+}
+
+/** 一章的标题块。 */
+@Composable
+private fun ChapterHeadingBlock(number: Int, title: String, bottomGap: androidx.compose.ui.unit.Dp) {
+    val palette = MiuixTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
-        Spacer(Modifier.height(16.dp))
-        FolioRule()
+        Spacer(Modifier.height(14.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(palette.dividerLine)
+        )
         Spacer(Modifier.height(12.dp))
-        FolioKicker(
+        Text(
             text = "第 ${number.toString().padStart(2, '0')} 章",
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelSmall,
+            color = palette.primary,
         )
         Spacer(Modifier.height(6.dp))
         Text(
             text = title,
             style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = palette.onSurface,
         )
         Spacer(Modifier.height(bottomGap))
     }
 }
 
-/**
- * 一个正文段：书签是左侧 2dp 正红竖条，高亮是 9% 正红底，两者可同时存在。
- * 竖条用 Row + fillMaxHeight，不用 drawBehind 阴影。
- */
+/** 一个正文段：书签是左侧 2dp 朱砂竖条，高亮是 9% 朱砂底。 */
 @Composable
 private fun ParagraphBlock(
     text: String,
     style: TextStyle,
     bookmarked: Boolean,
     highlighted: Boolean,
-    bottomGap: Dp,
+    bottomGap: androidx.compose.ui.unit.Dp,
 ) {
+    val palette = MiuixTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min)
+                .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
                 .then(
                     if (highlighted) {
-                        Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.09f))
+                        Modifier.background(palette.primary.copy(alpha = 0.09f))
                     } else {
                         Modifier
                     },
@@ -838,14 +717,14 @@ private fun ParagraphBlock(
                     Modifier
                         .width(2.dp)
                         .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.primary),
+                        .background(palette.primary),
                 )
                 Spacer(Modifier.width(6.dp))
             }
             Text(
                 text = text,
                 style = style,
-                color = MaterialTheme.colorScheme.onBackground,
+                color = palette.onBackground,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -853,17 +732,14 @@ private fun ParagraphBlock(
     }
 }
 
-/** 一章导航的左右触摸区；不可用时 32% 透明度。 */
+/** 一章导航的左右触摸区。 */
 @Composable
-private fun ChapterNavAction(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
+private fun ChapterNavAction(label: String, enabled: Boolean, onClick: () -> Unit) {
+    val palette = MiuixTheme.colorScheme
     Box(
         modifier = Modifier
-            .width(60.dp)
-            .height(40.dp)
+            .width(64.dp)
+            .height(36.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -875,69 +751,8 @@ private fun ChapterNavAction(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = if (enabled) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.32f)
-            },
+            color = if (enabled) palette.onSurface else palette.disabledOnSurface,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** 动作条的一格数据。 */
-private data class ReaderAction(
-    val label: String,
-    val status: String,
-    val active: Boolean,
-    val onClick: () -> Unit,
-)
-
-/** 动作条的一格：等宽标签 + 当前状态小字；选中或开启时正红。 */
-@Composable
-private fun ReaderActionCell(
-    label: String,
-    status: String,
-    active: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val ink = if (active) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val soft = if (active) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Column(
-        modifier = modifier
-            .height(48.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = status,
-            style = MaterialTheme.typography.labelSmall,
-            color = soft,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -954,5 +769,4 @@ private fun remainderLabel(minutes: Int): String {
     }
 }
 
-/** 云端书未连接时的固定文案（与架构 §8 一致）。 */
 internal const val CLOUD_NEED_CONNECT = "云端书需要连接桌面端才能阅读"

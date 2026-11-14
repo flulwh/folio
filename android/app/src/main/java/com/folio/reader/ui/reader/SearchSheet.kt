@@ -15,11 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -28,22 +23,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.folio.reader.core.SearchHit
-import com.folio.reader.ui.FolioHairline
-import com.folio.reader.ui.FolioIconAction
-import com.folio.reader.ui.FolioKicker
-import com.folio.reader.ui.FolioSheet
 import com.folio.reader.ui.SearchUiState
+import com.folio.reader.ui.miuix.HyperSheet
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 全书搜索抽屉：等宽输入行 + 命中状态行 + 高亮结果列表。
- *
+ * 全书搜索面板（HyperOS）：胶囊输入框 + 命中状态 + 高亮结果。
  * 命中高亮由 [SearchHit.start] / [SearchHit.end] 直接给出，UI 不再重复找词。
  */
 @Composable
@@ -55,161 +50,109 @@ fun SearchSheet(
     onDismiss: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    val scheme = MiuixTheme.colorScheme
 
-    // 等第一帧布局完成再要焦点，避免 FocusRequester 尚未挂上
     LaunchedEffect(Unit) {
         withFrameNanos { }
         focusRequester.requestFocus()
     }
 
-    FolioSheet(
+    HyperSheet(
         onDismiss = onDismiss,
         title = "全书搜索",
-        kicker = "SEARCH / ${state.total}",
+        subtitle = if (state.total > 0) "命中 ${state.total} 条" else "SEARCH",
     ) {
-        Row(
+        TextField(
+            value = state.query,
+            onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 14.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FolioKicker("FIND")
-            Spacer(Modifier.width(12.dp))
-            BasicTextField(
-                value = state.query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
-                decorationBox = { inner ->
-                    Box {
-                        if (state.query.isEmpty()) {
-                            Text(
-                                text = "输入关键词",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        inner()
-                    }
-                },
-            )
-            if (state.query.isNotEmpty()) {
-                Spacer(Modifier.width(4.dp))
-                FolioIconAction(
-                    icon = Icons.Filled.Close,
-                    contentDescription = "清除",
-                    onClick = { onQueryChange("") },
-                    size = 32.dp,
-                    iconSize = 16.dp,
-                )
-            }
-        }
-        FolioHairline(Modifier.padding(horizontal = 20.dp))
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .focusRequester(focusRequester),
+            label = "输入关键词",
+            useLabelAsPlaceholder = true,
+            singleLine = true,
+            cornerRadius = 16.dp,
+        )
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(top = 10.dp, bottom = 10.dp),
+                .padding(horizontal = 20.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Row {
-                    FolioKicker("命中 ${state.total} 条")
-                    Spacer(Modifier.width(12.dp))
-                    FolioKicker(
-                        if (state.cursor < 0) {
-                            "未定位"
-                        } else {
-                            "当前 ${state.cursor + 1}/${state.total}"
-                        }
-                    )
-                }
-                if (state.running) {
-                    Spacer(Modifier.height(2.dp))
-                    FolioKicker("正在搜索…", color = MaterialTheme.colorScheme.primary)
-                }
+                Text(
+                    text = when {
+                        state.running -> "正在搜索…"
+                        state.cursor < 0 -> "命中 ${state.total} 条"
+                        else -> "当前 ${state.cursor + 1} / ${state.total}"
+                    },
+                    fontSize = 12.sp,
+                    color = if (state.running) scheme.primary else scheme.onSurfaceVariantSummary,
+                    maxLines = 1,
+                )
             }
-            StepAction("↑ 上一处", enabled = state.total > 0) { onStep(-1) }
-            Spacer(Modifier.width(4.dp))
-            StepAction("↓ 下一处", enabled = state.total > 0) { onStep(1) }
+            StepAction("上一处", state.total > 0) { onStep(-1) }
+            Spacer(Modifier.width(6.dp))
+            StepAction("下一处", state.total > 0) { onStep(1) }
         }
 
         when {
-            state.query.isBlank() -> EmptyHint("输入关键词，搜当前书")
+            state.query.isBlank() -> EmptyHint("输入关键词，搜这一本书")
             state.running && state.hits.isEmpty() -> EmptyHint("正在搜索…")
             state.hits.isEmpty() -> EmptyHint("没有找到「${state.query.trim()}」")
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.54f),
-            ) {
+            else -> LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
                 itemsIndexed(
                     items = state.hits,
                     key = { _, hit -> "${hit.paraIndex}-${hit.start}" },
                 ) { index, hit ->
                     val current = index == state.cursor
-                    Box(Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { onJump(hit) },
-                                ),
-                        ) {
-                            FolioHairline()
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.Top,
-                            ) {
-                                Text(
-                                    text = String.format("%03d", index + 1),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (current) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    modifier = Modifier.widthIn(min = 34.dp),
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    FolioKicker(
-                                        hit.chapterTitle.ifBlank {
-                                            "第 ${hit.chapterIndex + 1} 章"
-                                        }
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = highlighted(hit),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onJump(hit) },
+                            )
+                            .background(
+                                if (current) scheme.primaryContainer else scheme.surface
+                            )
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Text(
+                            text = "${index + 1}".padStart(3, '0'),
+                            fontSize = 11.sp,
+                            color = if (current) scheme.primary else scheme.onSurfaceVariantSummary,
+                            modifier = Modifier.widthIn(min = 34.dp),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = hit.chapterTitle.ifBlank { "第 ${hit.chapterIndex + 1} 章" },
+                                fontSize = 11.sp,
+                                color = scheme.onSurfaceVariantSummary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = highlighted(hit),
+                                fontSize = 14.5.sp,
+                                color = scheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                         if (current) {
-                            Box(Modifier.matchParentSize()) {
-                                Box(
-                                    Modifier
-                                        .fillMaxHeight()
-                                        .width(2.dp)
-                                        .background(MaterialTheme.colorScheme.primary)
-                                )
-                            }
+                            Box(
+                                Modifier
+                                    .width(3.dp)
+                                    .height(20.dp)
+                                    .background(scheme.primary)
+                            )
                         }
                     }
                 }
@@ -218,11 +161,11 @@ fun SearchSheet(
     }
 }
 
-/** 命中摘录：关键词用朱红薄底 + 加粗标出来。 */
+/** 命中摘录：关键词用朱砂薄底 + 加粗标出来。 */
 @Composable
-private fun highlighted(hit: SearchHit) = run {
-    val primary = MaterialTheme.colorScheme.primary
-    buildAnnotatedString {
+private fun highlighted(hit: SearchHit): AnnotatedString {
+    val primary = MiuixTheme.colorScheme.primary
+    return buildAnnotatedString {
         append(hit.excerpt)
         if (hit.start >= 0 && hit.start < hit.end && hit.end <= hit.excerpt.length) {
             addStyle(
@@ -241,15 +184,13 @@ private fun highlighted(hit: SearchHit) = run {
 @Composable
 private fun EmptyHint(text: String) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 56.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }
@@ -265,9 +206,9 @@ private fun StepAction(label: String, enabled: Boolean, onClick: () -> Unit) {
                 enabled = enabled,
                 onClick = onClick,
             )
-            .padding(horizontal = 6.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        fontSize = 12.sp,
+        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(
             alpha = if (enabled) 1f else 0.32f
         ),
         maxLines = 1,
