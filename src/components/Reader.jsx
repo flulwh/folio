@@ -39,29 +39,132 @@ import {
 const AUTO_SCROLL_SPEEDS = [15, 25, 40, 60]; // px per second
 const DEFAULT_AUTO_SPEED = 1; // index into AUTO_SCROLL_SPEEDS
 const UI_IDLE_MS = 2500;
-// 排版测量每批处理多少段（越大越快、越容易掉帧）
+// 排版测量每批处理多少段（越大越快、越容易掉帧）。
+// 真实批大小由 measureChunkSize() 按书的大小放大，小书的行为保持不变。
 const MEASURE_CHUNK = 600;
+// 单批上限：再大就是一次几百毫秒的长任务，进度条会「卡住」而不是「走得快」。
+const MEASURE_CHUNK_MAX = 24000;
+// 目标总帧数：整本测量摊到约 16 帧。44 万段的长篇按每帧 600 段要跑 730 多帧（十几秒），
+// 放大批次后同样的书约 16 帧就量完 —— 每帧重一点，但总时长少一个数量级。
+const MEASURE_FRAMES = 16;
 // 超过这个段落数才显示「正在排版」提示，小书瞬间就好
 const MEASURE_HINT_MIN = 400;
-// 段落高度缓存：同一本书 + 同一排版 + 同一栏宽，第二次打开直接命中，不再跑测量。
-// 上限按「大长篇」给：几百万字的长篇段落数轻松过 4 万，卡在 4 万会让这类书永远存不进缓存、
-// 每次打开都整本重排一遍。localStorage 一条几十万段的记录约 1~2MB，还能放得下。
+/* 段落高度缓存：同一本书 + 同一排版 + 同一栏宽，第二次打开直接命中，不再跑测量。
+ *
+ * 以前用 JSON 小数数组存，40 万段就要 4MB 左右，既超 localStorage 配额、又被
+ * HEIGHT_CACHE_MAX 拦下，于是「超长篇小说永远命中不了缓存，每次打开整本重排」。
+ * 现在改成 Uint16 二进制 + base64：40 万段约 880KB（base64 后 1.2MB），
+ * 长篇也存得下。第 0 位存栏宽，读取时校验栏宽是否还对得上。
+ */
 const HEIGHT_CACHE_PREFIX = 'folio:heights:';
-const HEIGHT_CACHE_MAX = 200000;
+const HEIGHT_CACHE_MAX = 1200000;
+// 进程内缓存：同一会话里重开书连 localStorage 都不用读。
+const heightMemCache = new Map();
+const HEIGHT_MEM_MAX = 4;
 
 /** 摘录统一压成单行：段落号才是锚点，字符偏移只用于显示。 */
 const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
+/** 测量层用 innerHTML 拼节点，正文必须转义，否则 `<` 会被当成标签。 */
+function escapeHtml(value) {
+  return String(value).replace(/[&<>]/g, (ch) => (ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : '&gt;'));
+}
+
+// 测量层里的空行探针：和正文里完全同构，用来量出 `.vp-gap` 的真实高度
+const GAP_PROBE = '<div class="measure-item"><div class="vp-gap"></div></div>';
+
+/** 按书的大小决定每批测量多少段：小书 600，大书放大到 ~16 帧量完。 */
+function measureChunkSize(count) {
+  return Math.max(MEASURE_CHUNK, Math.min(MEASURE_CHUNK_MAX, Math.ceil(count / MEASURE_FRAMES)));
+}
+
+function heightStorageKey(key, width) {
+  return `${HEIGHT_CACHE_PREFIX}${key}|${width}`;
+}
+
+function rememberHeights(storageKey, heights) {
+  heightMemCache.set(storageKey, heights);
+  if (heightMemCache.size > HEIGHT_MEM_MAX) {
+    heightMemCache.delete(heightMemCache.keys().next().value);
+  }
+}
+
+function encodeHeights(width, heights) {
+  // [0] = 栏宽，[1..] = 每段高度。段落高度不可能超过 65535px，Uint16 够用。
+  const bin = new Uint16Array(heights.length + 1);
+  bin[0] = Math.max(0, Math.min(65535, Math.round(width)));
+  for (let i = 0; i < heights.length; i += 1) {
+    bin[i + 1] = Math.max(0, Math.min(65535, Math.round(heights[i] || 0)));
+  }
+  const bytes = new Uint8Array(bin.buffer);
+  // 分块转字符：一次 apply 几十万个参数会直接爆调用栈
+  const BLOCK = 0x8000;
+  let raw = '';
+  for (let i = 0; i < bytes.length; i += BLOCK) {
+    raw += String.fromCharCode.apply(null, bytes.subarray(i, i + BLOCK));
+  }
+  return btoa(raw);
+}
+
+function decodeHeights(raw) {
+  const text = atob(raw);
+  const bin = new Uint16Array(text.length >> 1);
+  const bytes = new Uint8Array(bin.buffer);
+  for (let i = 0; i < bytes.length; i += 1) bytes[i] = text.charCodeAt(i);
+  return bin;
+}
+
 function loadHeights(key, width) {
+  const storageKey = heightStorageKey(key, width);
+  const mem = heightMemCache.get(storageKey);
+  if (mem) return mem;
   try {
-    const raw = window.localStorage.getItem(HEIGHT_CACHE_PREFIX + key);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data || Math.abs(Number(data.w) - width) > 1) return null;
-    if (!Array.isArray(data.h) || !data.h.length) return null;
-    return Float64Array.from(data.h);
+    const bin = decodeHeights(raw);
+    if (bin.length < 2) return null;
+    // 栏宽差 1px 以内仍算同一套排版（缩放/滚动条会让宽度抖动 1px）
+    if (Math.abs(bin[0] - width) > 1) return null;
+    const heights = new Float64Array(bin.length - 1);
+    for (let i = 0; i < heights.length; i += 1) heights[i] = bin[i + 1];
+    rememberHeights(storageKey, heights);
+    return heights;
   } catch {
     return null;
+  }
+}
+
+/** 这本书 + 这套排版有没有缓存（只查键名，不解码上百万字节）。 */
+function hasHeights(key) {
+  const prefix = `${HEIGHT_CACHE_PREFIX}${key}|`;
+  for (const storageKey of heightMemCache.keys()) {
+    if (storageKey.startsWith(prefix)) return true;
+  }
+  try {
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const storageKey = window.localStorage.key(i);
+      if (storageKey && storageKey.startsWith(prefix)) return true;
+    }
+  } catch {
+    /* 拿不到 storage 就当作没有 */
+  }
+  return false;
+}
+
+/** 同一本书只留一份缓存：栏宽变了就丢掉旧栏宽那份，避免换几次窗口宽度把配额塞满。 */
+function pruneHeights(key, keepStorageKey) {
+  const prefix = `${HEIGHT_CACHE_PREFIX}${key}|`;
+  try {
+    const doomed = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const storageKey = window.localStorage.key(i);
+      if (storageKey && storageKey.startsWith(prefix) && storageKey !== keepStorageKey) {
+        doomed.push(storageKey);
+      }
+    }
+    doomed.forEach((storageKey) => window.localStorage.removeItem(storageKey));
+  } catch {
+    /* 拿不到 storage 就算了 */
   }
 }
 
@@ -70,7 +173,7 @@ function dropOtherHeights(keepKey) {
     const doomed = [];
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i);
-      if (key && key.startsWith(HEIGHT_CACHE_PREFIX) && key !== HEIGHT_CACHE_PREFIX + keepKey) {
+      if (key && key.startsWith(HEIGHT_CACHE_PREFIX) && key !== keepKey) {
         doomed.push(key);
       }
     }
@@ -82,15 +185,18 @@ function dropOtherHeights(keepKey) {
 
 function saveHeights(key, width, heights) {
   if (!heights || heights.length > HEIGHT_CACHE_MAX) return;
-  const payload = JSON.stringify({ w: width, h: Array.from(heights, (value) => Math.round(value)) });
+  const storageKey = heightStorageKey(key, width);
+  rememberHeights(storageKey, heights);
+  const payload = encodeHeights(width, heights);
   try {
-    window.localStorage.setItem(HEIGHT_CACHE_PREFIX + key, payload);
+    pruneHeights(key, storageKey);
+    window.localStorage.setItem(storageKey, payload);
   } catch {
     // 写不进去多半是配额满了：先把别本书的旧记录清掉再试一次，
     // 否则这本书永远命中不了缓存，每次打开都要重新排版。
-    dropOtherHeights(key);
+    dropOtherHeights(storageKey);
     try {
-      window.localStorage.setItem(HEIGHT_CACHE_PREFIX + key, payload);
+      window.localStorage.setItem(storageKey, payload);
     } catch {
       /* 还是不行就算了，下次再测 */
     }
@@ -187,6 +293,30 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       10
     );
   }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.paragraphSpacing]);
+
+  // 空行段落是固定高度（`.vp-gap`，随字号缩放），不必逐段进 DOM 实测；
+  // 超长篇里空行常常占一半（44 万段的书里 22 万段是空行），跳过它们直接让测量量减半。
+  // 固定高度取自测量层里那一个真实的空行探针，避免把 CSS 里的系数抄到 JS 里。
+  const gapHeightRef = useRef(0);
+  const textIndexes = useMemo(() => {
+    const list = [];
+    for (let i = 0; i < paragraphs.length; i += 1) {
+      if (!paragraphs[i].blank) list.push(i);
+    }
+    return list;
+  }, [paragraphs]);
+  const measureChunk = useMemo(() => measureChunkSize(textIndexes.length), [textIndexes.length]);
+  // 新建高度表时先把空行的固定高度填好，剩下的才靠 DOM 实测。
+  const createHeightStore = () => {
+    const store = new Float64Array(paragraphs.length);
+    const gap = gapHeightRef.current;
+    if (gap > 0) {
+      for (let i = 0; i < paragraphs.length; i += 1) {
+        if (paragraphs[i].blank) store[i] = gap;
+      }
+    }
+    return store;
+  };
 
   const [measuring, setMeasuring] = useState(true);
   const measureHeightsRef = useRef(null);
@@ -286,6 +416,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const typographyKey = `${book.id}|${settings.fontSize}|${settings.lineHeight}|${settings.pageWidth}|${settings.paragraphSpacing}|${settings.fontFamily}|${settings.userFont || ''}|${settings.indent}`;
   // 高度缓存键：排版 + 段落数（栏宽在读写时会再校验一次）
   const cacheKey = `${typographyKey}|${paragraphs.length}`;
+  // 有没有现成的高度缓存：有的话首批只渲染一小撮做校验，不必把整批塞进 DOM 再丢弃。
+  const hasCachedHeights = useMemo(() => hasHeights(cacheKey), [cacheKey]);
 
   overlaysOpenRef.current = tocOpen || settingsOpen || marksOpen || searchOpen;
 
@@ -587,7 +719,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       firstSettingsRun.current = false;
       return;
     }
-    measureHeightsRef.current = new Float64Array(paragraphs.length);
+    measureHeightsRef.current = createHeightStore();
     setMeasureFrom(0);
     setMeasuring(true);
   }, [paragraphs.length, typographyKey]);
@@ -600,7 +732,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     if (typeof document !== 'undefined' && document.fonts?.ready) {
       document.fonts.ready.then(() => {
         if (!alive) return;
-        measureHeightsRef.current = new Float64Array(paragraphs.length);
+        measureHeightsRef.current = createHeightStore();
         setMeasureFrom(0);
         setMeasuring(true);
       });
@@ -626,14 +758,48 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     let store = measureHeightsRef.current;
     // 首帧时被动 effect 还没跑，这里补建一次，避免游标永远停在第一块
     if (!store || store.length !== paragraphs.length) {
-      store = new Float64Array(paragraphs.length);
+      store = createHeightStore();
       measureHeightsRef.current = store;
     }
     const width = Math.round(scrollRef.current?.clientWidth || 0);
+    const total = textIndexes.length;
+    if (!total) {
+      measureItems(new Float64Array(paragraphs.length));
+      setMeasuring(false);
+      return;
+    }
+    const from = Math.min(measureFrom, total);
+    // 有缓存时第一批只渲染一小撮做校验，别为了验证把上千段塞进 DOM
+    const batch = from === 0 && hasCachedHeights ? Math.min(measureChunk, 96) : measureChunk;
+    const to = Math.min(total, from + batch);
+    // 测量层直接拼 DOM，不走 React：上万段的 reconciliation 比布局本身还贵，
+    // 而测量只关心「这个 p 有多高」，不需要事件、划线标记和动画。
+    const parts = [];
+    for (let k = from; k < to; k += 1) {
+      const index = textIndexes[k];
+      const top = index === 0 ? 'padding-top:14vh;' : '';
+      const bottom = index === paragraphs.length - 1 ? 'padding-bottom:28vh;' : '';
+      const style = top || bottom ? ` style="${top}${bottom}"` : '';
+      const cls = headingSet.has(index) ? 'para chapter-title' : 'para';
+      parts.push(
+        `<div class="measure-item" data-index="${index}"${style}><p class="${cls}">${escapeHtml(
+          paragraphs[index].text || ''
+        )}</p></div>`
+      );
+    }
+    layer.innerHTML = `${GAP_PROBE}${parts.join('')}`;
+    // 空行探针：量一次 `.vp-gap` 的真实高度，按这个值填满所有空行段落
+    const gapNode = layer.firstElementChild;
+    const gapHeight = gapNode ? gapNode.offsetHeight : 0;
+    if (gapHeight > 0 && gapHeight !== gapHeightRef.current) {
+      gapHeightRef.current = gapHeight;
+      for (let i = 0; i < store.length; i += 1) {
+        if (paragraphs[i].blank) store[i] = gapHeight;
+      }
+    }
     const nodes = layer.children;
-    if (!nodes.length) return;
-    // 分块测量：一次性把上万段落塞进 DOM 会让主线程卡住 1~2 秒（渲染 + 一次大重排），
-    // 所以每批只渲染/测量 MEASURE_CHUNK 段，布局代价被摊到多帧里。
+    // 分块测量：一次把上万段塞进 DOM 会卡住主线程，所以每批只测量 measureChunk 段。
+    // 批大小随书的大小放大（见 measureChunkSize），空行段落不渲染、直接用固定高度填。
     for (let i = 0; i < nodes.length; i += 1) {
       const node = nodes[i];
       const index = Number(node.dataset.index);
@@ -656,6 +822,13 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         }
         if (counted === 0 || diff / counted <= 0.02) {
           const merged = Float64Array.from(cached);
+          // 空行是固定高度，直接用这次探针量到的值，免得旧缓存里的空行高度过期
+          const gap = gapHeightRef.current;
+          if (gap > 0) {
+            for (let i = 0; i < merged.length; i += 1) {
+              if (paragraphs[i].blank) merged[i] = gap;
+            }
+          }
           for (let i = 0; i < nodes.length; i += 1) {
             const index = Number(nodes[i].dataset.index);
             if (Number.isFinite(index) && index >= 0 && index < merged.length) merged[index] = store[index];
@@ -670,13 +843,12 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         }
       }
     }
-    const next = measureFrom + nodes.length;
-    if (next < paragraphs.length) {
+    if (to < total) {
       // 用 rAF 推进游标：layout effect 里直接 setState 会让 React 在同一帧内同步重渲染，
-      // 十批测量全挤进一个长任务里、首屏迟迟不出现；rAF 让浏览器先把这批画出来。
+      // 所有批次全挤进一个长任务里、首屏迟迟不出现；rAF 让浏览器先把这批画出来。
       measureRafRef.current = requestAnimationFrame(() => {
         measureRafRef.current = 0;
-        setMeasureFrom(next);
+        setMeasureFrom(to);
       });
       return;
     }
@@ -687,7 +859,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     if (restoredRef.current) {
       requestAnimationFrame(() => scrollToIndex(lastIndexRef.current, { align: 'start' }));
     }
-  }, [measuring, measureFrom, measureItems, paragraphs.length, scrollToIndex]);
+  }, [measuring, measureFrom, measureItems, paragraphs.length, textIndexes.length, scrollToIndex]);
 
   /* --------------------------- navigation --------------------------- */
 
@@ -1514,26 +1686,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           style={measuring ? undefined : { height: total }}
         >
           {measuring ? (
-            <div className="measure-list" ref={measureRef}>
-              {paragraphs
-                .slice(measureFrom, measureFrom + MEASURE_CHUNK)
-                .map((para, offset) => {
-                  const i = measureFrom + offset;
-                  return (
-                    <div
-                      key={i}
-                      className="measure-item"
-                      data-index={i}
-                      style={{
-                        paddingTop: i === 0 ? '14vh' : undefined,
-                        paddingBottom: i === paragraphs.length - 1 ? '28vh' : undefined,
-                      }}
-                    >
-                      {para.blank ? <div className="vp-gap" /> : renderParagraph(para, i)}
-                    </div>
-                  );
-                })}
-            </div>
+            // 子节点由排版测量的 layout effect 直接拼（不走 React），这里只留挂载点
+            <div className="measure-list" ref={measureRef} />
           ) : (
             items
           )}
@@ -1545,7 +1699,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           <span className="reader-measuring-dot" />
           正在排版
           <span className="reader-measuring-pct">
-            {Math.min(99, Math.round((measureFrom / Math.max(1, paragraphs.length)) * 100))}%
+            {Math.min(99, Math.round((measureFrom / Math.max(1, textIndexes.length)) * 100))}%
           </span>
         </div>
       )}

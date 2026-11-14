@@ -44,6 +44,10 @@ export function computeVisibleRange(offsets, count, top, viewport, overscan) {
 export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize = null }) {
   const scrollRef = useRef(null);
   const sizesRef = useRef(new Map());
+  // 整本书的实测高度（来自离屏测量）单独存一份 Float64Array：
+  // 几十万段全塞进 Map 要几十 MB 内存，每次重建偏移表还要几十万次 Map.get。
+  // Map 只留给「滚动中现场量到」的那十几段，rebuild 时 Map 优先。
+  const baseRef = useRef(null);
   const offsetsRef = useRef(new Float64Array(1));
   const totalRef = useRef(0);
   const rebuildRaf = useRef(0);
@@ -57,10 +61,12 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
   const rebuild = useCallback(() => {
     const n = count;
     const offsets = new Float64Array(n + 1);
+    const base = baseRef.current && baseRef.current.length === n ? baseRef.current : null;
     let acc = 0;
     for (let i = 0; i < n; i += 1) {
       offsets[i] = acc;
-      const h = sizesRef.current.get(i);
+      let h = sizesRef.current.get(i);
+      if (h === undefined) h = base ? base[i] : undefined;
       acc += h === undefined ? estimate : h;
     }
     offsets[n] = acc;
@@ -132,7 +138,10 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
   // rewraps text and invalidates the measured heights.
   useLayoutEffect(() => {
     if (prevCount.current !== count) {
-      if (count < prevCount.current * 0.5 || count === 0) sizesRef.current.clear();
+      if (count < prevCount.current * 0.5 || count === 0) {
+        sizesRef.current.clear();
+        baseRef.current = null;
+      }
       prevCount.current = count;
     }
     rebuild();
@@ -207,7 +216,11 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
       const apply = () => {
         const offsets = offsetsRef.current;
         const itemTop = offsets[target] ?? 0;
-        const itemHeight = sizesRef.current.get(target) ?? estimate;
+        const base = baseRef.current;
+        const itemHeight =
+          sizesRef.current.get(target) ??
+          (base && base.length === count ? base[target] : undefined) ??
+          estimate;
         let top = itemTop;
         if (align === 'center') top -= (el.clientHeight - itemHeight) / 2;
         else if (align === 'end') top -= el.clientHeight - itemHeight;
@@ -254,11 +267,14 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
     (heights) => {
       if (!heights || heights.length !== count) return false;
       let changed = false;
+      const previous = baseRef.current;
       for (let i = 0; i < count; i += 1) {
-        const previous = sizesRef.current.get(i);
-        if (previous === undefined || Math.abs(previous - heights[i]) > 0.5) changed = true;
-        sizesRef.current.set(i, heights[i]);
+        const before = sizesRef.current.get(i) ?? (previous && previous.length === count ? previous[i] : undefined);
+        if (before === undefined || Math.abs(before - heights[i]) > 0.5) changed = true;
       }
+      // 实测表整份替换，Map 里的现场测量值作废（它们本来就该等于 base 里的值）
+      sizesRef.current.clear();
+      baseRef.current = new Float64Array(heights);
       rebuild();
       computeVisible();
       setLayoutVersion((v) => v + 1);
@@ -269,6 +285,7 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
 
   const resetMeasurements = useCallback(() => {
     sizesRef.current.clear();
+    baseRef.current = null;
     scheduleRebuild(true);
   }, [scheduleRebuild]);
 

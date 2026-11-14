@@ -21,6 +21,10 @@ export default function TocPanel({
   onOpenSettings,
 }) {
   const kit = useMotionKit();
+  // 目录面板是「先改 open、下一帧才挂载」的两段式（AnimatePresence 的存活开关）：
+  // 挂在 open 上做测量/绑监听会在节点还不存在的第一帧里直接 return，之后再也不跑。
+  // 所以所有依赖 DOM 的 effect 都跟 alive 走。
+  const alive = usePresence(open);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -63,7 +67,7 @@ export default function TocPanel({
 
   // 滚动时只更新窗口，不动整张表。
   useEffect(() => {
-    if (!open) return undefined;
+    if (!alive) return undefined;
     const el = listRef.current;
     if (!el) return undefined;
     let raf = 0;
@@ -84,20 +88,20 @@ export default function TocPanel({
       ro?.disconnect();
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [open]);
+  }, [alive]);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!alive) return;
     const node = listRef.current?.querySelector('.toc-item');
     if (!node) return;
     const measured = node.getBoundingClientRect().height;
     if (measured > 1 && Math.abs(measured - rowH) > 0.5) setRowH(measured);
-  }, [open, rowH]);
+  }, [alive, rowH]);
 
   // 打开时把当前章放到中间。目录行是虚拟的，不能靠 scrollIntoView，
   // 直接按行号算出 scrollTop，连旁边几千行都不用进 DOM。
   useEffect(() => {
-    if (!open) {
+    if (!alive) {
       positionedRef.current = '';
       return undefined;
     }
@@ -117,7 +121,7 @@ export default function TocPanel({
       setViewHeight(el.clientHeight);
     });
     return () => cancelAnimationFrame(id);
-  }, [open, rowH, filtered, currentChapter]);
+  }, [alive, rowH, filtered, currentChapter]);
 
   // 键盘上下移动：只把光标那一行带进视口。
   useEffect(() => {
@@ -194,8 +198,6 @@ export default function TocPanel({
       </button>
     );
   }
-
-  const alive = usePresence(open);
 
   return (
     <AnimatePresence>
