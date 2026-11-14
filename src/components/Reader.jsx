@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { motionKitFor } from '../motion-kit.js';
-import { useAppActions, useFonts, useProgress, useSettings } from '../store/AppStore.jsx';
+import { useAppActions, useFonts, useMarks, useProgress, useSettings } from '../store/AppStore.jsx';
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
@@ -16,15 +16,23 @@ import {
   parseBookCached,
 } from '../utils/chapters.js';
 import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
+import { findMatchRange, searchBook } from '../utils/search.js';
 import TocPanel from './TocPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
+import MarksPanel from './MarksPanel.jsx';
+import SearchPanel from './SearchPanel.jsx';
+import NoteDialog from './NoteDialog.jsx';
 import {
   IconArrowLeft,
+  IconBookmark,
   IconChevron,
+  IconHighlight,
   IconList,
   IconMaximize,
+  IconNote,
   IconPause,
   IconPlay,
+  IconSearch,
   IconType,
 } from './Icons.jsx';
 
@@ -40,6 +48,9 @@ const MEASURE_HINT_MIN = 400;
 // 每次打开都整本重排一遍。localStorage 一条几十万段的记录约 1~2MB，还能放得下。
 const HEIGHT_CACHE_PREFIX = 'folio:heights:';
 const HEIGHT_CACHE_MAX = 200000;
+
+/** 摘录统一压成单行：段落号才是锚点，字符偏移只用于显示。 */
+const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
 
 function loadHeights(key, width) {
   try {
@@ -91,8 +102,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   // 阅读器已经订阅了 settings，直接按皮肤取套件，不再多挂一个 hook
   const kit = motionKitFor(settings.skin);
   const progress = useProgress();
+  const marksMap = useMarks();
   const fonts = useFonts();
-  const { saveProgress, patchSettings, resetSettings, notify } = useAppActions();
+  const { saveProgress, saveBookMarks, patchSettings, resetSettings, notify } = useAppActions();
 
   // 正文用的字体栈：优先用户安装的字体，回退到基础字体族。
   // 选中的字体必须确实加载成功，否则正文会悄悄掉回默认字体 —— 这里做一次校验。
@@ -147,6 +159,13 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   }, [book.cloudChapters, paragraphs, parsedChapters]);
 
   const hasHeadings = book.cloudChapters?.length ? true : parsedHasHeadings;
+
+  // 云端书只装了一个章节窗口：窗口内的章号要加上 windowBase 才是全书章号。
+  const windowBase = cloud?.windowBase || 0;
+  const bookMarks = useMemo(
+    () => (Array.isArray(marksMap[book.id]) ? marksMap[book.id] : []),
+    [marksMap, book.id]
+  );
 
   const headingSet = useMemo(() => {
     if (book.cloudChapters?.length) {
@@ -216,8 +235,21 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     const saved = progress[book.id];
     return saved && Number.isFinite(saved.percent) ? saved.percent : 0;
   });
+  const [currentPara, setCurrentPara] = useState(() => {
+    const saved = progress[book.id];
+    return saved && Number.isFinite(saved.paraIndex) ? saved.paraIndex : 0;
+  });
   const [tocOpen, setTocOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [marksOpen, setMarksOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHits, setSearchHits] = useState([]);
+  const [searchCursor, setSearchCursor] = useState(-1);
+  const [searching, setSearching] = useState(false);
+  const [activeHit, setActiveHit] = useState(null);
+  const [selection, setSelection] = useState(null);
+  const [noteTarget, setNoteTarget] = useState(null);
   const [uiVisible, setUiVisible] = useState(true);
   const [autoScroll, setAutoScroll] = useState(false);
   const [autoSpeed, setAutoSpeed] = useState(DEFAULT_AUTO_SPEED);
@@ -247,6 +279,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const firstSettingsRun = useRef(true);
   const measureRef = useRef(null);
   const measureRafRef = useRef(0);
+  const searchTimer = useRef(null);
 
   // Everything that can change a paragraph's height. When this changes the
   // offscreen measurement pass re-runs and the whole offset table becomes exact.
@@ -254,7 +287,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   // 高度缓存键：排版 + 段落数（栏宽在读写时会再校验一次）
   const cacheKey = `${typographyKey}|${paragraphs.length}`;
 
-  overlaysOpenRef.current = tocOpen || settingsOpen;
+  overlaysOpenRef.current = tocOpen || settingsOpen || marksOpen || searchOpen;
 
   /* ------------------------- UI visibility ------------------------- */
 
@@ -306,13 +339,13 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   }, [wakeUI]);
 
   useEffect(() => {
-    if (tocOpen || settingsOpen) {
+    if (tocOpen || settingsOpen || marksOpen || searchOpen) {
       setUiVisible(true);
       if (idleTimer.current) clearTimeout(idleTimer.current);
     } else {
       wakeUI();
     }
-  }, [tocOpen, settingsOpen, wakeUI]);
+  }, [tocOpen, settingsOpen, marksOpen, searchOpen, wakeUI]);
 
   /* ------------------------- progress saving ------------------------ */
 
@@ -364,6 +397,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       if (hairTimer.current) clearTimeout(hairTimer.current);
       if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current);
       if (smoothRef.current.raf) cancelAnimationFrame(smoothRef.current.raf);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, []);
 
@@ -455,6 +489,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         const state = getScrollState();
         lastIndexRef.current = state.index;
         setScrollPercent(state.percent);
+        setCurrentPara((prev) => (prev === state.index ? prev : state.index));
+        setSelection(null);
         const ci = chapterIndexForPara(chapters, state.index);
         setChapterIndex((prev) => (prev === ci ? prev : ci));
         scheduleSave();
@@ -487,6 +523,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     if (measuring) return;
     const state = getScrollState();
     setScrollPercent(state.percent);
+    setCurrentPara((prev) => (prev === state.index ? prev : state.index));
     const ci = chapterIndexForPara(chapters, state.index);
     setChapterIndex((prev) => (prev === ci ? prev : ci));
   }, [total, chapters, getScrollState, measuring]);
@@ -526,6 +563,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       inner = requestAnimationFrame(() => {
         restoredRef.current = true;
         animateScroll(getOffset(saved.paraIndex), 520);
+        setCurrentPara(saved.paraIndex);
         setChapterIndex(chapterIndexForPara(chapters, saved.paraIndex));
         setScrollPercent(saved.percent ?? 0);
         setResumeChip({ key: Date.now(), percent: saved.percent ?? 0 });
@@ -690,6 +728,284 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     onClose();
   }, [flushSave, onClose]);
 
+  /* ------------------- bookmarks / highlights / notes --------------- */
+
+  // 痕迹锚定在「段落号」上，而不是字符偏移：换字号 / 换栏宽后正文重排，
+  // 段落号仍然稳定，划线不会错位。
+  const absoluteParaForMark = useCallback(
+    (mark) => {
+      const local = Number(mark?.paraIndex);
+      if (!Number.isFinite(local)) return null;
+      if (Number(mark.chapterNo) >= 0) {
+        const chapter = chapters[Number(mark.chapterNo) - windowBase];
+        if (!chapter) return null;
+        return chapter.paraIndex + local;
+      }
+      return local;
+    },
+    [chapters, windowBase]
+  );
+
+  const buildMark = useCallback(
+    (paraIndex, kind, excerpt, note = '') => {
+      const ci = chapterIndexForPara(chapters, paraIndex);
+      const chapter = chapters[ci];
+      const isWindow = !!cloud;
+      return {
+        id:
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `mark-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        paraIndex: isWindow ? paraIndex - (chapter?.paraIndex || 0) : paraIndex,
+        chapter: chapter?.title || '',
+        chapterIndex: ci,
+        chapterNo: isWindow ? windowBase + ci : -1,
+        excerpt: compactText(excerpt || paragraphs[paraIndex]?.text || '').slice(0, 120),
+        note: String(note || '').trim(),
+        kind,
+        createdAt: Date.now(),
+      };
+    },
+    [chapters, cloud, paragraphs, windowBase]
+  );
+
+  // 书签落在「当前位置最近的非空段落」上，空行不会成为一张空白书签。
+  const bookmarkTarget = useMemo(() => {
+    if (!paragraphs.length) return -1;
+    const start = clamp(currentPara, 0, paragraphs.length - 1);
+    for (let i = start; i >= 0; i -= 1) {
+      if (!paragraphs[i]?.blank) return i;
+    }
+    for (let i = start + 1; i < paragraphs.length; i += 1) {
+      if (!paragraphs[i]?.blank) return i;
+    }
+    return -1;
+  }, [currentPara, paragraphs]);
+
+  const marksByPara = useMemo(() => {
+    const map = new Map();
+    bookMarks.forEach((mark) => {
+      const index = absoluteParaForMark(mark);
+      if (index == null || index < 0 || index >= paragraphs.length) return;
+      const entry = map.get(index) || { bookmark: false, highlights: [] };
+      if (mark.kind === 'bookmark') entry.bookmark = true;
+      else entry.highlights.push(mark);
+      map.set(index, entry);
+    });
+    return map;
+  }, [absoluteParaForMark, bookMarks, paragraphs.length]);
+
+  const isBookmarked = !!marksByPara.get(bookmarkTarget)?.bookmark;
+
+  const toggleBookmark = useCallback(() => {
+    const index = bookmarkTarget;
+    if (index < 0) return;
+    const existing = bookMarks.find(
+      (mark) => mark.kind === 'bookmark' && absoluteParaForMark(mark) === index
+    );
+    if (existing) {
+      saveBookMarks(book.id, bookMarks.filter((mark) => mark.id !== existing.id));
+      notify('已取消书签');
+    } else {
+      saveBookMarks(book.id, [...bookMarks, buildMark(index, 'bookmark')]);
+      notify('已加书签');
+    }
+    wakeUI();
+  }, [
+    absoluteParaForMark,
+    book.id,
+    bookMarks,
+    bookmarkTarget,
+    buildMark,
+    notify,
+    saveBookMarks,
+    wakeUI,
+  ]);
+
+  const toggleHighlight = useCallback(
+    (paraIndex, excerpt) => {
+      const existing = bookMarks.find(
+        (mark) => mark.kind === 'highlight' && absoluteParaForMark(mark) === paraIndex
+      );
+      if (existing) {
+        // 带笔记的划线不直接删：先打开笔记框，避免误删用户写过的东西
+        if (existing.note) {
+          setNoteTarget({ markId: existing.id, paraIndex, excerpt: existing.excerpt });
+          return;
+        }
+        saveBookMarks(book.id, bookMarks.filter((mark) => mark.id !== existing.id));
+        notify('已取消划线');
+        return;
+      }
+      saveBookMarks(book.id, [...bookMarks, buildMark(paraIndex, 'highlight', excerpt)]);
+      notify('已划线');
+      setSelection(null);
+    },
+    [absoluteParaForMark, book.id, bookMarks, buildMark, notify, saveBookMarks]
+  );
+
+  const openNoteFor = useCallback(
+    (paraIndex, excerpt) => {
+      const existing = bookMarks.find(
+        (mark) => mark.kind === 'highlight' && absoluteParaForMark(mark) === paraIndex
+      );
+      setNoteTarget({
+        markId: existing?.id || null,
+        paraIndex,
+        excerpt: existing?.excerpt || excerpt,
+      });
+      setSelection(null);
+    },
+    [absoluteParaForMark, bookMarks]
+  );
+
+  const saveNote = useCallback(
+    (text) => {
+      const target = noteTarget;
+      if (!target) return;
+      const note = String(text || '').trim();
+      if (target.markId) {
+        saveBookMarks(
+          book.id,
+          bookMarks.map((mark) =>
+            mark.id === target.markId ? { ...mark, note, updatedAt: Date.now() } : mark
+          )
+        );
+      } else if (note) {
+        saveBookMarks(book.id, [
+          ...bookMarks,
+          buildMark(target.paraIndex, 'highlight', target.excerpt, note),
+        ]);
+      }
+      setNoteTarget(null);
+      notify(note ? '笔记已保存' : '笔记已清空');
+    },
+    [book.id, bookMarks, buildMark, noteTarget, notify, saveBookMarks]
+  );
+
+  const updateNote = useCallback(
+    (id, text) => {
+      saveBookMarks(
+        book.id,
+        bookMarks.map((mark) =>
+          mark.id === id ? { ...mark, note: String(text || '').trim(), updatedAt: Date.now() } : mark
+        )
+      );
+      notify('笔记已保存');
+    },
+    [book.id, bookMarks, notify, saveBookMarks]
+  );
+
+  const removeMark = useCallback(
+    (id) => {
+      saveBookMarks(book.id, bookMarks.filter((mark) => mark.id !== id));
+      notify('已删除痕迹');
+    },
+    [book.id, bookMarks, notify, saveBookMarks]
+  );
+
+  const jumpToMark = useCallback(
+    (mark) => {
+      setActiveHit(null);
+      const index = absoluteParaForMark(mark);
+      if (index == null) {
+        if (Number(mark.chapterNo) >= 0) cloud?.onJump?.(Number(mark.chapterNo));
+        notify('这一章不在当前窗口，正在跳转');
+        return;
+      }
+      setAutoScroll(false);
+      playSettle();
+      animateScroll(getOffset(index), 480);
+      setCurrentPara(index);
+    },
+    [absoluteParaForMark, animateScroll, cloud, getOffset, notify, playSettle]
+  );
+
+  /* ------------------------ selection bubble ------------------------ */
+
+  const handleReaderMouseUp = useCallback((event) => {
+    if (event.target.closest?.('.selection-bubble')) return;
+    const selection = window.getSelection();
+    const text = selection && !selection.isCollapsed ? compactText(selection.toString()) : '';
+    if (!text) {
+      setSelection(null);
+      return;
+    }
+    const anchor = selection.anchorNode;
+    const element = anchor?.nodeType === 3 ? anchor.parentElement : anchor;
+    const node = element?.closest?.('.vp-item');
+    const paraIndex = Number(node?.dataset.index);
+    if (!node || !Number.isFinite(paraIndex)) {
+      setSelection(null);
+      return;
+    }
+    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+    const rect = range?.getBoundingClientRect();
+    if (!rect) {
+      setSelection(null);
+      return;
+    }
+    setSelection({
+      x: clamp(rect.left + rect.width / 2, 96, window.innerWidth - 96),
+      y: clamp(rect.top - 10, 64, window.innerHeight - 72),
+      paraIndex,
+      excerpt: text.slice(0, 120),
+    });
+  }, []);
+
+  /* --------------------------- full-text search --------------------- */
+
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (!searchOpen || !searchQuery.trim()) {
+      setSearchHits([]);
+      setSearchCursor(-1);
+      setSearching(false);
+      setActiveHit(null);
+      return undefined;
+    }
+    setSearching(true);
+    setActiveHit(null);
+    const keyword = searchQuery.trim();
+    searchTimer.current = setTimeout(() => {
+      const hits = searchBook(paragraphs, chapters, keyword);
+      setSearchHits(hits);
+      setSearchCursor(hits.length ? 0 : -1);
+      setSearching(false);
+    }, 260);
+    return () => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, [searchOpen, searchQuery, paragraphs, chapters]);
+
+  const jumpToHit = useCallback(
+    (hit, index) => {
+      if (!hit) return;
+      const text = paragraphs[hit.paraIndex]?.text || '';
+      const range = findMatchRange(text, searchQuery) || {
+        start: Math.max(0, hit.start),
+        end: Math.max(1, hit.end),
+      };
+      setActiveHit({ paraIndex: hit.paraIndex, start: range.start, end: range.end });
+      setSearchCursor(index);
+      setAutoScroll(false);
+      playSettle();
+      animateScroll(getOffset(hit.paraIndex), 420);
+      setCurrentPara(hit.paraIndex);
+    },
+    [animateScroll, getOffset, paragraphs, playSettle, searchQuery]
+  );
+
+  const stepHit = useCallback(
+    (direction) => {
+      if (!searchHits.length) return;
+      const base = searchCursor < 0 ? (direction > 0 ? -1 : 0) : searchCursor;
+      const next = (base + direction + searchHits.length) % searchHits.length;
+      jumpToHit(searchHits[next], next);
+    },
+    [jumpToHit, searchCursor, searchHits]
+  );
+
   /* --------------------------- auto scroll -------------------------- */
 
   useEffect(() => {
@@ -761,7 +1077,12 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     closePanels: () => {
       setTocOpen(false);
       setSettingsOpen(false);
+      setMarksOpen(false);
+      setSearchOpen(false);
+      setSelection(null);
     },
+    dismissSelection: () => setSelection(null),
+    hasSelection: () => !!selection,
     back: handleBack,
     prev: () => {
       setAutoScroll(false);
@@ -771,8 +1092,35 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       setAutoScroll(false);
       goToChapter(globalChapter + 1);
     },
-    toggleToc: () => setTocOpen((v) => !v),
-    toggleSettings: () => setSettingsOpen((v) => !v),
+    toggleToc: () => {
+      setTocOpen((v) => !v);
+      setSettingsOpen(false);
+      setMarksOpen(false);
+      setSearchOpen(false);
+      setSelection(null);
+    },
+    toggleSettings: () => {
+      setSettingsOpen((v) => !v);
+      setTocOpen(false);
+      setMarksOpen(false);
+      setSearchOpen(false);
+      setSelection(null);
+    },
+    toggleMarks: () => {
+      setMarksOpen((v) => !v);
+      setTocOpen(false);
+      setSettingsOpen(false);
+      setSearchOpen(false);
+      setSelection(null);
+    },
+    toggleSearch: () => {
+      setSearchOpen((v) => !v);
+      setTocOpen(false);
+      setSettingsOpen(false);
+      setMarksOpen(false);
+      setSelection(null);
+    },
+    toggleBookmark,
     toggleAuto: () => setAutoScroll((v) => !v),
     slower: () => setAutoSpeed((v) => Math.max(0, v - 1)),
     faster: () => setAutoSpeed((v) => Math.min(AUTO_SCROLL_SPEEDS.length - 1, v + 1)),
@@ -818,7 +1166,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       patchSettings({ fontSize: next });
       notify(`字号 ${next}px`);
     },
-    isPanel: () => tocOpen || settingsOpen,
+    isPanel: () => tocOpen || settingsOpen || marksOpen || searchOpen,
     isUiVisible: () => uiVisible,
   };
 
@@ -828,9 +1176,16 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
       const h = handlersRef.current;
 
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        h.toggleSearch();
+        return;
+      }
+
       switch (e.key) {
         case 'Escape':
           if (h.isPanel()) h.closePanels();
+          else if (h.hasSelection()) h.dismissSelection();
           else if (!h.isUiVisible()) h.wake();
           else h.back();
           break;
@@ -889,6 +1244,14 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         case 'A':
           h.toggleAuto();
           break;
+        case 'b':
+        case 'B':
+          h.toggleBookmark();
+          break;
+        case 'm':
+        case 'M':
+          h.toggleMarks();
+          break;
         case '[':
           h.slower();
           break;
@@ -918,7 +1281,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   /* ----------------------------- render ----------------------------- */
 
   const currentChapter = chapters[chapterIndex] || chapters[0];
-  const windowBase = cloud?.windowBase || 0;
   const totalChapters = cloud?.chapters?.length || chapters.length;
   const globalChapter = windowBase + chapterIndex;
   const remainingText = useMemo(() => {
@@ -932,6 +1294,45 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     const left = charCount * (1 - clamp(scrollPercent, 0, 100) / 100);
     return estimateRemainingMinutes(left);
   }, [charCount, cloud, scrollPercent, windowBase]);
+
+  /* 正文装饰只改变「墨色/背景」和绝对定位的伪元素，绝不动行高：
+     段落高度表是精确测量出来的，任何影响布局的装饰都会让虚拟滚动错位。 */
+  const renderParagraph = (para, index) => {
+    const text = para.text || '';
+    const entry = marksByPara.get(index);
+    let className = `para${headingSet.has(index) ? ' chapter-title' : ''}${
+      entry?.bookmark ? ' bookmarked' : ''
+    }`;
+
+    if (activeHit && activeHit.paraIndex === index) {
+      const { start, end } = activeHit;
+      if (start >= 0 && end > start && end <= text.length) {
+        return (
+          <p className={className}>
+            {text.slice(0, start)}
+            <mark className="para-find">{text.slice(start, end)}</mark>
+            {text.slice(end)}
+          </p>
+        );
+      }
+    }
+
+    const highlight = entry?.highlights?.[0];
+    if (highlight?.excerpt) {
+      const at = text.indexOf(highlight.excerpt);
+      if (at >= 0) {
+        return (
+          <p className={className}>
+            {text.slice(0, at)}
+            <mark className="para-mark">{text.slice(at, at + highlight.excerpt.length)}</mark>
+            {text.slice(at + highlight.excerpt.length)}
+          </p>
+        );
+      }
+    }
+    if (entry?.highlights?.length) className += ' para-highlighted';
+    return <p className={className}>{text}</p>;
+  };
 
   const items = [];
   for (let i = range.start; i < range.end && i < paragraphs.length; i += 1) {
@@ -952,11 +1353,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           paddingBottom: isLast ? '28vh' : undefined,
         }}
       >
-        {para.blank ? (
-          <div className="vp-gap" />
-        ) : (
-          <p className={`para${headingSet.has(i) ? ' chapter-title' : ''}`}>{para.text}</p>
-        )}
+        {para.blank ? <div className="vp-gap" /> : renderParagraph(para, i)}
       </div>
     );
   }
@@ -967,7 +1364,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   };
 
   const handleContentClick = (e) => {
-    if (e.target.closest('.edge-nav')) return;
+    if (e.target.closest('.edge-nav') || e.target.closest('.selection-bubble')) return;
     const selection = window.getSelection();
     if (selection && selection.toString()) return;
     // 滚动/拖动后的点击不切换工具栏（防止松手时误触）
@@ -1013,6 +1410,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   // 云端书读完全书（没有更多章且当前窗口滚到底）才算读完
   const finished = cloud ? !cloud.hasMore && scrollPercent >= 99.6 : scrollPercent >= 99.6;
+  const noteInitial = noteTarget?.markId
+    ? bookMarks.find((mark) => mark.id === noteTarget.markId)?.note || ''
+    : '';
 
   return (
     <div
@@ -1065,10 +1465,28 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           >
             {autoScroll ? <IconPause size={17} /> : <IconPlay size={17} />}
           </button>
-          <button className="icon-btn" onClick={() => setTocOpen(true)} title="目录 (T)">
+          <button
+            className={`icon-btn${searchOpen ? ' active' : ''}`}
+            onClick={() => handlersRef.current.toggleSearch()}
+            title="全书搜索 (Ctrl/Cmd + F)"
+          >
+            <IconSearch size={17} />
+          </button>
+          <button
+            className={`icon-btn${marksOpen ? ' active' : ''}`}
+            onClick={() => handlersRef.current.toggleMarks()}
+            title="书签与笔记 (M)"
+          >
+            <IconBookmark size={17} />
+          </button>
+          <button className="icon-btn" onClick={() => handlersRef.current.toggleToc()} title="目录 (T)">
             <IconList />
           </button>
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="阅读设置 (S)">
+          <button
+            className="icon-btn"
+            onClick={() => handlersRef.current.toggleSettings()}
+            title="阅读设置 (S)"
+          >
             <IconType />
           </button>
           <button className="icon-btn" onClick={toggleFullscreen} title="全屏 (F)">
@@ -1084,6 +1502,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         ref={scrollRef}
         onClick={handleContentClick}
         onPointerDown={handlePointerDown}
+        onMouseUp={handleReaderMouseUp}
         onWheel={handleWheel}
       >
         <div
@@ -1108,11 +1527,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
                         paddingBottom: i === paragraphs.length - 1 ? '28vh' : undefined,
                       }}
                     >
-                      {para.blank ? (
-                        <div className="vp-gap" />
-                      ) : (
-                        <p className={`para${headingSet.has(i) ? ' chapter-title' : ''}`}>{para.text}</p>
-                      )}
+                      {para.blank ? <div className="vp-gap" /> : renderParagraph(para, i)}
                     </div>
                   );
                 })}
@@ -1286,6 +1701,57 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {selection && (
+        <div
+          className="selection-bubble"
+          style={{ left: selection.x, top: selection.y }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button type="button" onClick={() => toggleHighlight(selection.paraIndex, selection.excerpt)}>
+            <IconHighlight size={13} /> 划线
+          </button>
+          <span className="selection-bubble-divider" />
+          <button type="button" onClick={() => openNoteFor(selection.paraIndex, selection.excerpt)}>
+            <IconNote size={13} /> 笔记
+          </button>
+        </div>
+      )}
+
+      <NoteDialog
+        open={!!noteTarget}
+        excerpt={noteTarget?.excerpt || ''}
+        initial={noteInitial}
+        onSave={saveNote}
+        onClose={() => setNoteTarget(null)}
+      />
+
+      <MarksPanel
+        open={marksOpen}
+        bookName={book.name}
+        marks={bookMarks}
+        currentPara={bookmarkTarget}
+        canBookmark={bookmarkTarget >= 0}
+        isBookmarked={isBookmarked}
+        onToggleBookmark={toggleBookmark}
+        onJump={jumpToMark}
+        onRemove={removeMark}
+        onUpdateNote={updateNote}
+        onClose={() => setMarksOpen(false)}
+      />
+
+      <SearchPanel
+        open={searchOpen}
+        bookName={book.name}
+        query={searchQuery}
+        onQueryChange={setSearchQuery}
+        hits={searchHits}
+        running={searching}
+        cursor={searchCursor}
+        onJump={jumpToHit}
+        onStep={stepHit}
+        onClose={() => setSearchOpen(false)}
+      />
 
       <TocPanel
         open={tocOpen}

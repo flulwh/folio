@@ -119,6 +119,8 @@ const files = {
   settings: path.join(dataDir, 'settings.json'),
   sources: path.join(dataDir, 'sources.json'),
   rules: path.join(dataDir, 'rules.json'),
+  // 书签 / 划线 / 笔记：结构 { 书 id: [mark, ...] }，字段与 Android ReaderMark 对齐
+  marks: path.join(dataDir, 'marks.json'),
 };
 // 书的内容放在这里（每本一个 .txt 副本），books.json 只存元数据。
 // 这样书架文件恒定是几十 KB，删掉 json 也不会丢正文，用户还能直接用编辑器打开看。
@@ -1777,6 +1779,13 @@ ipcMain.handle('store:set-progress', (_e, progress) => {
       /* 推送失败不影响落盘 */
     }
   }
+  return result;
+});
+ipcMain.handle('store:get-marks', () => readJson(files.marks, {}));
+ipcMain.handle('store:set-marks', (_e, marks) => {
+  const safe = marks && typeof marks === 'object' ? marks : {};
+  const result = writeJson(files.marks, safe);
+  if (!Object.keys(safe).length) markExplicitlyCleared(files.marks);
   return result;
 });
 ipcMain.handle('store:get-settings', () => readJson(files.settings, null));

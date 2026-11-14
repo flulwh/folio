@@ -37,6 +37,32 @@ export function IconSearch({ size = 18, ...rest }) {
   );
 }
 
+export function IconBookmark({ size = 18, ...rest }) {
+  return (
+    <svg width={size} height={size} {...base} {...rest}>
+      <path d="M7 4.5h10v15l-5-3.6-5 3.6v-15Z" />
+    </svg>
+  );
+}
+
+export function IconHighlight({ size = 18, ...rest }) {
+  return (
+    <svg width={size} height={size} {...base} {...rest}>
+      <path d="M5 19h14" />
+      <path d="M8.2 15.3 15.8 7.7a1.9 1.9 0 0 1 2.7 2.7l-7.6 7.6-3.5.8.8-3.5Z" />
+    </svg>
+  );
+}
+
+export function IconNote({ size = 18, ...rest }) {
+  return (
+    <svg width={size} height={size} {...base} {...rest}>
+      <path d="M6 3.5h8l5 5v12H6v-17Z" />
+      <path d="M14 3.5v5h5M9 12.5h6M9 16h4" />
+    </svg>
+  );
+}
+
 export function IconTrash({ size = 18, ...rest }) {
   return (
     <svg width={size} height={size} {...base} {...rest}>

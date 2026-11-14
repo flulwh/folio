@@ -3,7 +3,7 @@
 一个用 **Electron + React** 打造的极简电子书阅读器。主页就是书架，一切交互都为「读进去」服务：
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
 
-![version](https://img.shields.io/badge/version-2.7.1-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4)
+![version](https://img.shields.io/badge/version-2.8.0-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4)
 
 ---
 
@@ -13,12 +13,12 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.7.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.7.1) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.7.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.7.1) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.7.1-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.7.1) | 免安装压缩包，解压后运行 `Folio.exe` |
-| [`Folio-2.7.1-android.apk`](https://github.com/flulwh/folio/releases/tag/v2.7.1) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度 |
+| [`Folio-Setup-2.8.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.8.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.8.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.8.0) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.8.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.8.0) | 免安装压缩包，解压后运行 `Folio.exe` |
+| Android APK | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度；APK 见 [Releases](https://github.com/flulwh/folio/releases) 中的 `android-*` 版本 |
 
-历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
+历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
 > **双击没反应？** 少数受限 Windows 环境里 Chromium 沙箱起不来，需要带 `--no-sandbox` 启动。见 [排障文档](docs/troubleshooting.md#1-双击-exe-没有任何反应进程也看不到)。
 
@@ -65,6 +65,8 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 - **虚拟滚动**：几百万字的长篇也只渲染视口附近的段落，滚动不掉帧
 - **正则章节识别**：默认规则覆盖「第X章 / Chapter N / 序章 / 楔子 / 【标题】」等常见写法，也能在设置里写自己的正则
 - **目录抽屉**：章节搜索、当前章高亮、点击平滑跳转
+- **书签 / 划线 / 笔记**：选中正文即可划线或写笔记，页边一道朱砂短竖线标记书签；痕迹按段落锚定，换字号、换栏宽后不会错位
+- **全书搜索**：`Ctrl / ⌘ + F` 搜整本，命中按章节列出，`Enter` / `Shift + Enter` 逐条跳转，正文同步高亮
 - **进度保存**：以「段落索引」为锚点自动保存，换字号、换宽度后依然能回到原处
 - **自动滚动**：15 / 25 / 40 / 60 px/s 四档速度，`[` `]` 随时调速，到底自动停，滚轮即可接管
 - **排版可调**：字号、行距、正文宽度、段间距、首行缩进、无衬线 / 衬线 / 等宽
@@ -152,6 +154,9 @@ Folio 不提供任何服务器，也不代理内容。你可以导入第三方�
 | `[` / `]` | 自动滚动减速 / 加速 |
 | `T` | 目录 |
 | `S` | 阅读设置 |
+| `Ctrl` + `F` | 全书搜索 |
+| `B` | 当前段落加 / 取消书签 |
+| `M` | 书签与笔记 |
 | `F` | 全屏 |
 | `+` / `-` | 字号增减 |
 | `Esc` | 关闭面板 / 唤醒工具栏 / 返回书架 |
@@ -170,6 +175,7 @@ Folio 不提供任何服务器，也不代理内容。你可以导入第三方�
 | `books.json` | **只有元数据**（书名、大小、副本路径、封面色、添加时间）—— 一本 30 万字的书只占一两百字节 |
 | `books/<书名>.txt` | 正文副本，导入时从原文件复制一份。可以直接用记事本打开看、备份、搬走 |
 | `progress.json` | 阅读进度 |
+| `marks.json` | 书签、划线与笔记（按书 id 分组，字段与 Android 端对齐） |
 | `settings.json` | 排版与偏好 |
 | `sources.json` / `rules.json` | 书源与净化规则 |
 | `cloud/` | 云端章节缓存 |
@@ -193,7 +199,7 @@ npm run check     # 发版门禁：版本一致性 / 语法 / 打包配置
 npm run build     # 打出全部 Windows 产物
 ```
 
-> 版本号只写在 `package.json`（当前 `2.7.1`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.8.0`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)

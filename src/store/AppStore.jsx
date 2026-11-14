@@ -40,6 +40,7 @@ const BooksContext = createContext(MISSING);
 const DevicesContext = createContext(MISSING);
 const ProgressContext = createContext(MISSING);
 const SettingsContext = createContext(MISSING);
+const MarksContext = createContext(MISSING);
 const ThemeContext = createContext(MISSING);
 const SourcesContext = createContext(MISSING);
 const RulesContext = createContext(MISSING);
@@ -75,6 +76,16 @@ const browserFallback = {
   },
   async setProgress(progress) {
     localStorage.setItem(LS_PREFIX + 'progress', JSON.stringify(progress));
+  },
+  async getMarks() {
+    try {
+      return JSON.parse(localStorage.getItem(LS_PREFIX + 'marks') || '{}');
+    } catch {
+      return {};
+    }
+  },
+  async setMarks(marks) {
+    localStorage.setItem(LS_PREFIX + 'marks', JSON.stringify(marks));
   },
   async getSettings() {
     try {
@@ -126,6 +137,8 @@ const api = {
   setProgress: (...args) => (window.readerAPI?.setProgress ?? browserFallback.setProgress)(...args),
   getSettings: (...args) => (window.readerAPI?.getSettings ?? browserFallback.getSettings)(...args),
   setSettings: (...args) => (window.readerAPI?.setSettings ?? browserFallback.setSettings)(...args),
+  getMarks: (...args) => (window.readerAPI?.getMarks ?? browserFallback.getMarks)(...args),
+  setMarks: (...args) => (window.readerAPI?.setMarks ?? browserFallback.setMarks)(...args),
 
   // 局域网面板（只有桌面版有；浏览器预览里退化成「不可用」）
   lanStart: (config) =>
@@ -440,6 +453,7 @@ export function AppProvider({ children }) {
   const [devices, setDevices] = useState([]);
   const [progress, setProgress] = useState({});
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [marks, setMarks] = useState({});
   const [sources, setSources] = useState([]);
   const [rules, setRules] = useState([]);
   const [fonts, setFonts] = useState([]);
@@ -469,9 +483,18 @@ export function AppProvider({ children }) {
         }
       };
 
-      const [storedBooks, storedProgress, storedSettings, storedSources, storedRules, storedFonts] = await Promise.all([
+      const [
+        storedBooks,
+        storedProgress,
+        storedMarks,
+        storedSettings,
+        storedSources,
+        storedRules,
+        storedFonts,
+      ] = await Promise.all([
         safe(api.getBooks, []),
         safe(api.getProgress, {}),
+        safe(api.getMarks, {}),
         safe(api.getSettings, null),
         safe(api.listSources, []),
         safe(api.listRules, []),
@@ -480,6 +503,7 @@ export function AppProvider({ children }) {
       if (cancelled) return;
       setBooks(Array.isArray(storedBooks) ? storedBooks : []);
       setProgress(storedProgress && typeof storedProgress === 'object' ? storedProgress : {});
+      setMarks(storedMarks && typeof storedMarks === 'object' ? storedMarks : {});
       setSettings({ ...DEFAULT_SETTINGS, ...(storedSettings || {}) });
       setSources(Array.isArray(storedSources) ? storedSources : []);
       setRules(Array.isArray(storedRules) ? storedRules : []);
@@ -496,6 +520,7 @@ export function AppProvider({ children }) {
   const pendingDeletes = useRef(new Map());
   const persistBooks = useRef(debounce((value) => api.setBooks(value), 400)).current;
   const persistProgress = useRef(debounce((value) => api.setProgress(value), 300)).current;
+  const persistMarks = useRef(debounce((value) => api.setMarks(value), 300)).current;
   const persistSettings = useRef(debounce((value) => api.setSettings(value), 300)).current;
 
   useEffect(() => {
@@ -504,6 +529,9 @@ export function AppProvider({ children }) {
   useEffect(() => {
     if (loaded) persistProgress(progress);
   }, [progress, loaded, persistProgress]);
+  useEffect(() => {
+    if (loaded) persistMarks(marks);
+  }, [marks, loaded, persistMarks]);
   useEffect(() => {
     if (loaded) persistSettings(settings);
   }, [settings, loaded, persistSettings]);
@@ -535,6 +563,7 @@ export function AppProvider({ children }) {
     const flushAll = () => {
       persistBooks.flush();
       persistProgress.flush();
+      persistMarks.flush();
       persistSettings.flush();
     };
     window.addEventListener('pagehide', flushAll);
@@ -547,7 +576,7 @@ export function AppProvider({ children }) {
       window.removeEventListener('beforeunload', flushAll);
       flushAll();
     };
-  }, [persistBooks, persistProgress, persistSettings]);
+  }, [persistBooks, persistProgress, persistMarks, persistSettings]);
 
   // 局域网面板（手机）写回来的进度。
   // 规则和主进程一致：updatedAt 新的一方赢，字段做浅合并；
@@ -908,6 +937,13 @@ export function AppProvider({ children }) {
         if (removed.kind === 'cloud' && removed.sourceId && removed.bookUrl) {
           api.clearCloudCache({ sourceId: removed.sourceId, bookUrl: removed.bookUrl }).catch(() => {});
         }
+        // 书真的删掉之后再清痕迹；撤销窗口内 restoreBook 会取消这个定时器
+        setMarks((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       }, 10000);
       pendingDeletes.current.set(id, timer);
     }
@@ -941,6 +977,17 @@ export function AppProvider({ children }) {
       ...prev,
       [bookId]: { ...(prev[bookId] || {}), ...data, updatedAt: Date.now() },
     }));
+  }, []);
+
+  /** 整本替换某本书的痕迹列表；传空数组即清空。 */
+  const saveBookMarks = useCallback((bookId, list) => {
+    if (!bookId) return;
+    setMarks((prev) => {
+      const next = { ...prev };
+      if (Array.isArray(list) && list.length) next[bookId] = list;
+      else delete next[bookId];
+      return next;
+    });
   }, []);
 
   const patchSettings = useCallback((patch) => {
@@ -1051,6 +1098,7 @@ export function AppProvider({ children }) {
       restoreBook,
       updateBook,
       saveProgress,
+      saveBookMarks,
       patchSettings,
       resetSettings,
       installFonts,
@@ -1135,6 +1183,7 @@ export function AppProvider({ children }) {
       restoreBook,
       updateBook,
       saveProgress,
+      saveBookMarks,
       patchSettings,
       resetSettings,
       installFonts,
@@ -1183,6 +1232,7 @@ export function AppProvider({ children }) {
       <BooksContext.Provider value={books}>
         <DevicesContext.Provider value={devices}>
           <ProgressContext.Provider value={progress}>
+          <MarksContext.Provider value={marks}>
           <SettingsContext.Provider value={settings}>
             <ThemeContext.Provider value={themeState}>
               <SourcesContext.Provider value={sources}>
@@ -1200,6 +1250,7 @@ export function AppProvider({ children }) {
               </SourcesContext.Provider>
             </ThemeContext.Provider>
           </SettingsContext.Provider>
+          </MarksContext.Provider>
         </ProgressContext.Provider>
         </DevicesContext.Provider>
       </BooksContext.Provider>
@@ -1244,6 +1295,11 @@ export function useProgress() {
 /** 偏好设置。 */
 export function useSettings() {
   return useSlice(SettingsContext, 'useSettings');
+}
+
+/** 书签 / 划线 / 笔记：{ 书 id: [mark, ...] }。 */
+export function useMarks() {
+  return useSlice(MarksContext, 'useMarks');
 }
 
 /** 主题集合与当前主题。 */
@@ -1291,6 +1347,7 @@ export function useApp() {
   const devices = useDevices();
   const progress = useProgress();
   const settings = useSettings();
+  const marks = useMarks();
   const themeState = useThemeState();
   const sources = useSources();
   const rules = useRules();
@@ -1305,6 +1362,7 @@ export function useApp() {
       devices,
       progress,
       settings,
+      marks,
       ...themeState,
       sources,
       rules,
@@ -1319,6 +1377,7 @@ export function useApp() {
       devices,
       progress,
       settings,
+      marks,
       themeState,
       sources,
       rules,
