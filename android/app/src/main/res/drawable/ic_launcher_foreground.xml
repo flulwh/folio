@@ -4,16 +4,33 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- 打开的书：左页 -->
+    <!-- 与桌面端 icon.svg 同源：墨底 (#141413) 上一张纸页，右上折角与书签为橙色 (#D97757) -->
+    <!-- 纸页 -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M26,34 C36,29 48,29 53,36 L53,79 C48,73 36,73 26,78 Z" />
-    <!-- 右页 -->
+        android:fillColor="#FAF9F5"
+        android:pathData="M39.9,26.83 H63.63 L70.51,33.71 V78.77 C70.51,80.1 69.44,81.18 68.11,81.18 H39.9 C38.57,81.18 37.49,80.1 37.49,78.77 V29.23 C37.49,27.9 38.57,26.83 39.9,26.83 Z" />
+    <!-- 右上折角 -->
     <path
-        android:fillColor="#DCE7FF"
-        android:pathData="M82,34 C72,29 60,29 55,36 L55,79 C60,73 72,73 82,78 Z" />
-    <!-- 书脊 -->
+        android:fillColor="#D97757"
+        android:pathData="M63.63,26.83 L70.51,33.71 H65.35 C64.4,33.71 63.63,32.94 63.63,31.99 V26.83 Z" />
+    <!-- 书签 -->
     <path
-        android:fillColor="#8FB4FF"
-        android:pathData="M52,35 L56,35 L56,80 L52,80 Z" />
+        android:fillColor="#D97757"
+        android:pathData="M54.35,26.83 H58.13 V52.63 L56.24,54.86 L54.35,52.63 V26.83 Z" />
+    <!-- 文本线 -->
+    <path
+        android:strokeColor="#B0AEA5"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:pathData="M42.65,60.88 H63.29" />
+    <path
+        android:strokeColor="#B0AEA5"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:pathData="M42.65,66.04 H63.29" />
+    <path
+        android:strokeColor="#B0AEA5"
+        android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:pathData="M42.65,71.2 H56.75" />
 </vector>
