@@ -92,6 +92,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val scrollTarget: StateFlow<Int> = _scrollTarget.asStateFlow()
 
     /**
+     * 跳转锁：跳章/跳痕迹/跳搜索命中落地之前，不接受列表与分页器上报的位置。
+     *
+     * 跳转瞬间列表还停在旧布局上，会把旧位置（常常是 0）上报回来，[updatePosition]
+     * 照单全收就会把 chapterIndex / paraIndex 改写回旧值，看起来像「跳章跳回书首」。
+     */
+    private var jumpLocked = false
+    private var jumpUnlockJob: Job? = null
+
+    private fun lockJump() {
+        jumpLocked = true
+        jumpUnlockJob?.cancel()
+        // 兜底：UI 万一个别分支没回调，600ms 后自动解锁，不会永久冻住进度上报
+        jumpUnlockJob = viewModelScope.launch {
+            delay(600)
+            jumpLocked = false
+        }
+    }
+
+    private fun unlockJump() {
+        jumpUnlockJob?.cancel()
+        jumpLocked = false
+    }
+
+    /**
      * 翻页请求：`seq` 自增代表「新的一次」，`direction` 1 下一页 / -1 上一页。
      *
      * 阅读页是自由滚动的 LazyColumn，翻页需要知道视口高度，所以由 ReaderScreen
@@ -287,9 +311,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 downloadOnly = false,
                 autoTransferUnder20MB = settings.autoTransferUnder20MB,
             )
-            // 清单搬完之后再对齐进度：书 id 可能刚被归并过，晚一步更不容易丢
-            withContext(Dispatchers.IO) { progressSync.pullAndMerge() }
-            val flushed = withContext(Dispatchers.IO) { progressSync.flushPending() }
+            // 清单搬完之后再对齐进度：书 id 可能刚被归并过，晚一步更不容易丢。
+            // 这一步是双向的 —— 桌面端更新的取回来，本机更新的推回去（新者赢）。
+            val progressReport = withContext(Dispatchers.IO) { progressSync.sync() }
+            // 兜底：本轮没拉到的历史 pending 条目再补一次
+            withContext(Dispatchers.IO) { progressSync.flushPending() }
             // 痕迹同样等书 id 稳定后再合并；老桌面端没有 /api/marks 时静默跳过
             val marksOutcome = withContext(Dispatchers.IO) { marksSync.sync() }
             if (marksOutcome.changed) refreshOpenMarks()
@@ -304,12 +330,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 marksOutcome.changed -> "痕迹已对齐"
                 else -> null
             }
+            val progressNote = progressReport.message.takeIf { it.isNotBlank() }
             val message = when {
                 !outcome.ok -> outcome.message
                 silent && outcome.ok -> null
-                flushed.failed > 0 -> listOfNotNull(outcome.message, flushed.message, marksNote)
+                else -> listOfNotNull(outcome.message, progressNote, marksNote)
                     .joinToString(" · ")
-                else -> listOfNotNull(outcome.message, marksNote).joinToString(" · ")
             }
             _shelf.update { it.copy(syncing = false, message = message) }
             reloadLocal()
@@ -396,7 +422,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             marks = savedMarks,
             charPrefix = prefixOf(parsed.paragraphs),
         )
-        recordProgress(book, buildEntry(book, index, chapterIndex, parsed.chapters))
+        // 打开不等于在读：这里不写进度。否则一开书就打上「现在」的时间戳，
+        // 会把桌面端更新的阅读位置直接盖掉 —— 只有真的滚动 / 翻页才回写。
     }
 
     /** 云端书：先取目录，再按章取正文（正文只进内存）。 */
@@ -422,7 +449,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val target = entry?.chapter ?: chapters.first().index
         val position = chapters.indexOfFirst { it.index == target }.coerceAtLeast(0)
         _reader.update { it.copy(toc = chapters) }
-        readCloudChapter(book, chapters, position, entry)
+        readCloudChapter(book, chapters, position, entry, save = false)
     }
 
     private suspend fun readCloudChapter(
@@ -430,6 +457,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         toc: List<TocChapter>,
         position: Int,
         entry: ProgressEntry?,
+        /** 打开书时只恢复位置、不写进度；翻章才回写。 */
+        save: Boolean = true,
     ) {        val safePosition = position.coerceIn(0, toc.size - 1)
         val chapterNo = toc[safePosition].index
         val loaded = withContext(Dispatchers.IO) {
@@ -463,7 +492,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 charPrefix = prefixOf(parsed.paragraphs),
             )
         }
-        recordProgress(book, buildEntry(book, paraIndex, safePosition, parsed.chapters, chapterNo))
+        if (save) {
+            recordProgress(book, buildEntry(book, paraIndex, safePosition, parsed.chapters, chapterNo))
+        }
         prefetchNextChapter(book, toc, safePosition)
     }
 
@@ -509,17 +540,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (state.isCloud) {
             if (state.toc.isEmpty() || index >= state.toc.size) return
             if (index == state.chapterIndex && state.paragraphs.isNotEmpty()) return
+            lockJump()
             _reader.update { it.copy(loading = true, error = null, showToc = false) }
             viewModelScope.launch {
                 readCloudChapter(book, state.toc, index, progressMap[book.id])
+                unlockJump()
             }
         } else {
             val chapter = state.chapters.getOrNull(index) ?: return
+            val paraIndex = chapter.paraIndex.coerceIn(0, (state.paragraphs.size - 1).coerceAtLeast(0))
+            // 一次写全：章节、段落、百分比同时到位，不给旧位置上报留空档
             _reader.update {
-                it.copy(chapterIndex = index, chapterTitle = chapter.title, showToc = false)
+                it.copy(
+                    chapterIndex = index,
+                    chapterTitle = chapter.title,
+                    paraIndex = paraIndex,
+                    percent = percentOf(paraIndex, state.paragraphs.size, index, state.toc.size),
+                    showToc = false,
+                )
             }
-            scrollToParagraph(chapter.paraIndex)
-            updatePosition(chapter.paraIndex)
+            scrollToParagraph(paraIndex)
+            recordProgress(book, buildEntry(book, paraIndex, index, state.chapters, null))
         }
     }
 
@@ -568,6 +609,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 滚动时上报当前段落。 */
     fun updatePosition(paraIndex: Int) {
+        // 跳转还没落地：这时上报的是旧布局的位置，收下就会把章节改写回去
+        if (jumpLocked) return
         val state = _reader.value
         val book = state.book ?: return
         if (state.paragraphs.isEmpty()) return
@@ -658,10 +701,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun scrollToParagraph(paraIndex: Int) {
+        // 目标发出去到列表真正滚到位之间，位置上报一律作废
+        lockJump()
         _scrollTarget.value = paraIndex
     }
 
     fun clearScrollTarget() {
+        unlockJump()
         _scrollTarget.value = -1
     }
 
@@ -837,8 +883,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 return
             }
         }
-        scrollToParagraph(mark.paraIndex)
+        // 先改状态再上锁发滚动目标：上锁后 updatePosition 会被忽略
         updatePosition(mark.paraIndex)
+        scrollToParagraph(mark.paraIndex)
     }
 
     /* ---------------- 全书搜索 ---------------- */
@@ -899,8 +946,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 showMarks = false,
             )
         }
-        scrollToParagraph(hit.paraIndex)
         updatePosition(hit.paraIndex)
+        scrollToParagraph(hit.paraIndex)
     }
 
     /** 命中列表里上一条 / 下一条。 */
@@ -1208,6 +1255,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             percent = percent,
             updatedAt = System.currentTimeMillis(),
         )
+        if (samePlace(progressMap[book.id], entry)) return
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         comicProgressJob?.cancel()
@@ -1238,6 +1286,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /* ---------------- 进度落盘与回写 ---------------- */
 
     private fun recordProgress(book: Book, entry: ProgressEntry) {
+        // 位置没动就不写。打开书时的还原滚动、重新测量都会走到这里，
+        // 每次都盖一个「现在」会把桌面端更新的位置冲掉；只有真的翻过去才回写。
+        if (samePlace(progressMap[book.id], entry)) return
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         persistJob?.cancel()
@@ -1257,6 +1308,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
+    }
+
+    /** 只比「读到哪」，不比 `updatedAt`；两端合并后重复上报不该再刷新时间戳。 */
+    private fun samePlace(a: ProgressEntry?, b: ProgressEntry): Boolean {
+        if (a == null) return false
+        return a.paraIndex == b.paraIndex &&
+            a.chapter == b.chapter &&
+            a.chapterIndex == b.chapterIndex &&
+            a.windowBase == b.windowBase &&
+            a.percent == b.percent
     }
 
     /** 立刻把进度写盘并尝试补写。 */
