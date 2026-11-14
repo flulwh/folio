@@ -615,6 +615,29 @@ export function AppProvider({ children }) {
     };
   }, []);
 
+  // 手机写回书签 / 划线 / 笔记：主进程已经合并落盘，这里只换掉那一本书。
+  // 不整份替换：别的书在桌面端可能还有防抖里没落盘的改动。
+  useEffect(() => {
+    const off = window.readerAPI?.onLanMarks?.((payload) => {
+      const incoming = payload?.marks;
+      const bookId = String(payload?.bookId || '');
+      if (!incoming || typeof incoming !== 'object' || !bookId) return;
+      const list = incoming[bookId];
+      if (!Array.isArray(list)) return;
+      setMarks((prev) => {
+        if (JSON.stringify(prev[bookId] || []) === JSON.stringify(list)) return prev;
+        return { ...prev, [bookId]: list };
+      });
+    });
+    return () => {
+      try {
+        off?.();
+      } catch {
+        /* 窗口正在销毁时 removeListener 可能抛错 */
+      }
+    };
+  }, []);
+
   // 手机上传落盘后主进程推 lan:books。books.json 已经由主进程写好，
   // 这里重新读一遍并换进内存 —— 和首次加载走同一条 api.getBooks 路径，
   // 不另造取数方式。内存里还没落盘的本地改动按 id 保留，避免和防抖写入打架。

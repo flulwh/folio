@@ -380,6 +380,12 @@ data class ComicUiState(
         get() = if (total <= 0) 0f else (page + 1).toFloat() / total
 }
 
+/** 阅读页翻页请求；[seq] 只用来区分「新的一次」，[direction] 1 下一页 / -1 上一页。 */
+data class PageTurn(
+    val seq: Long = 0L,
+    val direction: Int = 0,
+)
+
 /** 设置页状态。 */
 data class SettingsUiState(
     val serverUrl: String = "",
@@ -402,6 +408,10 @@ data class SettingsUiState(
     val autoScrollSpeed: Int = 1,
     /** 阅读时保持常亮。 */
     val keepScreenOn: Boolean = true,
+    /** 点屏幕左右两侧翻页；中间仍然切换顶/底栏。 */
+    val tapToTurn: Boolean = true,
+    /** 音量键翻页：上 = 上一页，下 = 下一页。 */
+    val volumeKeysTurn: Boolean = true,
     /** 页边距（dp，12–48）。 */
     val pagePadding: Int = 24,
     /** 漫画阅读方向：`vertical` / `horizontal`。 */

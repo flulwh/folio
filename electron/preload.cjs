@@ -46,6 +46,18 @@ contextBridge.exposeInMainWorld('readerAPI', {
     ipcRenderer.on('lan:progress', listener);
     return () => ipcRenderer.removeListener('lan:progress', listener);
   },
+  // 手机端写回了书签 / 划线 / 笔记：主进程推整份 marks.json 合并结果
+  onLanMarks: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('lan:marks', listener);
+    return () => ipcRenderer.removeListener('lan:marks', listener);
+  },
   // 手机上传落盘后主进程通知书架有变化：渲染层据此重新读一遍 books.json
   onLanBooks: (callback) => {
     const listener = (_event, payload) => {

@@ -102,7 +102,7 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 
 ```
 X-Folio-Device: <installId>          X-Folio-Device-Name: <URL 编码的型号>
-X-Folio-Platform: android            X-Folio-App-Version: 3.2.0
+X-Folio-Platform: android            X-Folio-App-Version: 3.3.0
 X-Folio-Api-Version: 2
 ```
 
@@ -149,6 +149,18 @@ App 在前台（`ON_START`）时挂一根 `/api/events` 的 SSE 长连接，退�
 `user_rejected`，正文一个字节都不改。
 
 过期指令在桌面端清扫，手机领不到；迟到的回执会被 404 拒绝，不会把过期指令「救活」。
+
+### 痕迹同步（3.3.0）
+
+书签 / 划线 / 笔记走 `/api/marks`，与进度分开：一次拉整份，合并后再把差异推回去。
+两端 id 不同，按 `kind|chapterNo|paraIndex` 对齐；`updatedAt` 新者胜。
+
+删除不能靠并集判断，所以 `library/marks-sync.json` 保存「上次同步成功」的指纹。
+本地有、远端没有、且本地自上次同步后没动过 → 判定为远端删除；反向同理，
+由手机把 `remove` 列表显式发给桌面端。没有快照（首次同步）时只做并集，不会误删。
+
+桌面端 `/api/marks` 返回 404（2.8.x 及更早）时整段同步静默跳过，
+书架与进度照常，不把「老桌面端」判成同步失败。
 
 ## 构建
 

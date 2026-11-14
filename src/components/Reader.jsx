@@ -764,6 +764,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         note: String(note || '').trim(),
         kind,
         createdAt: Date.now(),
+        // 双端同步按 updatedAt 判谁更新；新建时与 createdAt 相同
+        updatedAt: Date.now(),
       };
     },
     [chapters, cloud, paragraphs, windowBase]

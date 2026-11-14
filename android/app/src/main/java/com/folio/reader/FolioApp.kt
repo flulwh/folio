@@ -10,6 +10,8 @@ import com.folio.reader.data.BookFileStore
 import com.folio.reader.data.BookStore
 import com.folio.reader.data.CloudChapterSource
 import com.folio.reader.data.ConnectionManager
+import com.folio.reader.data.MarkStore
+import com.folio.reader.data.MarksSync
 import com.folio.reader.data.Migration
 import com.folio.reader.data.ProgressStore
 import com.folio.reader.data.ProgressSync
@@ -55,6 +57,16 @@ class AppContainer(app: Application) {
     )
 
     val progressSync = ProgressSync(progress, books) { connection.client() }
+
+    /** 书签 / 划线 / 笔记：与进度分开一份文件，双端同步也单独走一条。 */
+    val marks = MarkStore(libraryDir)
+
+    val marksSync = MarksSync(
+        store = marks,
+        books = books,
+        baseFile = File(libraryDir, "marks-sync.json"),
+        client = { connection.client() },
+    )
 
     val sync = SyncEngine(books, progress, syncState, files) { connection.client() }
 
