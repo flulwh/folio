@@ -4,7 +4,7 @@
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
 Android 端是原生 **Kotlin + Compose** 客户端，与桌面端走局域网同步进度和阅读痕迹。
 
-![version](https://img.shields.io/badge/desktop-2.9.2-2b2e33) ![android](https://img.shields.io/badge/Android-3.4.7-3ddc84) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) [![Android CI](https://github.com/flulwh/folio/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/flulwh/folio/actions/workflows/android.yml)
+![desktop](https://img.shields.io/github/v/release/flulwh/folio?filter=v2.*&label=desktop&color=2b2e33) ![android](https://img.shields.io/github/v/release/flulwh/folio?filter=android-*&label=Android&logo=android&logoColor=white&color=3ddc84) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) [![Android CI](https://github.com/flulwh/folio/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/flulwh/folio/actions/workflows/android.yml)
 
 ---
 
@@ -17,7 +17,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 | [`Folio-Setup-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
 | [`Folio-Portable-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 单文件便携版，双击即用，不写注册表 |
 | [`Folio-2.9.2-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 免安装压缩包，解压后运行 `Folio.exe` |
-| [`Folio-3.4.7-android.apk`](https://github.com/flulwh/folio/releases/tag/android-3.4.7) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
+| [`Folio-3.4.7-android.apk`](https://github.com/flulwh/folio/releases/download/android-3.4.7/Folio-3.4.7-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
