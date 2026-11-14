@@ -37,6 +37,8 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 ## 截图
 
+**桌面端**
+
 | 书架 | 沉浸阅读 | 目录 | 自动滚动 |
 | --- | --- | --- | --- |
 | ![书架](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/bookshelf.png) | ![阅读器](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/reader.png) | ![目录](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/toc.png) | ![自动滚动](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/auto-scroll.png) |
@@ -48,6 +50,12 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 | 设置 · 外观 | 设置 · 阅读 | 运行日志 |
 | --- | --- | --- |
 | ![外观](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/themes-appearance.png) | ![阅读](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/settings-page-reading.png) | ![日志](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/logs.png) |
+
+**安卓端**
+
+| 书架 | 阅读 | 阅读控制层 |
+| --- | --- | --- |
+| ![安卓书架](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/android-shelf.png) | ![安卓阅读](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/android-reader.png) | ![安卓阅读控制层](https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/android-reader-hud.png) |
 
 ---
 
