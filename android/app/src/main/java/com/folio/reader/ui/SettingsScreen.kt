@@ -526,32 +526,35 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
             val source = remember { MutableInteractionSource() }
             Box(
                 Modifier
-                    .pressScale(source)
-                    .size(42.dp)
+                    .pressScale(source, pressedScale = 0.92f)
+                    .size(38.dp)
                     .clip(CircleShape)
+                    .background(scheme.secondary)
                     .clickable(interactionSource = source, indication = null, onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier.size(18.dp),
                     tint = scheme.onSurface,
                 )
             }
         }
         Text(
             text = "设置",
-            modifier = Modifier.padding(start = 8.dp, top = 2.dp),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 8.dp, top = 14.dp),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.6).sp,
             color = scheme.onSurface,
         )
         Text(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(start = 8.dp, top = 3.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 8.dp, top = 5.dp, bottom = 10.dp),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.3.sp,
             color = scheme.onSurfaceVariantSummary,
         )
     }

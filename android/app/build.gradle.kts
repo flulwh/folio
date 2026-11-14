@@ -12,10 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.9：同步回来更新的进度时，正在读的那本书会跟着挪位；
-        // 「重新排版」不再被当成「读到了这里」把桌面端进度冲掉。
-        versionCode = 15
-        versionName = "3.4.9"
+        // 3.5.0：书架改成封面墙 + 继续阅读卡片，阅读器 HUD 换成浮动卡片。
+        versionCode = 16
+        versionName = "3.5.0"
         vectorDrawables.useSupportLibrary = true
     }
 

@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -55,6 +56,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -341,51 +343,47 @@ fun ReaderScreen(
                 slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { -it / 12 },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Column(
+            Row(
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(palette.background.copy(alpha = 0.96f), palette.background.copy(alpha = 0f))
-                        )
-                    ),
+                    .statusBarsPadding()
+                    .padding(horizontal = 14.dp)
+                    .padding(top = 4.dp)
+                    .shadow(10.dp, RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(palette.surface.copy(alpha = 0.96f))
+                    .border(0.5.dp, palette.dividerLine, RoundedCornerShape(20.dp))
+                    .height(50.dp)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(52.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
-                    Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
+                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                    Text(
+                        text = reader.chapterTitle.ifBlank { book?.title.orEmpty() },
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = palette.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (reader.chapterTitle.isNotBlank()) {
                         Text(
-                            text = reader.chapterTitle.ifBlank { book?.title.orEmpty() },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = palette.onSurface,
+                            text = book?.title.orEmpty(),
+                            fontSize = 10.5.sp,
+                            color = palette.onSurfaceVariantSummary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (reader.chapterTitle.isNotBlank()) {
-                            Text(
-                                text = book?.title.orEmpty(),
-                                fontSize = 10.5.sp,
-                                color = palette.onSurfaceVariantSummary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
                     }
-                    val bookmarked = reader.paraIndex in bookmarkedParas
-                    HyperRoundIcon(
-                        icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = if (bookmarked) "取消书签" else "加书签",
-                        onClick = { vm.toggleBookmark() },
-                        tint = if (bookmarked) palette.primary else palette.onSurface,
-                    )
                 }
+                val bookmarked = reader.paraIndex in bookmarkedParas
+                HyperRoundIcon(
+                    icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                    contentDescription = if (bookmarked) "取消书签" else "加书签",
+                    onClick = { vm.toggleBookmark() },
+                    tint = if (bookmarked) palette.primary else palette.onSurface,
+                )
             }
         }
 
@@ -443,14 +441,15 @@ fun ReaderScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(palette.background.copy(alpha = 0f), palette.background.copy(alpha = 0.97f))
-                        )
-                    )
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 20.dp, bottom = 2.dp),
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = 10.dp)
+                    .shadow(12.dp, RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(palette.surface.copy(alpha = 0.97f))
+                    .border(0.5.dp, palette.dividerLine, RoundedCornerShape(24.dp))
+                    .padding(horizontal = 14.dp)
+                    .padding(top = 10.dp, bottom = 4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Chevron("‹", reader.hasPrevChapter) { vm.prevChapter() }
