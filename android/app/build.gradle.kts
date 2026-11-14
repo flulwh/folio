@@ -12,9 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.5.0：书架改成封面墙 + 继续阅读卡片，阅读器 HUD 换成浮动卡片。
-        versionCode = 16
-        versionName = "3.5.0"
+        // 3.5.1：启动图标换成与桌面端同源的墨纸橙图标。
+        versionCode = 17
+        versionName = "3.5.1"
         vectorDrawables.useSupportLibrary = true
     }
 
