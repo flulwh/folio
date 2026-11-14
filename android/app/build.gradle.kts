@@ -12,10 +12,11 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.1：收紧 HUD、统一间距与字号层级。设备头里的
+        // 3.4.2：设置页改用 Miuix 自带的 SuperSwitch / SuperArrow /
+        // SuperDropdown 排布，去掉自造行零件与双重缩进。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 7
-        versionName = "3.4.1"
+        versionCode = 8
+        versionName = "3.4.2"
         vectorDrawables.useSupportLibrary = true
     }
 

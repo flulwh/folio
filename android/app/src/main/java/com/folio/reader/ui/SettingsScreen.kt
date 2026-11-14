@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,26 +36,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
-import com.folio.reader.ui.miuix.HyperGroup
-import com.folio.reader.ui.miuix.HyperRow
-import com.folio.reader.ui.miuix.HyperSectionTitle
-import com.folio.reader.ui.miuix.HyperSegmented
-import com.folio.reader.ui.miuix.HyperSliderRow
-import com.folio.reader.ui.miuix.HyperSwitchRow
-import com.folio.reader.ui.miuix.PageMargin
-import com.folio.reader.ui.miuix.RowInset
 import java.util.Locale
 import kotlin.math.roundToInt
+import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Slider
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.extra.SuperArrow
+import top.yukonga.miuix.kmp.extra.SuperDropdown
+import top.yukonga.miuix.kmp.extra.SuperSwitch
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 漫画阅读方向两档。 */
@@ -69,8 +69,12 @@ private val DirectionChoices = listOf(
 private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 
 /**
- * 设置页（HyperOS）：分组卡片 + 开关 + 滑杆 + 胶囊分段。
- * 桌面端 / 同步 / 排版 / 底色 / 漫画 / 存储 / 关于，顺序与旧版一致。
+ * 设置页（HyperOS）。
+ *
+ * 行零件全部用 Miuix 自带组件：`Card` 做分组、`SmallTitle` 做组标题、
+ * `SuperSwitch` / `SuperArrow` / `SuperDropdown` / `BasicComponent` 做行，
+ * 分隔线用 `HorizontalDivider`。自己只写了两样 Miuix 没提供的东西：
+ * 带数值的滑杆行，以及阅读排版实时预览。
  */
 @Composable
 fun SettingsScreen(
@@ -100,42 +104,42 @@ fun SettingsScreen(
         )
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .navigationBarsPadding(),
-            contentPadding = PaddingValues(bottom = 40.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
+            contentPadding = PaddingValues(bottom = 32.dp),
         ) {
-            /* ---------------- 01 桌面端 ---------------- */
-            item("desktop") {
-                HyperSectionTitle("桌面端")
-                HyperGroup {
-                    TextField(
-                        value = urlText,
-                        onValueChange = {
-                            urlText = it
-                            vm.updateServerUrl(it)
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-                        label = "http://192.168.1.20:7788",
-                        useLabelAsPlaceholder = true,
-                        singleLine = true,
-                        cornerRadius = 14.dp,
-                    )
-                    TextField(
-                        value = tokenText,
-                        onValueChange = {
-                            tokenText = it
-                            vm.updateToken(it)
-                        },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-                        label = "访问码（桌面端「设置 → 网络」）",
-                        useLabelAsPlaceholder = true,
-                        singleLine = true,
-                        cornerRadius = 14.dp,
-                    )
+            /* ---------------- 连接 ---------------- */
+            item("connect") {
+                SmallTitle(text = "连接")
+                SettingsCard {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        TextField(
+                            value = urlText,
+                            onValueChange = {
+                                urlText = it
+                                vm.updateServerUrl(it)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "http://192.168.1.20:7788",
+                            useLabelAsPlaceholder = true,
+                            singleLine = true,
+                            cornerRadius = 14.dp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TextField(
+                            value = tokenText,
+                            onValueChange = {
+                                tokenText = it
+                                vm.updateToken(it)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "访问码（桌面端「设置 → 网络」）",
+                            useLabelAsPlaceholder = true,
+                            singleLine = true,
+                            cornerRadius = 14.dp,
+                        )
+                    }
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -143,7 +147,7 @@ fun SettingsScreen(
                             onClick = { vm.testConnection() },
                             enabled = !state.searching,
                             cornerRadius = 14.dp,
-                            minHeight = 40.dp,
+                            minHeight = 38.dp,
                         ) {
                             Text("测试连接", fontSize = 13.sp, color = scheme.onPrimary)
                         }
@@ -152,14 +156,14 @@ fun SettingsScreen(
                                 text = "取消",
                                 onClick = { vm.cancelDiscover() },
                                 cornerRadius = 14.dp,
-                                minHeight = 40.dp,
+                                minHeight = 38.dp,
                             )
                         } else if (state.connection != ConnectionState.UNKNOWN) {
                             TextButton(
                                 text = "断开",
                                 onClick = { vm.disconnect() },
                                 cornerRadius = 14.dp,
-                                minHeight = 40.dp,
+                                minHeight = 38.dp,
                             )
                         }
                         Spacer(Modifier.weight(1f))
@@ -167,14 +171,14 @@ fun SettingsScreen(
                             text = if (state.searching) "搜索中…" else "搜索桌面端",
                             modifier = Modifier
                                 .clickable(enabled = !state.searching) { vm.discover { } }
-                                .padding(horizontal = 6.dp, vertical = 6.dp),
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
                             fontSize = 12.5.sp,
                             color = if (state.searching) scheme.disabledOnSurface else scheme.primary,
                             maxLines = 1,
                         )
                     }
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -200,12 +204,7 @@ fun SettingsScreen(
                         )
                     }
                     if (state.discovered.isNotEmpty()) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp)) {
-                            Text(
-                                text = "找到 ${state.discovered.size} 个桌面端",
-                                fontSize = 11.5.sp,
-                                color = scheme.primary,
-                            )
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
                             state.discovered.forEach { url ->
                                 Row(
                                     modifier = Modifier
@@ -215,7 +214,7 @@ fun SettingsScreen(
                                             urlText = url
                                             vm.updateServerUrl(url)
                                         }
-                                        .padding(vertical = 10.dp, horizontal = 6.dp),
+                                        .padding(vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
@@ -233,97 +232,86 @@ fun SettingsScreen(
                         }
                     } else {
                         Text(
-                            text = "桌面端要开着「局域网面板」；地址里的端口在桌面端「设置 → 网络」里。",
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+                            text = "桌面端要开着「局域网面板」；端口在桌面端「设置 → 网络」里。",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             fontSize = 11.5.sp,
                             color = scheme.onSurfaceVariantSummary,
                         )
                     }
-                    HyperRow(title = "同步状态", summary = "逐本查看", onClick = onOpenSyncStatus)
-                    HyperSwitchRow(
-                        title = "未连接时隐藏在线书",
-                        summary = "免得点进去只看到一句报错",
-                        checked = state.hideRemoteWhenOffline,
-                        onCheckedChange = vm::updateHideRemote,
+                    HorizontalDivider(color = scheme.dividerLine)
+                    SuperArrow(
+                        title = "同步状态",
+                        summary = "逐本查看",
+                        onClick = onOpenSyncStatus,
                     )
                 }
             }
 
-            /* ---------------- 02 同步 ---------------- */
+            /* ---------------- 同步 ---------------- */
             item("sync") {
-                HyperSectionTitle("同步")
-                HyperGroup {
-                    HyperSwitchRow(
-                        title = "自动同步",
-                        summary = "连上桌面端时自动对齐书架与进度",
+                SmallTitle(text = "同步")
+                SettingsCard {
+                    SuperSwitch(
                         checked = state.autoSync,
                         onCheckedChange = vm::updateAutoSync,
+                        title = "自动同步",
+                        summary = "连上桌面端时自动对齐书架与进度",
                     )
-                    HyperSwitchRow(
-                        title = "自动上传 20MB 以内的书",
-                        summary = "更大的书等你点「下载到手机」",
+                    SuperSwitch(
                         checked = state.autoTransferUnder20MB,
                         onCheckedChange = vm::updateAutoTransfer,
+                        title = "自动上传 20MB 以内的书",
+                        summary = "更大的书等你点「下载到手机」",
                     )
-                    HyperSwitchRow(
-                        title = "仅在 Wi-Fi 下传输",
-                        summary = "按流量计费的网络里打开它",
+                    SuperSwitch(
                         checked = state.wifiOnly,
                         onCheckedChange = vm::updateWifiOnly,
+                        title = "仅在 Wi-Fi 下传输",
+                        summary = "按流量计费的网络里打开它",
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Button(
-                            onClick = { vm.syncNow() },
-                            enabled = !shelf.syncing,
-                            cornerRadius = 14.dp,
-                            minHeight = 40.dp,
-                        ) {
-                            Text(
-                                text = if (shelf.syncing) "正在同步…" else "立即同步",
-                                fontSize = 13.sp,
-                                color = scheme.onPrimary,
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = lastSyncLabel(state.lastSyncAt),
-                            fontSize = 11.5.sp,
-                            color = scheme.onSurfaceVariantSummary,
-                            maxLines = 1,
-                        )
-                    }
+                    SuperSwitch(
+                        checked = state.hideRemoteWhenOffline,
+                        onCheckedChange = vm::updateHideRemote,
+                        title = "未连接时隐藏在线书",
+                        summary = "免得点进去只看到一句报错",
+                    )
+                    HorizontalDivider(color = scheme.dividerLine)
+                    SuperArrow(
+                        title = "立即同步",
+                        summary = lastSyncLabel(state.lastSyncAt),
+                        rightText = if (shelf.syncing) "同步中…" else "同步",
+                        onClick = if (shelf.syncing) null else ({ vm.syncNow() }),
+                    )
                     if (state.conflictCount > 0) {
-                        HyperRow(
+                        SuperArrow(
                             title = "${state.conflictCount} 处冲突",
                             summary = "同名不同内容，需要你选保留哪一版",
+                            rightText = "处理",
                             onClick = onOpenSyncStatus,
-                            trailing = {
-                                Text(text = "处理 →", fontSize = 12.sp, color = scheme.primary)
-                            },
                         )
                     }
                 }
             }
 
-            /* ---------------- 03 排版 ---------------- */
-            item("style") {
-                HyperSectionTitle("排版")
-                HyperGroup {
-                    Column(Modifier.padding(12.dp)) {
-                        HyperSegmented(
-                            options = listOf("上下滚动", "左右翻页"),
-                            selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
-                            onSelect = {
-                                vm.updateReadingMode(
-                                    if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
-                                )
-                            },
-                        )
-                    }
-                    HyperSliderRow(
+            /* ---------------- 阅读 ---------------- */
+            item("read") {
+                SmallTitle(text = "阅读")
+                SettingsCard {
+                    ReadingPreview(state)
+                    HorizontalDivider(color = scheme.dividerLine)
+                    SuperDropdown(
+                        items = listOf("上下滚动", "左右翻页"),
+                        selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
+                        title = "阅读方式",
+                        onSelectedIndexChange = {
+                            vm.updateReadingMode(
+                                if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                            )
+                        },
+                    )
+                    SliderRow(
                         title = "字号",
                         valueLabel = "${state.fontSizeSp.roundToInt()}sp",
                         value = state.fontSizeSp.coerceIn(12f, 32f),
@@ -332,7 +320,7 @@ fun SettingsScreen(
                         maxValue = 32f,
                         decimalPlaces = 0,
                     )
-                    HyperSliderRow(
+                    SliderRow(
                         title = "行距",
                         valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
                         value = state.lineHeight.coerceIn(1.3f, 2.4f),
@@ -341,7 +329,7 @@ fun SettingsScreen(
                         maxValue = 2.4f,
                         decimalPlaces = 2,
                     )
-                    HyperSliderRow(
+                    SliderRow(
                         title = "字距",
                         valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
                         value = state.letterSpacingEm.coerceIn(0f, 0.12f),
@@ -350,7 +338,7 @@ fun SettingsScreen(
                         maxValue = 0.12f,
                         decimalPlaces = 3,
                     )
-                    HyperSliderRow(
+                    SliderRow(
                         title = "段距",
                         valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
                         value = state.paragraphSpacing.coerceIn(0f, 2f),
@@ -359,7 +347,7 @@ fun SettingsScreen(
                         maxValue = 2f,
                         decimalPlaces = 2,
                     )
-                    HyperSliderRow(
+                    SliderRow(
                         title = "页边距",
                         valueLabel = "${state.pagePadding}dp",
                         value = state.pagePadding.toFloat().coerceIn(12f, 48f),
@@ -368,157 +356,92 @@ fun SettingsScreen(
                         maxValue = 48f,
                         decimalPlaces = 0,
                     )
-                    HyperSwitchRow(
-                        title = "首行缩进",
-                        summary = "每段首行缩进两个字符",
+                    HorizontalDivider(color = scheme.dividerLine)
+                    SuperDropdown(
+                        items = listOf("宋体", "黑体"),
+                        selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
+                        title = "字体",
+                        onSelectedIndexChange = { index ->
+                            vm.updateFontFamily(
+                                if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                            )
+                        },
+                    )
+                    SuperDropdown(
+                        items = AutoScrollChoices,
+                        selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
+                        title = "自动滚动",
+                        onSelectedIndexChange = vm::updateAutoScrollSpeed,
+                    )
+                    SuperSwitch(
                         checked = state.firstLineIndent,
                         onCheckedChange = vm::updateFirstLineIndent,
+                        title = "首行缩进",
+                        summary = "每段首行缩进两个字符",
                     )
-                    HyperSwitchRow(
-                        title = "保持常亮",
-                        summary = "阅读时不熄屏",
+                    SuperSwitch(
                         checked = state.keepScreenOn,
                         onCheckedChange = vm::updateKeepScreenOn,
+                        title = "保持常亮",
+                        summary = "阅读时不熄屏",
                     )
-                    Column(Modifier.padding(12.dp)) {
-                        HyperSegmented(
-                            options = listOf("宋体", "黑体"),
-                            selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
-                            onSelect = { index ->
-                                vm.updateFontFamily(
-                                    if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
-                                )
-                            },
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        HyperSegmented(
-                            options = AutoScrollChoices,
-                            selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
-                            onSelect = { vm.updateAutoScrollSpeed(it) },
-                        )
-                    }
+                    HorizontalDivider(color = scheme.dividerLine)
+                    PaletteRow(
+                        selectedId = state.themePreset,
+                        onSelect = vm::updateThemePreset,
+                    )
+                    HorizontalDivider(color = scheme.dividerLine)
+                    SuperDropdown(
+                        items = DirectionChoices.map { it.first },
+                        selectedIndex = DirectionChoices
+                            .indexOfFirst { it.second == state.comicDirection }
+                            .coerceAtLeast(0),
+                        title = "漫画方向",
+                        onSelectedIndexChange = { index ->
+                            vm.updateComicDirection(DirectionChoices[index].second)
+                        },
+                    )
                 }
             }
 
-            /* ---------------- 04 底色 ---------------- */
-            item("theme") {
-                HyperSectionTitle("底色")
-                HyperGroup {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        READING_PALETTES.forEach { palette ->
-                            val selected = state.themePreset == palette.id
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { vm.updateThemePreset(palette.id) },
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(palette.bg)
-                                        .border(
-                                            width = 2.dp,
-                                            color = if (selected) scheme.primary else scheme.dividerLine,
-                                            shape = RoundedCornerShape(12.dp),
-                                        ),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (selected) {
-                                        Box(
-                                            Modifier
-                                                .size(7.dp)
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(scheme.primary)
-                                        )
-                                    }
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                Text(
-                                    text = palette.label,
-                                    fontSize = 11.sp,
-                                    color = if (selected) scheme.primary else scheme.onSurfaceVariantSummary,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            /* ---------------- 05 漫画 ---------------- */
-            item("comic") {
-                HyperSectionTitle("漫画")
-                HyperGroup {
-                    Column(Modifier.padding(12.dp)) {
-                        HyperSegmented(
-                            options = DirectionChoices.map { it.first },
-                            selectedIndex = DirectionChoices
-                                .indexOfFirst { it.second == state.comicDirection }
-                                .coerceAtLeast(0),
-                            onSelect = { index -> vm.updateComicDirection(DirectionChoices[index].second) },
-                        )
-                    }
-                }
-            }
-
-            /* ---------------- 06 存储 ---------------- */
-            item("storage") {
-                HyperSectionTitle("存储")
-                HyperGroup {
-                    HyperRow(title = "本机正文", trailing = { Value(formatSize(state.localBytes)) })
-                    HyperRow(title = "内存缓存", trailing = { Value(formatSize(state.memoryBytes)) })
-                    HyperRow(
+            /* ---------------- 本机 ---------------- */
+            item("local") {
+                SmallTitle(text = "本机")
+                SettingsCard {
+                    ValueRow(title = "本机正文", value = formatSize(state.localBytes))
+                    ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes))
+                    ValueRow(
                         title = "磁盘缓存",
-                        trailing = {
-                            Value(
-                                text = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
-                                color = if (state.cacheIsZero) scheme.primary else scheme.onSurfaceVariantSummary,
+                        value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
+                        valueColor = if (state.cacheIsZero) scheme.primary else null,
+                    )
+                    BasicComponent(
+                        title = "清空内存缓存",
+                        summary = "3.0 起正文不留磁盘副本",
+                        onClick = { vm.clearMemoryCache() },
+                        rightActions = {
+                            Text(
+                                text = "清理",
+                                fontSize = 13.sp,
+                                color = scheme.primary,
+                                maxLines = 1,
                             )
                         },
                     )
-                    Text(
-                        text = "3.0 的缓存全在内存里，磁盘上不留正文副本。",
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-                        fontSize = 11.5.sp,
-                        color = scheme.onSurfaceVariantSummary,
-                    )
-                    TextButton(
-                        text = "清空内存缓存",
-                        onClick = { vm.clearMemoryCache() },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
-                        cornerRadius = 14.dp,
-                    )
-                }
-            }
-
-            /* ---------------- 07 关于 ---------------- */
-            item("about") {
-                HyperSectionTitle("关于")
-                HyperGroup {
-                    HyperRow(title = "本机版本", trailing = { Value(state.appVersion) })
-                    HyperRow(
+                    HorizontalDivider(color = scheme.dividerLine)
+                    ValueRow(title = "本机版本", value = state.appVersion)
+                    ValueRow(
                         title = "桌面端",
-                        trailing = { Value(state.serverVersion.ifBlank { "未连接" }) },
+                        value = state.serverVersion.ifBlank { "未连接" },
                     )
-                    HyperRow(
+                    SuperArrow(
                         title = "诊断信息",
                         summary = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                        rightText = if (showDiagnostics) "收起" else "展开",
                         onClick = { showDiagnostics = !showDiagnostics },
-                        trailing = {
-                            Text(
-                                text = if (showDiagnostics) "收起" else "展开",
-                                fontSize = 12.sp,
-                                color = scheme.primary,
-                            )
-                        },
                     )
                     if (showDiagnostics) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp)) {
+                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                             Text(
                                 text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
                                 fontSize = 11.5.sp,
@@ -539,7 +462,7 @@ fun SettingsScreen(
                 if (!message.isNullOrBlank()) {
                     Text(
                         text = message,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                         fontSize = 12.sp,
                         color = scheme.primary,
                     )
@@ -559,17 +482,14 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
             .fillMaxWidth()
             .background(scheme.background)
             .statusBarsPadding()
-            .padding(horizontal = PageMargin),
+            .padding(horizontal = 8.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onBack),
+                Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -579,34 +499,196 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
                     tint = scheme.onSurface,
                 )
             }
-            Spacer(Modifier.weight(1f))
-            Text(text = "SETTINGS", fontSize = 11.sp, color = scheme.primary)
         }
         Text(
             text = "设置",
-            modifier = Modifier.padding(top = 4.dp),
-            fontSize = 26.sp,
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+            fontSize = 30.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
         )
         Text(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 10.dp),
             fontSize = 11.5.sp,
             color = scheme.onSurfaceVariantSummary,
         )
     }
 }
 
+/* ---------------- 组内容器 ---------------- */
+
+/** Miuix 官方 Card，内边距交给每一行自己，保证行文字与组标题对齐。 */
 @Composable
-private fun Value(text: String, color: Color = MiuixTheme.colorScheme.onSurfaceVariantSummary) {
-    Text(
-        text = text,
-        fontSize = 13.sp,
-        color = color,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+private fun SettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp,
+        insideMargin = PaddingValues(0.dp),
+        content = content,
     )
+}
+
+/* ---------------- 行零件（Miuix 没提供的两样） ---------------- */
+
+/** 标题 + 数值 + 滑杆，水平内边距与 `BasicComponent` 对齐。 */
+@Composable
+private fun SliderRow(
+    title: String,
+    valueLabel: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    minValue: Float,
+    maxValue: Float,
+    decimalPlaces: Int,
+) {
+    val scheme = MiuixTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                fontSize = 16.sp,
+                color = scheme.onSurface,
+            )
+            Text(
+                text = valueLabel,
+                fontSize = 13.sp,
+                color = scheme.onSurfaceVariantSummary,
+            )
+        }
+        Slider(
+            progress = value,
+            onProgressChange = onValueChange,
+            minValue = minValue,
+            maxValue = maxValue,
+            decimalPlaces = decimalPlaces,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+/** 只读的「标题 — 值」行，用 Miuix 的 `BasicComponent` 排。 */
+@Composable
+private fun ValueRow(title: String, value: String, valueColor: Color? = null) {
+    val scheme = MiuixTheme.colorScheme
+    BasicComponent(
+        title = title,
+        rightActions = {
+            Text(
+                text = value,
+                fontSize = 13.sp,
+                color = valueColor ?: scheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
+}
+
+/**
+ * 排版实时预览：显示当前底色与字号 / 行距 / 段距下的两行正文。
+ * 字号上限压到 20sp，避免预览把设置项挤走。
+ */
+@Composable
+private fun ReadingPreview(state: SettingsUiState) {
+    val preset = readingPalette(state.themePreset)
+    val fontScale = state.fontSizeSp.coerceIn(12f, 20f)
+    val style = androidx.compose.ui.text.TextStyle(
+        fontFamily = if (state.fontFamily == SettingsStore.FONT_SANS) {
+            FontFamily.SansSerif
+        } else {
+            FontFamily.Serif
+        },
+        fontSize = fontScale.sp,
+        lineHeight = (fontScale * state.lineHeight).sp,
+        letterSpacing = state.letterSpacingEm.em,
+        textIndent = if (state.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent.None,
+    )
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(preset.bg)
+                .border(0.5.dp, preset.line, RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+        ) {
+            Text(
+                text = "山色空蒙雨亦奇",
+                style = style,
+                color = preset.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height((fontScale * state.paragraphSpacing).dp))
+            Text(
+                text = "水光潋滟晴方好，淡妆浓抹总相宜。",
+                style = style,
+                color = preset.ink,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "${state.fontSizeSp.roundToInt()}sp · 行距 " +
+                    String.format(Locale.US, "%.2f", state.lineHeight) + " · 段距 " +
+                    String.format(Locale.US, "%.2f", state.paragraphSpacing),
+                fontSize = 10.5.sp,
+                color = preset.soft,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** 阅读底色：横排色块，选中的那格描朱砂边。 */
+@Composable
+private fun PaletteRow(selectedId: String, onSelect: (String) -> Unit) {
+    val scheme = MiuixTheme.colorScheme
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            READING_PALETTES.forEach { palette ->
+                val selected = selectedId == palette.id
+                Column(
+                    modifier = Modifier.weight(1f).clickable { onSelect(palette.id) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(palette.bg)
+                            .border(
+                                width = 2.dp,
+                                color = if (selected) scheme.primary else scheme.dividerLine,
+                                shape = RoundedCornerShape(12.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (selected) {
+                            Box(
+                                Modifier
+                                    .size(7.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(scheme.primary)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = palette.label,
+                        fontSize = 11.sp,
+                        color = if (selected) scheme.primary else scheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
 }
 
 /** 「上次同步 3 分钟前」；从没同步过就直说。 */
