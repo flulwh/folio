@@ -40,11 +40,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by vm.settingsState.collectAsState()
             val deleteConfirm by vm.deleteConfirm.collectAsState()
-            FolioTheme(
-                accent = settings.accent,
-                paper = settings.paper,
-                ink = settings.ink,
-            ) {
+            FolioTheme(preset = settings.themePreset) {
                 val navController = rememberNavController()
                 Box(Modifier.fillMaxSize()) {
                     NavHost(navController = navController, startDestination = ROUTE_SHELF) {

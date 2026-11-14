@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.1.0：设备管理（T07–T11）。设备头里的 X-Folio-App-Version 直接读 VERSION_NAME，
-        // 版本号只有这一处真相，改这里就等于改手机对外报的版本。
-        versionCode = 3
-        versionName = "3.1.0"
+        // 3.2.0：整机 UI 重做 + 书签 / 划线 / 搜索 / 自动滚动。设备头里的
+        // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
+        versionCode = 4
+        versionName = "3.2.0"
         vectorDrawables.useSupportLibrary = true
     }
 

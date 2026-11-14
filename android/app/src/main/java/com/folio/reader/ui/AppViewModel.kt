@@ -15,14 +15,19 @@ import com.folio.reader.core.BookKind
 import com.folio.reader.core.JsonIo
 import com.folio.reader.core.PageKey
 import com.folio.reader.core.ProgressEntry
+import com.folio.reader.core.ReaderMark
+import com.folio.reader.core.SearchHit
 import com.folio.reader.core.TextParser
+import com.folio.reader.core.TextSearch
 import com.folio.reader.core.TocChapter
 import com.folio.reader.core.comicPercent
 import com.folio.reader.data.ConnectionManager
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.DeleteConfirmer
+import com.folio.reader.data.MarkStore
 import com.folio.reader.data.SettingsStore
 import com.folio.reader.net.LanDiscovery
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -57,6 +62,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val progressSync = container.progressSync
     private val sync = container.sync
     private val images = container.images
+    /** 书签 / 划线：与进度分开一份文件，见 [MarkStore]。 */
+    private val marks = MarkStore(File(getApplication<Application>().filesDir, "library"))
+    private var searchJob: Job? = null
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -348,6 +356,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val parsed = TextParser.parseBook(text)
+        val savedMarks = withContext(Dispatchers.IO) { marks.read(book.id) }
         val entry = progressMap[book.id]
         val index = (entry?.paraIndex ?: 0).coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
         val chapterIndex = TextParser.chapterIndexForPara(parsed.chapters, index)
@@ -360,6 +369,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             paraIndex = index,
             percent = percentOf(index, parsed.paragraphs.size, 0, 0),
             offline = true,
+            marks = savedMarks,
+            charPrefix = prefixOf(parsed.paragraphs),
         )
         recordProgress(book, buildEntry(book, index, chapterIndex, parsed.chapters))
     }
@@ -409,6 +420,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val parsed = TextParser.parseBook(text)
+        val savedMarks = withContext(Dispatchers.IO) { marks.read(book.id) }
         val resume = if (entry != null && entry.chapter == chapterNo) (entry.paraIndex ?: 0) else 0
         val paraIndex = resume.coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
         _reader.update {
@@ -423,6 +435,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 paraIndex = paraIndex,
                 percent = percentOf(paraIndex, parsed.paragraphs.size, safePosition, toc.size),
                 offline = loaded.getOrNull()?.fromCache == true,
+                marks = savedMarks,
+                charPrefix = prefixOf(parsed.paragraphs),
             )
         }
         recordProgress(book, buildEntry(book, paraIndex, safePosition, parsed.chapters, chapterNo))
@@ -557,11 +571,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun toggleToc() {
-        _reader.update { it.copy(showToc = !it.showToc) }
+        _reader.update {
+            val open = !it.showToc
+            it.copy(
+                showToc = open,
+                showStyle = false,
+                showMarks = false,
+                search = if (open) it.search.copy(open = false) else it.search,
+            )
+        }
     }
 
     fun toggleStyle() {
-        _reader.update { it.copy(showStyle = !it.showStyle) }
+        _reader.update {
+            val open = !it.showStyle
+            it.copy(
+                showStyle = open,
+                showToc = false,
+                showMarks = false,
+                search = if (open) it.search.copy(open = false) else it.search,
+            )
+        }
     }
 
     fun toggleControls() {
@@ -578,12 +608,242 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun closeReader() {
         flush()
+        searchJob?.cancel()
         images.clear()
         cloud.clear()
         _reader.value = ReaderUiState()
         // T10：退出阅读器是快照的三个触发点之一（刚读完的书 lastReadAt / 进度都变了）。
         // 60s 内重复会被 SyncEngine 自己挡掉，这里不用再判断。
         viewModelScope.launch { runCatching { sync.reportSnapshot() } }
+    }
+
+    /* ---------------- 书签 · 划线 · 笔记 ---------------- */
+
+    /** 每段之前的累计字数，长度 = 段落数 + 1（最后一项是全书总字数）。 */
+    private fun prefixOf(paragraphs: List<com.folio.reader.core.Paragraph>): IntArray {
+        if (paragraphs.isEmpty()) return IntArray(0)
+        val prefix = IntArray(paragraphs.size + 1)
+        var sum = 0
+        for (index in paragraphs.indices) {
+            prefix[index] = sum
+            sum += paragraphs[index].text.length
+        }
+        prefix[paragraphs.size] = sum
+        return prefix
+    }
+
+    /** 当前段落所属章节标题（本机书按段落号反查，云端书就是当前章）。 */
+    private fun chapterTitleOf(state: ReaderUiState, paraIndex: Int): String {
+        if (state.isCloud) return state.chapterTitle
+        val index = TextParser.chapterIndexForPara(state.chapters, paraIndex)
+        return state.chapters.getOrNull(index)?.title.orEmpty()
+    }
+
+    fun toggleMarks() {
+        _reader.update {
+            val open = !it.showMarks
+            it.copy(
+                showMarks = open,
+                showToc = false,
+                showStyle = false,
+                search = if (open) it.search.copy(open = false) else it.search,
+            )
+        }
+    }
+
+    /** 在指定段落上加 / 取消书签（默认当前段落）。 */
+    fun toggleBookmark(paraIndex: Int = _reader.value.paraIndex) {
+        val state = _reader.value
+        val book = state.book ?: return
+        if (state.paragraphs.isEmpty()) return
+        val index = paraIndex.coerceIn(0, state.paragraphs.size - 1)
+        val existing = state.marks.firstOrNull { it.paraIndex == index && it.isBookmark }
+        if (existing != null) {
+            removeMark(existing.id)
+            return
+        }
+        val mark = ReaderMark.create(
+            bookId = book.id,
+            paraIndex = index,
+            chapterTitle = chapterTitleOf(state, index),
+            excerpt = state.paragraphs[index].text,
+            kind = ReaderMark.KIND_BOOKMARK,
+            chapterIndex = state.chapterIndex,
+            chapterNo = if (state.isCloud) state.toc.getOrNull(state.chapterIndex)?.index ?: -1 else -1,
+        )
+        commitMark(mark)
+    }
+
+    /** 划线（同段落重复划 = 取消）。 */
+    fun toggleHighlight(paraIndex: Int = _reader.value.paraIndex) {
+        val state = _reader.value
+        val book = state.book ?: return
+        if (state.paragraphs.isEmpty()) return
+        val index = paraIndex.coerceIn(0, state.paragraphs.size - 1)
+        val existing = state.marks.firstOrNull {
+            it.paraIndex == index && it.kind == ReaderMark.KIND_HIGHLIGHT
+        }
+        if (existing != null) {
+            removeMark(existing.id)
+            return
+        }
+        val mark = ReaderMark.create(
+            bookId = book.id,
+            paraIndex = index,
+            chapterTitle = chapterTitleOf(state, index),
+            excerpt = state.paragraphs[index].text,
+            kind = ReaderMark.KIND_HIGHLIGHT,
+            chapterIndex = state.chapterIndex,
+            chapterNo = if (state.isCloud) state.toc.getOrNull(state.chapterIndex)?.index ?: -1 else -1,
+        )
+        commitMark(mark)
+    }
+
+    private fun commitMark(mark: ReaderMark) {
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { marks.put(mark) }
+            _reader.update { it.copy(marks = list) }
+        }
+    }
+
+    fun removeMark(id: String) {
+        val book = _reader.value.book ?: return
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { marks.remove(book.id, id) }
+            _reader.update { it.copy(marks = list) }
+        }
+    }
+
+    /** 给某条痕迹写 / 改笔记；写空即退回纯书签。 */
+    fun updateMarkNote(id: String, note: String) {
+        val book = _reader.value.book ?: return
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) { marks.updateNote(book.id, id, note) }
+            _reader.update { it.copy(marks = list) }
+        }
+    }
+
+    /** 跳到某条痕迹所在段落；云端书跨章时先把目标章拉下来。 */
+    fun jumpToMark(mark: ReaderMark) {
+        val state = _reader.value
+        val book = state.book ?: return
+        _reader.update { it.copy(showMarks = false, showToc = false) }
+        if (state.isCloud) {
+            val position = state.toc.indexOfFirst { it.index == mark.chapterNo }
+            if (position >= 0 && position != state.chapterIndex) {
+                _reader.update { it.copy(loading = true, error = null) }
+                viewModelScope.launch {
+                    readCloudChapter(
+                        book = book,
+                        toc = state.toc,
+                        position = position,
+                        entry = ProgressEntry(
+                            id = book.id,
+                            paraIndex = mark.paraIndex,
+                            chapter = mark.chapterNo,
+                            chapterIndex = mark.chapterNo,
+                            chapterTitle = mark.chapterTitle,
+                            windowBase = mark.chapterNo,
+                            percent = state.percent,
+                            updatedAt = System.currentTimeMillis(),
+                        ),
+                    )
+                }
+                return
+            }
+        }
+        scrollToParagraph(mark.paraIndex)
+        updatePosition(mark.paraIndex)
+    }
+
+    /* ---------------- 全书搜索 ---------------- */
+
+    fun toggleSearch() {
+        val state = _reader.value
+        if (state.search.open) {
+            closeSearch()
+        } else {
+            _reader.update {
+                it.copy(
+                    search = it.search.copy(open = true),
+                    showToc = false,
+                    showStyle = false,
+                    showMarks = false,
+                )
+            }
+        }
+    }
+
+    fun closeSearch() {
+        searchJob?.cancel()
+        _reader.update { it.copy(search = SearchUiState()) }
+    }
+
+    fun updateSearchQuery(query: String) {
+        _reader.update {
+            it.copy(search = it.search.copy(query = query, running = query.isNotBlank(), cursor = -1))
+        }
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _reader.update { it.copy(search = it.search.copy(hits = emptyList(), running = false)) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(260)
+            val state = _reader.value
+            val hits = withContext(Dispatchers.Default) {
+                TextSearch.search(state.paragraphs, state.chapters, query)
+            }
+            _reader.update {
+                if (it.search.query == query) {
+                    it.copy(search = it.search.copy(hits = hits, running = false))
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    fun jumpToSearchHit(hit: SearchHit) {
+        val state = _reader.value
+        val cursor = state.search.hits.indexOf(hit)
+        _reader.update {
+            it.copy(
+                search = it.search.copy(cursor = cursor),
+                showToc = false,
+                showMarks = false,
+            )
+        }
+        scrollToParagraph(hit.paraIndex)
+        updatePosition(hit.paraIndex)
+    }
+
+    /** 命中列表里上一条 / 下一条。 */
+    fun stepSearchHit(delta: Int) {
+        val state = _reader.value
+        val hits = state.search.hits
+        if (hits.isEmpty()) return
+        val next = if (state.search.cursor < 0) {
+            if (delta > 0) 0 else hits.lastIndex
+        } else {
+            (state.search.cursor + delta).coerceIn(0, hits.lastIndex)
+        }
+        jumpToSearchHit(hits[next])
+    }
+
+    /* ---------------- 自动滚动 ---------------- */
+
+    fun toggleAutoScroll() {
+        val state = _reader.value
+        if (state.paragraphs.isEmpty()) return
+        _reader.update { it.copy(autoScroll = !it.autoScroll, controls = false) }
+    }
+
+    fun stopAutoScroll() {
+        if (_reader.value.autoScroll) {
+            // 走到书末自动停下时把控件叫回来，否则读者会面对一个没有任何出口的页面。
+            _reader.update { it.copy(autoScroll = false, controls = true) }
+        }
     }
 
     private fun percentOf(paraIndex: Int, paraCount: Int, chapterIndex: Int, tocTotal: Int): Double {
@@ -1112,6 +1372,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 token = settings.token,
                 fontSizeSp = settings.fontSizeSp,
                 lineHeight = settings.lineHeight,
+                letterSpacingEm = settings.letterSpacingEm,
+                paragraphSpacing = settings.paragraphSpacing,
+                firstLineIndent = settings.firstLineIndent,
+                autoScrollSpeed = settings.autoScrollSpeed,
+                keepScreenOn = settings.keepScreenOn,
                 fontFamily = settings.fontFamily,
                 themePreset = settings.themePreset,
                 pagePadding = settings.pagePadding,
@@ -1154,7 +1419,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /* --- 排版：小说 --- */
 
     fun updateFontSize(value: Float) {
-        val size = value.coerceIn(14f, 28f)
+        val size = value.coerceIn(12f, 32f)
         settings.fontSizeSp = size
         _settings.update { it.copy(fontSizeSp = size) }
     }
@@ -1162,6 +1427,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateLineHeight(value: Float) {
         settings.lineHeight = value
         _settings.update { it.copy(lineHeight = value) }
+    }
+
+    fun updateLetterSpacing(value: Float) {
+        settings.letterSpacingEm = value
+        _settings.update { it.copy(letterSpacingEm = value) }
+    }
+
+    fun updateParagraphSpacing(value: Float) {
+        settings.paragraphSpacing = value
+        _settings.update { it.copy(paragraphSpacing = value) }
+    }
+
+    fun updateFirstLineIndent(value: Boolean) {
+        settings.firstLineIndent = value
+        _settings.update { it.copy(firstLineIndent = value) }
+    }
+
+    fun updateAutoScrollSpeed(value: Int) {
+        settings.autoScrollSpeed = value
+        _settings.update { it.copy(autoScrollSpeed = value.coerceIn(0, 3)) }
+    }
+
+    fun updateKeepScreenOn(value: Boolean) {
+        settings.keepScreenOn = value
+        _settings.update { it.copy(keepScreenOn = value) }
     }
 
     fun updateFontFamily(value: String) {
@@ -1271,9 +1561,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
         /** 底色预设 → (背景, 文字)。夜间模式也走同一套 Material 主题，不另开分支。 */
         fun colorsOf(preset: String): Pair<Int, Int> = when (preset) {
-            SettingsStore.THEME_CREAM -> 0xFFF5EAD3.toInt() to 0xFF3B3226.toInt()
-            SettingsStore.THEME_NIGHT -> 0xFF15171A.toInt() to 0xFFC9CDD4.toInt()
-            else -> 0xFFFBF8F1.toInt() to 0xFF23201C.toInt()
+            SettingsStore.THEME_PAPER -> 0xFFFBF8F1.toInt() to 0xFF23201C.toInt()
+            SettingsStore.THEME_CREAM -> 0xFFF1E7D3.toInt() to 0xFF1F1A12.toInt()
+            SettingsStore.THEME_GRAPHITE -> 0xFF1C1C1E.toInt() to 0xFFE6E6E1.toInt()
+            SettingsStore.THEME_NIGHT -> 0xFF0C0C0E.toInt() to 0xFFC9C9C4.toInt()
+            else -> 0xFFF4F4F1.toInt() to 0xFF111111.toInt()
         }
     }
 }

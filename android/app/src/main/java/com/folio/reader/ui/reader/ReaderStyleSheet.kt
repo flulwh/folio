@@ -1,7 +1,9 @@
 package com.folio.reader.ui.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,188 +13,246 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextIndent
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.FolioKicker
+import com.folio.reader.ui.FolioSegmented
+import com.folio.reader.ui.FolioSectionHeader
+import com.folio.reader.ui.FolioSheet
+import com.folio.reader.ui.FolioSliderRow
+import com.folio.reader.ui.FolioSwitchRow
+import com.folio.reader.ui.READING_PALETTES
+import com.folio.reader.ui.ReadingPalette
 import com.folio.reader.ui.SettingsUiState
+import kotlin.math.roundToInt
+
+/** 排版面板顶部的两段试样，用当前字号 / 行距 / 字距 / 段距实时排版。 */
+private const val SPECIMEN_ONE =
+    "纸上的字，先要安静。把字号、行距、字距与段距调好，正文才肯把注意力还给故事本身。"
+
+private const val SPECIMEN_TWO =
+    "排版不是装饰，而是一种秩序：一页里所有的数字都该对齐，所有的分隔都该只留一条线。"
 
 /**
- * 排版弹层：字号 / 行距 / 字体 / 底色 / 页边距。
+ * 排版弹层：字样试样 + 正文 / 字体 / 底色 / 版面 / 自动滚动五组设置。
  *
- * 所有改动都**即时生效并持久化**（直接写 SharedPreferences）——
- * 用户在阅读页调完字号，退出再进来还是这个字号，不用二次确认。
+ * 所有改动即时生效，滑块直接回调，不做二次确认。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderStyleSheet(
     state: SettingsUiState,
     onFontSize: (Float) -> Unit,
     onLineHeight: (Float) -> Unit,
+    onLetterSpacing: (Float) -> Unit,
+    onParagraphSpacing: (Float) -> Unit,
+    onFirstLineIndent: (Boolean) -> Unit,
     onFontFamily: (String) -> Unit,
     onThemePreset: (String) -> Unit,
     onPagePadding: (Int) -> Unit,
+    onAutoScrollSpeed: (Int) -> Unit,
+    onKeepScreenOn: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val specimenStyle = TextStyle(
+        fontFamily = if (state.fontFamily == SettingsStore.FONT_SANS) {
+            FontFamily.SansSerif
+        } else {
+            FontFamily.Serif
+        },
+        fontSize = state.fontSizeSp.sp,
+        lineHeight = (state.fontSizeSp * state.lineHeight).sp,
+        letterSpacing = state.letterSpacingEm.em,
+        textIndent = if (state.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent(),
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+
+    FolioSheet(
+        onDismiss = onDismiss,
+        title = "排版",
+        kicker = "TYPE / STYLE",
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 28.dp),
+                .padding(top = 14.dp, bottom = 24.dp),
         ) {
-            Text("排版", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(12.dp))
-
-            /* 字号 14–28sp，步进 1 */
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("字号", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-                Slider(
-                    value = state.fontSizeSp,
-                    onValueChange = { onFontSize(it) },
-                    valueRange = 14f..28f,
-                    steps = 13,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "${state.fontSizeSp.toInt()}sp",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.width(48.dp),
-                )
+            FolioKicker("SPECIMEN")
+            Spacer(Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .padding(16.dp),
+            ) {
+                Text(text = SPECIMEN_ONE, style = specimenStyle)
+                Spacer(Modifier.height((state.fontSizeSp * state.paragraphSpacing).dp))
+                Text(text = SPECIMEN_TWO, style = specimenStyle)
             }
 
-            Spacer(Modifier.height(6.dp))
-            ChoiceRow(
+            /* 01 正文 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(number = "01", title = "正文")
+            FolioSliderRow(
+                label = "字号",
+                valueLabel = "${state.fontSizeSp.roundToInt()}sp",
+                value = state.fontSizeSp,
+                onValueChange = onFontSize,
+                valueRange = 12f..32f,
+                steps = 19,
+            )
+            FolioSliderRow(
                 label = "行距",
-                options = listOf("紧凑" to 1.5f, "标准" to 1.8f, "宽松" to 2.1f),
-                selected = state.lineHeight,
-                onSelect = { onLineHeight(it) },
+                valueLabel = String.format("%.1f×", state.lineHeight),
+                value = state.lineHeight,
+                onValueChange = onLineHeight,
+                valueRange = 1.3f..2.4f,
+                steps = 10,
+            )
+            FolioSliderRow(
+                label = "字距",
+                valueLabel = String.format("%.2fem", state.letterSpacingEm),
+                value = state.letterSpacingEm,
+                onValueChange = onLetterSpacing,
+                valueRange = 0f..0.12f,
+                steps = 11,
+            )
+            FolioSliderRow(
+                label = "段距",
+                valueLabel = String.format("%.1f×", state.paragraphSpacing),
+                value = state.paragraphSpacing,
+                onValueChange = onParagraphSpacing,
+                valueRange = 0f..2f,
+                steps = 19,
+            )
+            FolioSwitchRow(
+                label = "首行缩进",
+                checked = state.firstLineIndent,
+                onCheckedChange = onFirstLineIndent,
             )
 
-            Spacer(Modifier.height(10.dp))
-            ChoiceRow(
-                label = "字体",
-                options = listOf("宋体" to SettingsStore.FONT_SERIF, "黑体" to SettingsStore.FONT_SANS),
-                selected = state.fontFamily,
-                onSelect = onFontFamily,
+            /* 02 字体 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(number = "02", title = "字体")
+            Spacer(Modifier.height(8.dp))
+            FolioSegmented(
+                options = listOf("宋体", "黑体"),
+                selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
+                onSelect = { index ->
+                    onFontFamily(
+                        if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                    )
+                },
             )
 
+            /* 03 底色 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(number = "03", title = "底色")
             Spacer(Modifier.height(10.dp))
-            ChoiceRow(
-                label = "页边距",
-                options = listOf("窄" to 16, "标准" to 24, "宽" to 36),
-                selected = state.pagePadding,
-                onSelect = onPagePadding,
-            )
-
-            Spacer(Modifier.height(10.dp))
-            Text("底色", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ThemePresetChip(
-                    label = "纸白",
-                    preset = SettingsStore.THEME_PAPER,
-                    selected = state.themePreset == SettingsStore.THEME_PAPER,
-                    swatch = Color(0xFFFBF8F1),
-                    onSelect = onThemePreset,
-                )
-                ThemePresetChip(
-                    label = "米色",
-                    preset = SettingsStore.THEME_CREAM,
-                    selected = state.themePreset == SettingsStore.THEME_CREAM,
-                    swatch = Color(0xFFF5EAD3),
-                    onSelect = onThemePreset,
-                )
-                ThemePresetChip(
-                    label = "夜间",
-                    preset = SettingsStore.THEME_NIGHT,
-                    selected = state.themePreset == SettingsStore.THEME_NIGHT,
-                    swatch = Color(0xFF15171A),
-                    onSelect = onThemePreset,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun <T> ChoiceRow(
-    label: String,
-    options: List<Pair<String, T>>,
-    selected: T,
-    onSelect: (T) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(56.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.forEach { (text, value) ->
-                val isSelected = value == selected
-                OutlinedButton(
-                    onClick = { onSelect(value) },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(36.dp),
-                ) {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                READING_PALETTES.forEach { palette ->
+                    PaletteSwatch(
+                        palette = palette,
+                        selected = state.themePreset == palette.id,
+                        onSelect = onThemePreset,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
+
+            /* 04 版面 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(number = "04", title = "版面")
+            FolioSliderRow(
+                label = "页边距",
+                valueLabel = "${state.pagePadding}dp",
+                value = state.pagePadding.toFloat(),
+                onValueChange = { onPagePadding(it.roundToInt()) },
+                valueRange = 12f..48f,
+                steps = 35,
+            )
+
+            /* 05 自动滚动 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(
+                number = "05",
+                title = "自动滚动",
+                trailing = "${SettingsStore.AUTO_SCROLL_SPEEDS[state.autoScrollSpeed.coerceIn(0, 3)]} px/s",
+            )
+            Spacer(Modifier.height(8.dp))
+            FolioSegmented(
+                options = listOf("慢", "稳", "快", "疾"),
+                selectedIndex = state.autoScrollSpeed.coerceIn(0, 3),
+                onSelect = onAutoScrollSpeed,
+            )
+            FolioSwitchRow(
+                label = "保持屏幕常亮",
+                checked = state.keepScreenOn,
+                onCheckedChange = onKeepScreenOn,
+            )
         }
     }
 }
 
+/** 44dp 方形纸色样本：选中时换 2dp 墨线，中央压一枚 6dp 朱红方点。 */
 @Composable
-private fun ThemePresetChip(
-    label: String,
-    preset: String,
+private fun PaletteSwatch(
+    palette: ReadingPalette,
     selected: Boolean,
-    swatch: Color,
     onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
+        modifier = modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = { onSelect(palette.id) },
+        ),
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onSelect(preset) },
     ) {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(
-                    color = swatch,
-                    shape = RoundedCornerShape(10.dp),
+                .background(palette.bg)
+                .border(
+                    width = 2.dp,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
                 ),
+            contentAlignment = Alignment.Center,
         ) {
             if (selected) {
                 Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .align(Alignment.Center)
-                        .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(5.dp)),
+                    Modifier
+                        .size(6.dp)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
+        Spacer(Modifier.height(6.dp))
+        FolioKicker(
+            text = palette.label,
             color = if (selected) {
                 MaterialTheme.colorScheme.primary
             } else {

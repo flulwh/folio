@@ -4,7 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +17,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -28,9 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,20 +42,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.folio.reader.core.Book
 import com.folio.reader.core.PageKey
+import com.folio.reader.core.TocChapter
 import com.folio.reader.data.SettingsStore
-import com.folio.reader.ui.reader.TocSheet
 import com.folio.reader.ui.reader.ZoomableImage
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -67,6 +71,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  *  - 单页失败只影响那一页，占位给原因 + 重试；
  *  - 读到本话 80% 预取下一话的页清单与前两张（VM 里做，失败静默）；
  *  - 离开时 `ImageLoader.clear()` + `ChapterMemoryCache.clear()`，内存归零。
+ *
+ * 视觉上只有顶栏、底栏与目录抽屉换了皮：纸底墨字、发丝线、等宽页码，
+ * 图片区、手势、缩放、预取与所有回调保持原样。
  */
 @Composable
 fun ComicReaderScreen(
@@ -102,14 +109,26 @@ fun ComicReaderScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = comic.error.orEmpty(),
-                    color = Color.White.copy(alpha = 0.86f),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { vm.reloadComic() }) { Text("重试") }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color.White.copy(alpha = 0.18f))
+                        .padding(20.dp),
+                ) {
+                    Text(
+                        text = "ERROR",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.55f),
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = comic.error.orEmpty(),
+                        color = Color.White.copy(alpha = 0.86f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    DarkOutlineAction(text = "重试", onClick = { vm.reloadComic() })
+                }
             }
 
             book != null && comic.total > 0 -> Box(
@@ -140,73 +159,42 @@ fun ComicReaderScreen(
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Surface(color = Color.Black.copy(alpha = 0.72f)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回",
-                            tint = Color.White,
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = book?.title.orEmpty(),
-                            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = comic.chapterTitle,
-                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    IconButton(onClick = { vm.toggleComicToc() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.List,
-                            contentDescription = "选择话",
-                            tint = Color.White,
-                        )
-                    }
-                }
-            }
+            ComicTopBar(
+                bookTitle = book?.title.orEmpty(),
+                chapterNo = if (comic.chapterNo > 0) comic.chapterNo else comic.chapterIndex + 1,
+                page = comic.page,
+                total = comic.total,
+                onBack = onBack,
+                onOpenToc = { vm.toggleComicToc() },
+            )
         }
 
         // 翻话失败：上一话的图留着，底下提示 + 重试
         if (comic.error != null && comic.total > 0 && !needConnect) {
-            Surface(
-                color = Color.Black.copy(alpha = 0.78f),
+            Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = if (comic.controls) 56.dp else 8.dp)
-                    .padding(horizontal = 12.dp),
+                    .padding(bottom = if (comic.controls) 96.dp else 12.dp)
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.94f))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = comic.error.orEmpty(),
-                        color = Color.White.copy(alpha = 0.86f),
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { vm.reloadComic() }) {
-                        Text("重试", color = Color.White)
-                    }
-                }
+                FolioKicker("ERROR", color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = comic.error.orEmpty(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.width(8.dp))
+                ChromeTextAction(text = "重试", onClick = { vm.reloadComic() })
             }
         }
 
@@ -217,46 +205,23 @@ fun ComicReaderScreen(
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            Surface(color = Color.Black.copy(alpha = 0.72f)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = { vm.prevComicChapter() },
-                        enabled = comic.hasPrevChapter,
-                    ) {
-                        Text(
-                            text = "上一话",
-                            color = if (comic.hasPrevChapter) Color.White else Color.White.copy(alpha = 0.35f),
-                        )
-                    }
-                    Text(
-                        text = "第 ${comic.page + 1}/${comic.total} 页",
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.8f),
-                    )
-                    TextButton(
-                        onClick = { vm.nextComicChapter() },
-                        enabled = comic.hasNextChapter,
-                    ) {
-                        Text(
-                            text = "下一话",
-                            color = if (comic.hasNextChapter) Color.White else Color.White.copy(alpha = 0.35f),
-                        )
-                    }
-                }
-            }
+            ComicBottomBar(
+                page = comic.page,
+                total = comic.total,
+                progress = comic.chapterProgress,
+                hasPrevChapter = comic.hasPrevChapter,
+                hasNextChapter = comic.hasNextChapter,
+                chapterCount = comic.toc.size,
+                onPrevChapter = { vm.prevComicChapter() },
+                onNextChapter = { vm.nextComicChapter() },
+                onOpenToc = { vm.toggleComicToc() },
+            )
         }
     }
 
     if (comic.showToc) {
-        TocSheet(
-            labels = comic.toc.map { it.title },
+        ComicTocSheet(
+            chapters = comic.toc,
             currentIndex = comic.chapterIndex,
             onSelect = { index ->
                 vm.toggleComicToc()
@@ -280,6 +245,262 @@ fun ComicReaderScreen(
             dismissButton = {
                 TextButton(onClick = onBack) { Text("返回") }
             },
+        )
+    }
+}
+
+/* ---------------- 顶栏 / 底栏 / 目录 ---------------- */
+
+@Composable
+private fun ComicTopBar(
+    bookTitle: String,
+    chapterNo: Int,
+    page: Int,
+    total: Int,
+    onBack: () -> Unit,
+    onOpenToc: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.94f)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FolioIconAction(
+                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                onClick = onBack,
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+            ) {
+                Text(
+                    text = bookTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "第 $chapterNo 话 · 第 $page/$total 页",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            FolioIconAction(
+                icon = Icons.AutoMirrored.Filled.List,
+                contentDescription = "选择话",
+                onClick = onOpenToc,
+            )
+        }
+        FolioRule()
+    }
+}
+
+@Composable
+private fun ComicBottomBar(
+    page: Int,
+    total: Int,
+    progress: Float,
+    hasPrevChapter: Boolean,
+    hasNextChapter: Boolean,
+    chapterCount: Int,
+    onPrevChapter: () -> Unit,
+    onNextChapter: () -> Unit,
+    onOpenToc: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.94f))
+            .navigationBarsPadding(),
+    ) {
+        FolioProgressRail(progress = progress)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ChromeTextAction(
+                text = "上一话",
+                onClick = onPrevChapter,
+                enabled = hasPrevChapter,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "${page + 1} / $total",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.weight(1f))
+            ChromeTextAction(
+                text = "下一话",
+                onClick = onNextChapter,
+                enabled = hasNextChapter,
+            )
+        }
+        FolioHairline()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onOpenToc,
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FolioKicker("INDEX", color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "目录",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            FolioKicker("$chapterCount 话 →")
+        }
+    }
+}
+
+@Composable
+private fun ComicTocSheet(
+    chapters: List<TocChapter>,
+    currentIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    FolioSheet(
+        onDismiss = onDismiss,
+        kicker = "INDEX / ${chapters.size} 话",
+        title = "话",
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 460.dp),
+        ) {
+            itemsIndexed(chapters) { index, chapter ->
+                val selected = index == currentIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(index) }
+                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .width(2.dp)
+                            .height(18.dp)
+                            .background(
+                                if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color.Transparent
+                                }
+                            )
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = (index + 1).toString().padStart(3, '0'),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        text = chapter.title.ifBlank { "第 ${chapter.index} 话" },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (selected) {
+                        FolioKicker("读到这里", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ---------------- 栏内的小操作 ---------------- */
+
+/** 无涟漪文字操作，底栏的上一话 / 下一话与错误条的「重试」共用。 */
+@Composable
+private fun ChromeTextAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Box(
+        modifier = modifier
+            .height(36.dp)
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            },
+            maxLines = 1,
+        )
+    }
+}
+
+/** 深色图片区上的方框操作，避免纸色按钮在暗底上消失。 */
+@Composable
+private fun DarkOutlineAction(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .height(40.dp)
+            .border(1.dp, Color.White.copy(alpha = 0.55f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White,
+            maxLines = 1,
         )
     }
 }
@@ -386,16 +607,25 @@ private fun ComicPageBox(
 
             error != null -> Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .border(1.dp, Color.White.copy(alpha = 0.18f))
+                    .padding(18.dp),
             ) {
+                Text(
+                    text = "ERROR",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.55f),
+                )
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = error,
                     color = Color.White.copy(alpha = 0.8f),
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = onRetry) { Text("重试", color = Color.White) }
+                Spacer(Modifier.height(10.dp))
+                DarkOutlineAction(text = "重试", onClick = onRetry)
             }
 
             else -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -408,7 +638,7 @@ private fun ComicPageBox(
                 Text(
                     text = "第 ${page + 1}/$total 页",
                     color = Color.White.copy(alpha = 0.45f),
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
