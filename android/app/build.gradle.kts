@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.5：Anthropic 品牌色 + 克制动效（页面转场 / 列表入场 / 按压反馈 / HUD 显隐）。
+        // 3.4.6：修复设置页列表项被 Box 叠在一起的问题（Reveal 改 Column）。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 11
-        versionName = "3.4.5"
+        versionCode = 12
+        versionName = "3.4.6"
         vectorDrawables.useSupportLibrary = true
     }
 

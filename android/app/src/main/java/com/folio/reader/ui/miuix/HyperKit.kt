@@ -644,13 +644,16 @@ object FolioMotion {
 /**
  * 列表入场：淡入 + 10dp 上移，按 [index] 错开一小段。
  *
+ * 用 `Column` 而不是 `Box`：列表项里经常直接并排写好几个组件
+ * （分组标题、发丝线、设置行），`Box` 会把它们叠在同一位置。
+ *
  * 状态用 `rememberSaveable` 保存，滚出屏幕再滚回来时不会重新播一遍。
  */
 @Composable
 fun Reveal(
     index: Int = 0,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     var shown by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -671,14 +674,13 @@ fun Reveal(
         label = "reveal-lift",
     )
     val liftPx = with(LocalDensity.current) { lift.toPx() }
-    Box(
+    Column(
         modifier.graphicsLayer {
             this.alpha = alpha
             translationY = liftPx
-        }
-    ) {
-        content()
-    }
+        },
+        content = content,
+    )
 }
 
 /** 按压缩放：默认 0.98，克制到只让人感到「按到了」。 */
