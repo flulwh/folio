@@ -118,16 +118,23 @@ export function isHeading(text, regex) {
 /** Build chapters using an already compiled regex (shared by parseBook). */
 function buildChaptersWithRegex(paragraphs, regex) {
   const chapters = [];
+  // Readers mark heading paragraphs with a class; keeping this list here saves
+  // them a second O(n) regex sweep over the whole book on every open.
+  const headingIndexes = [];
   for (let i = 0; i < paragraphs.length; i += 1) {
     const p = paragraphs[i];
     if (p.blank) continue;
-    if (isHeading(p.text, regex)) chapters.push({ title: cleanTitle(p.text), paraIndex: i });
+    if (isHeading(p.text, regex)) {
+      headingIndexes.push(i);
+      chapters.push({ title: cleanTitle(p.text), paraIndex: i });
+    }
   }
 
   if (chapters.length === 0) {
     return {
       chapters: [{ title: '全文', paraIndex: 0 }],
       hasHeadings: false,
+      headingIndexes,
     };
   }
 
@@ -143,7 +150,7 @@ function buildChaptersWithRegex(paragraphs, regex) {
     if (hasRealText) chapters.unshift({ title: '开篇', paraIndex: 0 });
   }
 
-  return { chapters, hasHeadings: true };
+  return { chapters, hasHeadings: true, headingIndexes };
 }
 
 /**
@@ -182,14 +189,42 @@ export function parseBook(content, customRegex = '') {
   if (!regex || regex.error) regex = compileRegex(AUTO_CHAPTER_REGEX);
   // Compile once and share the instance across both passes.
   const paragraphs = splitParagraphs(text, regex);
-  const { chapters, hasHeadings } = buildChaptersWithRegex(paragraphs, regex);
+  const { chapters, hasHeadings, headingIndexes } = buildChaptersWithRegex(paragraphs, regex);
   return {
     paragraphs,
     chapters,
     hasHeadings,
+    headingIndexes,
     charCount: text.length,
     wordCount: countWords(text),
   };
+}
+
+/**
+ * 解析缓存：本地书每次打开都重新 parse 一遍，对几 MB 的书是一次明显的卡顿。
+ * 缓存键由书 id + 正文长度 + 正文首尾字符 + 正则组成，同一本书再次打开直接命中。
+ * 只保留最近几本，避免大书把内存吃满。
+ */
+const PARSE_CACHE_MAX = 3;
+const parseCache = [];
+
+export function parseBookCached(content, customRegex = '', cacheKey = '') {
+  const source = content || '';
+  const signature = `${cacheKey}|${customRegex}|${source.length}|${source.charCodeAt(0)}|${source.charCodeAt(source.length - 1)}`;
+  for (let i = 0; i < parseCache.length; i += 1) {
+    if (parseCache[i].signature === signature) {
+      const entry = parseCache[i];
+      if (i > 0) {
+        parseCache.splice(i, 1);
+        parseCache.unshift(entry);
+      }
+      return entry.parsed;
+    }
+  }
+  const parsed = parseBook(source, customRegex);
+  parseCache.unshift({ signature, parsed });
+  if (parseCache.length > PARSE_CACHE_MAX) parseCache.length = PARSE_CACHE_MAX;
+  return parsed;
 }
 
 /** CJK characters count as words; latin words by whitespace. */
