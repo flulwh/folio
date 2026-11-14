@@ -48,9 +48,14 @@ if (lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version
 }
 
 const readme = read('README.md');
+// Android 端有自己的版本线（android-x.y.z、Folio-x.y.z-android.apk），
+// 不归桌面端发版门禁管，扫版本号前先摘掉，否则双端版本不同会误报。
+const readmeDesktop = readme
+  .replace(/(?:android|Folio)-\d+\.\d+\.\d+-android/gi, '')
+  .replace(/android-\d+\.\d+\.\d+/gi, '');
 // (?<![\d.]) 排除 IP 的子串，(?!\.\d) 排除 127.0.0.1 这类四段地址；
 // 但允许 `Folio-Setup-2.0.0.exe` 后面跟 .exe。
-const docVersions = [...new Set([...readme.matchAll(/(?<![\d.])\d+\.\d+\.\d+(?!\.\d)/g)].map((m) => m[0]))];
+const docVersions = [...new Set([...readmeDesktop.matchAll(/(?<![\d.])\d+\.\d+\.\d+(?!\.\d)/g)].map((m) => m[0]))];
 const stale = docVersions.filter((v) => v !== pkg.version);
 if (stale.length) fail('README 版本号', `出现旧版本 ${stale.join(', ')}，请同步到 ${pkg.version}`);
 else pass(`README 版本号同步（${pkg.version}）`);
