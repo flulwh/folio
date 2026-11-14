@@ -12,11 +12,8 @@ import { useAppActions, useFonts, useProgress, useSettings } from '../store/AppS
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
-  AUTO_CHAPTER_REGEX,
   chapterIndexForPara,
-  compileRegex,
-  isHeading,
-  parseBook,
+  parseBookCached,
 } from '../utils/chapters.js';
 import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
 import TocPanel from './TocPanel.jsx';
@@ -38,9 +35,11 @@ const UI_IDLE_MS = 2500;
 const MEASURE_CHUNK = 600;
 // 超过这个段落数才显示「正在排版」提示，小书瞬间就好
 const MEASURE_HINT_MIN = 400;
-// 段落高度缓存：同一本书 + 同一排版 + 同一栏宽，第二次打开直接命中，不再跑测量
+// 段落高度缓存：同一本书 + 同一排版 + 同一栏宽，第二次打开直接命中，不再跑测量。
+// 上限按「大长篇」给：几百万字的长篇段落数轻松过 4 万，卡在 4 万会让这类书永远存不进缓存、
+// 每次打开都整本重排一遍。localStorage 一条几十万段的记录约 1~2MB，还能放得下。
 const HEIGHT_CACHE_PREFIX = 'folio:heights:';
-const HEIGHT_CACHE_MAX = 40000;
+const HEIGHT_CACHE_MAX = 200000;
 
 function loadHeights(key, width) {
   try {
@@ -55,15 +54,35 @@ function loadHeights(key, width) {
   }
 }
 
+function dropOtherHeights(keepKey) {
+  try {
+    const doomed = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (key && key.startsWith(HEIGHT_CACHE_PREFIX) && key !== HEIGHT_CACHE_PREFIX + keepKey) {
+        doomed.push(key);
+      }
+    }
+    doomed.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    /* 拿不到 storage 就算了 */
+  }
+}
+
 function saveHeights(key, width, heights) {
   if (!heights || heights.length > HEIGHT_CACHE_MAX) return;
+  const payload = JSON.stringify({ w: width, h: Array.from(heights, (value) => Math.round(value)) });
   try {
-    window.localStorage.setItem(
-      HEIGHT_CACHE_PREFIX + key,
-      JSON.stringify({ w: width, h: Array.from(heights, (value) => Math.round(value)) })
-    );
+    window.localStorage.setItem(HEIGHT_CACHE_PREFIX + key, payload);
   } catch {
-    /* localStorage 满了就算了，下次再测 */
+    // 写不进去多半是配额满了：先把别本书的旧记录清掉再试一次，
+    // 否则这本书永远命中不了缓存，每次打开都要重新排版。
+    dropOtherHeights(key);
+    try {
+      window.localStorage.setItem(HEIGHT_CACHE_PREFIX + key, payload);
+    } catch {
+      /* 还是不行就算了，下次再测 */
+    }
   }
 }
 
@@ -95,8 +114,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         : '0.006em';
 
   const parsed = useMemo(
-    () => parseBook(book.content || '', settings.chapterRegex),
-    [book.content, settings.chapterRegex]
+    () => parseBookCached(book.content || '', settings.chapterRegex, book.id),
+    [book.content, book.id, settings.chapterRegex]
   );
   const {
     paragraphs,
@@ -130,18 +149,14 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const hasHeadings = book.cloudChapters?.length ? true : parsedHasHeadings;
 
   const headingSet = useMemo(() => {
-    const set = new Set();
     if (book.cloudChapters?.length) {
+      const set = new Set();
       chapters.forEach((item) => set.add(item.paraIndex));
       return set;
     }
-    let regex = compileRegex(settings.chapterRegex.trim() || AUTO_CHAPTER_REGEX);
-    if (regex instanceof Error || (regex && regex.error)) regex = compileRegex(AUTO_CHAPTER_REGEX);
-    paragraphs.forEach((p, i) => {
-      if (!p.blank && isHeading(p.text, regex)) set.add(i);
-    });
-    return set;
-  }, [book.cloudChapters, chapters, paragraphs, settings.chapterRegex]);
+    // parseBook 已经把标题段落挑出来了，这里不再对全书跑一遍正则。
+    return new Set(parsed.headingIndexes);
+  }, [book.cloudChapters, chapters, parsed]);
 
   const estimate = useMemo(() => {
     const usable = Math.max(240, settings.pageWidth - 48);
@@ -157,6 +172,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const [measuring, setMeasuring] = useState(true);
   const measureHeightsRef = useRef(null);
   const [measureFrom, setMeasureFrom] = useState(0);
+  // 「正在排版」延迟出现：命中缓存时测量只占一帧，立刻显示反而像是每次都重排了一遍。
+  const [measureHint, setMeasureHint] = useState(false);
 
   const resetMeasure = useCallback(() => {
     if (measureRafRef.current) {
@@ -539,7 +556,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   useEffect(() => {
     let alive = true;
-    // Web fonts change line heights; re-measure once they are in.
+    // 只有用户装了自己字体（@font-face 异步加载）时才需要等字体回来重测；
+    // 系统字体是同步可用的，再测一遍只会让「正在排版」多闪一次。
+    if (!activeUserFont) return undefined;
     if (typeof document !== 'undefined' && document.fonts?.ready) {
       document.fonts.ready.then(() => {
         if (!alive) return;
@@ -551,7 +570,16 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     return () => {
       alive = false;
     };
-  }, [paragraphs.length]);
+  }, [activeUserFont, paragraphs.length]);
+
+  useEffect(() => {
+    if (!measuring || paragraphs.length <= MEASURE_HINT_MIN) {
+      setMeasureHint(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setMeasureHint(true), 240);
+    return () => clearTimeout(timer);
+  }, [measuring, paragraphs.length]);
 
   useLayoutEffect(() => {
     if (!measuring) return;
@@ -1095,7 +1123,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         </div>
       </div>
 
-      {measuring && paragraphs.length > MEASURE_HINT_MIN && (
+      {measureHint && (
         <div className="reader-measuring">
           <span className="reader-measuring-dot" />
           正在排版
