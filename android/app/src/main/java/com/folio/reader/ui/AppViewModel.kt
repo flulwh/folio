@@ -15,6 +15,7 @@ import com.folio.reader.core.BookKind
 import com.folio.reader.core.JsonIo
 import com.folio.reader.core.PageKey
 import com.folio.reader.core.ProgressEntry
+import com.folio.reader.core.ProgressMerger
 import com.folio.reader.core.ReaderMark
 import com.folio.reader.core.SampleSize
 import com.folio.reader.core.SearchHit
@@ -351,6 +352,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             _shelf.update { it.copy(syncing = false, message = message) }
             reloadLocal()
+            applySyncedProgress(progressReport.adoptedIds)
             loadSettingsState()
         }
     }
@@ -867,6 +869,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_reader.value.book?.id == book.id) _reader.update { it.copy(marks = list) }
     }
 
+    /**
+     * 同步取回更新的进度后，把正在读的这本书也挪过去。
+     *
+     * 不挪的话阅读器还停在旧位置：它下一次重新测量或翻页就拿着旧位置写进度，
+     * 再盖上「现在」的时间戳，把刚取回来的桌面端进度又冲掉——用户看到的就是
+     * 「电脑上明明读得更远，同步过去却退回手机的位置」。
+     *
+     * 只处理本机书：云端书的段落号是当前章窗口内的相对值，跨章要重新取正文，
+     * 留到下次打开时自然落地。
+     */
+    private fun applySyncedProgress(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        val state = _reader.value
+        val book = state.book ?: return
+        if (state.isCloud || state.loading || book.id !in ids) return
+        val entry = progressMap[book.id] ?: return
+        val total = state.paragraphs.size
+        if (total == 0) return
+        val target = (entry.paraIndex ?: return).coerceIn(0, total - 1)
+        if (target == state.paraIndex) return
+        val chapterIndex = TextParser.chapterIndexForPara(state.chapters, target)
+        _reader.update {
+            it.copy(
+                paraIndex = target,
+                chapterIndex = chapterIndex,
+                chapterTitle = state.chapters.getOrNull(chapterIndex)?.title.orEmpty(),
+                percent = entry.percent ?: percentOf(target, total, 0, 0),
+            )
+        }
+        scrollToParagraph(target)
+    }
+
     /** 跳到某条痕迹所在段落；云端书跨章时先把目标章拉下来。 */
     fun jumpToMark(mark: ReaderMark) {
         val state = _reader.value
@@ -1288,7 +1322,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             percent = percent,
             updatedAt = System.currentTimeMillis(),
         )
-        if (samePlace(progressMap[book.id], entry)) return
+        // 页号只体现在 percent 里，漫画必须带上它判重，否则同话内翻页不落盘
+        if (ProgressMerger.samePlace(progressMap[book.id], entry, includePercent = true)) return
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         comicProgressJob?.cancel()
@@ -1321,7 +1356,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun recordProgress(book: Book, entry: ProgressEntry) {
         // 位置没动就不写。打开书时的还原滚动、重新测量都会走到这里，
         // 每次都盖一个「现在」会把桌面端更新的位置冲掉；只有真的翻过去才回写。
-        if (samePlace(progressMap[book.id], entry)) return
+        if (ProgressMerger.samePlace(progressMap[book.id], entry)) return
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         persistJob?.cancel()
@@ -1341,16 +1376,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-    }
-
-    /** 只比「读到哪」，不比 `updatedAt`；两端合并后重复上报不该再刷新时间戳。 */
-    private fun samePlace(a: ProgressEntry?, b: ProgressEntry): Boolean {
-        if (a == null) return false
-        return a.paraIndex == b.paraIndex &&
-            a.chapter == b.chapter &&
-            a.chapterIndex == b.chapterIndex &&
-            a.windowBase == b.windowBase &&
-            a.percent == b.percent
     }
 
     /** 立刻把进度写盘并尝试补写。 */

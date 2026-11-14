@@ -30,6 +30,8 @@ class ProgressSync(
     data class Report(
         /** 桌面端更新、手机采纳的条数。 */
         val adopted: Int = 0,
+        /** 被采纳的书 id（本机 id），用来把正在读的那本书同步挪位。 */
+        val adoptedIds: Set<String> = emptySet(),
         /** 手机更新、回写桌面端的条数。 */
         val pushed: Int = 0,
         /** 回写失败、留待下次的条数。 */
@@ -77,6 +79,7 @@ class ProgressSync(
         val local = progress.read()
         val next = LinkedHashMap(local)
         var adopted = 0
+        val adoptedIds = mutableSetOf<String>()
         for ((remoteId, remoteEntry) in remote) {
             val book = byRemoteId[remoteId]
             val localId = book?.id ?: remoteId
@@ -85,7 +88,10 @@ class ProgressSync(
             val merged = ProgressMerger.mergeEntry(current, incoming) ?: continue
             if (merged == current) continue
             next[localId] = merged
-            if (current == null || incoming.updatedAt > current.updatedAt) adopted += 1
+            if (current == null || incoming.updatedAt > current.updatedAt) {
+                adopted += 1
+                adoptedIds += localId
+            }
         }
         if (next != local) progress.write(next)
 
@@ -116,6 +122,7 @@ class ProgressSync(
 
         return Report(
             adopted = adopted,
+            adoptedIds = adoptedIds,
             pushed = pushed,
             failed = failed,
             message = messageOf(adopted, pushed, failed),
