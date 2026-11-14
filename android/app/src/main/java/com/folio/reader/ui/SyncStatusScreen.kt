@@ -17,9 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Text
@@ -36,9 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Book
 import com.folio.reader.core.SyncState
-import com.folio.reader.ui.miuix.HyperGroup
-import com.folio.reader.ui.miuix.HyperRow
-import com.folio.reader.ui.miuix.HyperSectionTitle
+import com.folio.reader.ui.miuix.GroupLabel
+import com.folio.reader.ui.miuix.Hairline
 import com.folio.reader.ui.miuix.PageMargin
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Button
@@ -47,9 +44,10 @@ import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 同步报告（HyperOS）：状态卡 + 两个操作 + 冲突提示 + 逐本账本 + 诊断。
+ * 同步报告。
  *
- * 同步失败时用户需要知道「是哪一本、为什么」，所以每本书都带一行原因。
+ * 三个数字横排当表头，下面一条发丝线；逐本状态就是普通列表行，
+ * 传输中在行下补一条 2dp 进度线，失败行直接给「重试」。没有卡片。
  */
 @Composable
 fun SyncStatusScreen(
@@ -59,7 +57,6 @@ fun SyncStatusScreen(
     val state by vm.shelf.collectAsState()
     val books = state.books.distinctBy { it.id }
     val scheme = MiuixTheme.colorScheme
-    val hasConflicts = state.conflictCount > 0
 
     Column(Modifier.fillMaxSize().background(scheme.background)) {
         SyncHeader(onBack = onBack)
@@ -68,130 +65,108 @@ fun SyncStatusScreen(
             modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
-            item {
-                HyperSectionTitle("状态")
-                HyperGroup {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            item("stats") {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Stat(value = if (state.online) "在线" else "离线", label = "连接", Modifier.weight(1f))
+                    StatDivider()
+                    Stat(
+                        value = state.serverVersion.ifBlank { "—" },
+                        label = "桌面端",
+                        modifier = Modifier.weight(1f),
+                    )
+                    StatDivider()
+                    Stat(value = lastSyncText(state.lastSyncAt), label = "上次同步", Modifier.weight(1f))
+                }
+                Hairline(inset = PageMargin)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Button(
+                        onClick = { vm.syncNow() },
+                        enabled = !state.syncing,
+                        modifier = Modifier.weight(1f),
+                        cornerRadius = 10.dp,
+                        minHeight = 40.dp,
                     ) {
-                        StatCard(
-                            value = if (state.online) "在线" else "离线",
-                            label = "连接",
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatCard(
-                            value = state.serverVersion.ifBlank { "—" },
-                            label = "桌面端",
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatCard(
-                            value = lastSyncText(state.lastSyncAt),
-                            label = "上次同步",
-                            modifier = Modifier.weight(1f),
+                        Text(
+                            text = if (state.syncing) "同步中…" else "立即同步",
+                            fontSize = 13.5.sp,
+                            color = scheme.onPrimary,
                         )
                     }
+                    TextButton(
+                        text = "重新检测",
+                        onClick = { vm.testConnection() },
+                        modifier = Modifier.weight(1f),
+                        cornerRadius = 10.dp,
+                        minHeight = 40.dp,
+                    )
+                }
+            }
+
+            if (state.conflictCount > 0) {
+                item("conflicts") {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Modifier.fillMaxWidth().background(scheme.primaryContainer),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Button(
-                            onClick = { vm.syncNow() },
-                            enabled = !state.syncing,
-                            modifier = Modifier.weight(1f),
-                            cornerRadius = 14.dp,
-                            minHeight = 44.dp,
-                        ) {
-                            Text(
-                                text = if (state.syncing) "同步中…" else "立即同步",
-                                fontSize = 14.sp,
-                                color = scheme.onPrimary,
-                            )
-                        }
-                        TextButton(
-                            text = "重新检测",
-                            onClick = { vm.testConnection() },
-                            modifier = Modifier.weight(1f),
-                            cornerRadius = 14.dp,
-                            minHeight = 44.dp,
+                        Box(Modifier.width(2.dp).height(34.dp).background(scheme.primary))
+                        Text(
+                            text = "${state.conflictCount} 本内容不一致，请选择保留哪一版",
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                            fontSize = 12.5.sp,
+                            color = scheme.primary,
+                            maxLines = 2,
                         )
                     }
                 }
             }
 
-            if (hasConflicts) {
-                item {
-                    HyperSectionTitle("冲突")
-                    HyperGroup {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
-                                Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(scheme.primary)
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "${state.conflictCount} 本内容不一致，请选择保留哪一版",
-                                fontSize = 12.5.sp,
-                                color = scheme.onSurface,
-                                maxLines = 2,
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                HyperSectionTitle(if (books.isEmpty()) "无条目" else "逐本状态 · ${books.size} 项")
+            item("books-label") {
+                GroupLabel(
+                    text = "逐本状态",
+                    trailing = if (books.isEmpty()) "0" else "${books.size}",
+                    inset = PageMargin,
+                )
+                Hairline(inset = PageMargin)
             }
 
             if (books.isEmpty()) {
-                item {
+                item("books-empty") {
                     Text(
                         text = "导入一本 txt，或连上桌面端同步一次。",
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(horizontal = PageMargin, vertical = 16.dp),
                         fontSize = 12.5.sp,
                         color = scheme.onSurfaceVariantSummary,
                     )
                 }
             } else {
-                item {
-                    HyperGroup {
-                        books.forEachIndexed { index, book ->
-                            SyncBookRow(
-                                book = book,
-                                state = state,
-                                onRetry = { vm.retrySync(book) },
-                            )
-                            if (index < books.lastIndex) {
-                                Box(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 18.dp)
-                                        .height(1.dp)
-                                        .background(scheme.dividerLine)
-                                )
-                            }
-                        }
-                    }
+                items(count = books.size, key = { books[it].id }) { index ->
+                    SyncBookRow(
+                        book = books[index],
+                        state = state,
+                        onRetry = { vm.retrySync(books[index]) },
+                    )
                 }
             }
 
-            item {
-                HyperSectionTitle("诊断")
-                HyperGroup {
-                    Text(
-                        text = diagnosticsOf(state),
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        fontSize = 11.5.sp,
-                        fontFamily = FontFamily.Monospace,
-                        color = scheme.onSurfaceVariantSummary,
-                    )
-                }
+            item("diagnostics") {
+                GroupLabel(text = "诊断", inset = PageMargin)
+                Hairline(inset = PageMargin)
+                Text(
+                    text = diagnosticsOf(state),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = PageMargin, vertical = 14.dp),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = scheme.onSurfaceVariantSummary,
+                )
+                Hairline(inset = PageMargin)
             }
         }
     }
@@ -207,7 +182,10 @@ private fun SyncHeader(onBack: () -> Unit) {
             .statusBarsPadding()
             .padding(horizontal = PageMargin),
     ) {
-        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(top = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box(
                 Modifier
                     .size(40.dp)
@@ -218,16 +196,14 @@ private fun SyncHeader(onBack: () -> Unit) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(19.dp),
                     tint = scheme.onSurface,
                 )
             }
-            Spacer(Modifier.weight(1f))
-            Text(text = "SYNC / REPORT", fontSize = 11.sp, color = scheme.primary)
         }
         Text(
             text = "同步",
-            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
             fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
@@ -237,26 +213,26 @@ private fun SyncHeader(onBack: () -> Unit) {
 }
 
 @Composable
-private fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
+private fun Stat(value: String, label: String, modifier: Modifier = Modifier) {
     val scheme = MiuixTheme.colorScheme
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(scheme.secondary)
-            .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    Column(modifier = modifier.padding(vertical = 12.dp)) {
         Text(
             text = value,
-            fontSize = 15.sp,
+            fontSize = 16.sp,
+            fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Medium,
             color = scheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(2.dp))
-        Text(text = label, fontSize = 10.5.sp, color = scheme.onSurfaceVariantSummary, maxLines = 1)
+        Spacer(Modifier.height(3.dp))
+        Text(text = label, fontSize = 10.sp, color = scheme.onSurfaceVariantSummary, maxLines = 1)
     }
+}
+
+@Composable
+private fun StatDivider() {
+    Box(Modifier.width(0.6.dp).height(26.dp).background(MiuixTheme.colorScheme.dividerLine))
 }
 
 @Composable
@@ -268,58 +244,86 @@ private fun SyncBookRow(book: Book, state: ShelfUiState, onRetry: () -> Unit) {
     val retryable = syncState == SyncState.FAILED || syncState == SyncState.NOT_SYNCED
 
     Column(Modifier.fillMaxWidth()) {
-        HyperRow(
-            title = book.title,
-            summary = buildString {
-                append(state.sourceLabelOf(book))
-                append(" · ")
-                append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
-                if (!reason.isNullOrBlank()) append(" · ").append(reason)
-            },
-            onClick = if (retryable) onRetry else null,
-            trailing = {
-                Text(text = labelOf(syncState), fontSize = 11.5.sp, color = scheme.onSurfaceVariantSummary)
-            },
-        )
-        if (syncState == SyncState.TRANSFERRING) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(scheme.dividerLine),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
-                            .height(3.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(scheme.primary)
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(text = "$percent%", fontSize = 11.sp, color = scheme.onSurfaceVariantSummary)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (retryable) Modifier.clickable(onClick = onRetry) else Modifier)
+                .padding(horizontal = PageMargin)
+                .padding(vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = book.title,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = buildString {
+                        append(state.sourceLabelOf(book))
+                        append(" · ")
+                        append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
+                        if (!reason.isNullOrBlank()) append(" · ").append(reason)
+                    },
+                    fontSize = 11.sp,
+                    color = scheme.onSurfaceVariantSummary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-        }
-        if (retryable) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = labelOf(syncState),
+                fontSize = 11.sp,
+                color = when (syncState) {
+                    SyncState.FAILED, SyncState.CONTENT_MISMATCH -> scheme.primary
+                    SyncState.SYNCED -> scheme.onSurfaceVariantSummary
+                    else -> scheme.onSurfaceVariantSummary
+                },
+                maxLines = 1,
+            )
+            if (retryable) {
+                Spacer(Modifier.width(10.dp))
                 Text(
                     text = "重试",
                     modifier = Modifier
                         .clickable(onClick = onRetry)
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                    fontSize = 11.5.sp,
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                    fontSize = 11.sp,
                     color = scheme.primary,
                     maxLines = 1,
                 )
             }
         }
+        if (syncState == SyncState.TRANSFERRING) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = PageMargin, end = PageMargin, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(2.dp)
+                        .background(scheme.dividerLine),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
+                            .height(2.dp)
+                            .background(scheme.primary)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(text = "$percent%", fontSize = 10.sp, color = scheme.onSurfaceVariantSummary)
+            }
+        }
+        Hairline(inset = PageMargin)
     }
 }
 

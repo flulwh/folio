@@ -12,11 +12,11 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.2：设置页改用 Miuix 自带的 SuperSwitch / SuperArrow /
-        // SuperDropdown 排布，去掉自造行零件与双重缩进。
+        // 3.4.3：书架 / 设置 / 同步 / 漫画 HUD 去掉卡片，改为整页列表 +
+        // 发丝分隔线，封面主导、单一朱砂强调色。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 8
-        versionName = "3.4.2"
+        versionCode = 9
+        versionName = "3.4.3"
         vectorDrawables.useSupportLibrary = true
     }
 

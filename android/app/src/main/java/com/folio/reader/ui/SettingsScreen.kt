@@ -43,15 +43,14 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.GroupLabel
+import com.folio.reader.ui.miuix.Hairline
 import java.util.Locale
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.extra.SuperArrow
@@ -69,12 +68,11 @@ private val DirectionChoices = listOf(
 private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 
 /**
- * 设置页（HyperOS）。
+ * 设置页。
  *
- * 行零件全部用 Miuix 自带组件：`Card` 做分组、`SmallTitle` 做组标题、
- * `SuperSwitch` / `SuperArrow` / `SuperDropdown` / `BasicComponent` 做行，
- * 分隔线用 `HorizontalDivider`。自己只写了两样 Miuix 没提供的东西：
- * 带数值的滑杆行，以及阅读排版实时预览。
+ * 整页就是一张表：分组标题 + 行 + 发丝线，没有卡片、没有圆角容器。
+ * 行零件全部用 Miuix 自带组件（`SuperSwitch` / `SuperArrow` / `SuperDropdown` /
+ * `BasicComponent`），自己只写带数值的滑杆行、阅读排版预览和底色选择。
  */
 @Composable
 fun SettingsScreen(
@@ -105,359 +103,378 @@ fun SettingsScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            contentPadding = PaddingValues(bottom = 40.dp),
         ) {
             /* ---------------- 连接 ---------------- */
             item("connect") {
-                SmallTitle(text = "连接")
-                SettingsCard {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        TextField(
-                            value = urlText,
-                            onValueChange = {
-                                urlText = it
-                                vm.updateServerUrl(it)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = "http://192.168.1.20:7788",
-                            useLabelAsPlaceholder = true,
-                            singleLine = true,
-                            cornerRadius = 14.dp,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        TextField(
-                            value = tokenText,
-                            onValueChange = {
-                                tokenText = it
-                                vm.updateToken(it)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = "访问码（桌面端「设置 → 网络」）",
-                            useLabelAsPlaceholder = true,
-                            singleLine = true,
-                            cornerRadius = 14.dp,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Button(
-                            onClick = { vm.testConnection() },
-                            enabled = !state.searching,
-                            cornerRadius = 14.dp,
-                            minHeight = 38.dp,
-                        ) {
-                            Text("测试连接", fontSize = 13.sp, color = scheme.onPrimary)
-                        }
-                        if (state.searching) {
-                            TextButton(
-                                text = "取消",
-                                onClick = { vm.cancelDiscover() },
-                                cornerRadius = 14.dp,
-                                minHeight = 38.dp,
-                            )
-                        } else if (state.connection != ConnectionState.UNKNOWN) {
-                            TextButton(
-                                text = "断开",
-                                onClick = { vm.disconnect() },
-                                cornerRadius = 14.dp,
-                                minHeight = 38.dp,
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = if (state.searching) "搜索中…" else "搜索桌面端",
-                            modifier = Modifier
-                                .clickable(enabled = !state.searching) { vm.discover { } }
-                                .padding(horizontal = 4.dp, vertical = 6.dp),
-                            fontSize = 12.5.sp,
-                            color = if (state.searching) scheme.disabledOnSurface else scheme.primary,
-                            maxLines = 1,
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (state.connection.healthy) Color(0xFF2E7D32) else scheme.primary
-                                )
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            text = if (state.connection.healthy) {
-                                state.connectionDetail.ifBlank { state.connection.label }
-                            } else {
-                                state.connection.label
-                            },
-                            modifier = Modifier.weight(1f),
-                            fontSize = 11.5.sp,
-                            color = scheme.onSurfaceVariantSummary,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    if (state.discovered.isNotEmpty()) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                            state.discovered.forEach { url ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            urlText = url
-                                            vm.updateServerUrl(url)
-                                        }
-                                        .padding(vertical = 9.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = url,
-                                        modifier = Modifier.weight(1f),
-                                        fontSize = 12.5.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = scheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(text = "填入", fontSize = 11.5.sp, color = scheme.primary)
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "桌面端要开着「局域网面板」；端口在桌面端「设置 → 网络」里。",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            fontSize = 11.5.sp,
-                            color = scheme.onSurfaceVariantSummary,
-                        )
-                    }
-                    HorizontalDivider(color = scheme.dividerLine)
-                    SuperArrow(
-                        title = "同步状态",
-                        summary = "逐本查看",
-                        onClick = onOpenSyncStatus,
+                GroupLabel(text = "连接", topGap = 12.dp)
+                Hairline(inset = 16.dp)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    TextField(
+                        value = urlText,
+                        onValueChange = {
+                            urlText = it
+                            vm.updateServerUrl(it)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "http://192.168.1.20:7788",
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        cornerRadius = 10.dp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextField(
+                        value = tokenText,
+                        onValueChange = {
+                            tokenText = it
+                            vm.updateToken(it)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "访问码（桌面端「设置 → 网络」）",
+                        useLabelAsPlaceholder = true,
+                        singleLine = true,
+                        cornerRadius = 10.dp,
                     )
                 }
+                Hairline(inset = 16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(
+                        onClick = { vm.testConnection() },
+                        enabled = !state.searching,
+                        cornerRadius = 10.dp,
+                        minHeight = 36.dp,
+                    ) {
+                        Text("测试连接", fontSize = 13.sp, color = scheme.onPrimary)
+                    }
+                    if (state.searching) {
+                        TextButton(
+                            text = "取消",
+                            onClick = { vm.cancelDiscover() },
+                            cornerRadius = 10.dp,
+                            minHeight = 36.dp,
+                        )
+                    } else if (state.connection != ConnectionState.UNKNOWN) {
+                        TextButton(
+                            text = "断开",
+                            onClick = { vm.disconnect() },
+                            cornerRadius = 10.dp,
+                            minHeight = 36.dp,
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = if (state.searching) "搜索中…" else "搜索桌面端",
+                        modifier = Modifier
+                            .clickable(enabled = !state.searching) { vm.discover { } }
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        fontSize = 12.5.sp,
+                        color = if (state.searching) scheme.disabledOnSurface else scheme.primary,
+                        maxLines = 1,
+                    )
+                }
+                Hairline(inset = 16.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (state.connection.healthy) Color(0xFF2E7D32) else scheme.primary
+                            )
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = if (state.connection.healthy) {
+                            state.connectionDetail.ifBlank { state.connection.label }
+                        } else {
+                            state.connection.label
+                        },
+                        modifier = Modifier.weight(1f),
+                        fontSize = 11.5.sp,
+                        color = scheme.onSurfaceVariantSummary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (state.discovered.isNotEmpty()) {
+                    state.discovered.forEach { url ->
+                        Hairline(inset = 16.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    urlText = url
+                                    vm.updateServerUrl(url)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = url,
+                                modifier = Modifier.weight(1f),
+                                fontSize = 12.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = scheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(text = "填入", fontSize = 11.5.sp, color = scheme.primary)
+                        }
+                    }
+                } else {
+                    Hairline(inset = 16.dp)
+                    Text(
+                        text = "桌面端要开着「局域网面板」；端口在桌面端「设置 → 网络」里。",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        fontSize = 11.5.sp,
+                        color = scheme.onSurfaceVariantSummary,
+                    )
+                }
+                Hairline(inset = 16.dp)
+                SuperArrow(
+                    title = "同步状态",
+                    summary = "逐本查看",
+                    onClick = onOpenSyncStatus,
+                )
+                Hairline(inset = 16.dp)
             }
 
             /* ---------------- 同步 ---------------- */
             item("sync") {
-                SmallTitle(text = "同步")
-                SettingsCard {
-                    SuperSwitch(
-                        checked = state.autoSync,
-                        onCheckedChange = vm::updateAutoSync,
-                        title = "自动同步",
-                        summary = "连上桌面端时自动对齐书架与进度",
-                    )
-                    SuperSwitch(
-                        checked = state.autoTransferUnder20MB,
-                        onCheckedChange = vm::updateAutoTransfer,
-                        title = "自动上传 20MB 以内的书",
-                        summary = "更大的书等你点「下载到手机」",
-                    )
-                    SuperSwitch(
-                        checked = state.wifiOnly,
-                        onCheckedChange = vm::updateWifiOnly,
-                        title = "仅在 Wi-Fi 下传输",
-                        summary = "按流量计费的网络里打开它",
-                    )
-                    SuperSwitch(
-                        checked = state.hideRemoteWhenOffline,
-                        onCheckedChange = vm::updateHideRemote,
-                        title = "未连接时隐藏在线书",
-                        summary = "免得点进去只看到一句报错",
-                    )
-                    HorizontalDivider(color = scheme.dividerLine)
+                GroupLabel(text = "同步")
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.autoSync,
+                    onCheckedChange = vm::updateAutoSync,
+                    title = "自动同步",
+                    summary = "连上桌面端时自动对齐书架与进度",
+                )
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.autoTransferUnder20MB,
+                    onCheckedChange = vm::updateAutoTransfer,
+                    title = "自动上传 20MB 以内的书",
+                    summary = "更大的书等你点「下载到手机」",
+                )
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.wifiOnly,
+                    onCheckedChange = vm::updateWifiOnly,
+                    title = "仅在 Wi-Fi 下传输",
+                    summary = "按流量计费的网络里打开它",
+                )
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.hideRemoteWhenOffline,
+                    onCheckedChange = vm::updateHideRemote,
+                    title = "未连接时隐藏在线书",
+                    summary = "免得点进去只看到一句报错",
+                )
+                Hairline(inset = 16.dp)
+                SuperArrow(
+                    title = "立即同步",
+                    summary = lastSyncLabel(state.lastSyncAt),
+                    rightText = if (shelf.syncing) "同步中…" else "同步",
+                    onClick = if (shelf.syncing) null else ({ vm.syncNow() }),
+                )
+                if (state.conflictCount > 0) {
+                    Hairline(inset = 16.dp)
                     SuperArrow(
-                        title = "立即同步",
-                        summary = lastSyncLabel(state.lastSyncAt),
-                        rightText = if (shelf.syncing) "同步中…" else "同步",
-                        onClick = if (shelf.syncing) null else ({ vm.syncNow() }),
+                        title = "${state.conflictCount} 处冲突",
+                        summary = "同名不同内容，需要你选保留哪一版",
+                        rightText = "处理",
+                        onClick = onOpenSyncStatus,
                     )
-                    if (state.conflictCount > 0) {
-                        SuperArrow(
-                            title = "${state.conflictCount} 处冲突",
-                            summary = "同名不同内容，需要你选保留哪一版",
-                            rightText = "处理",
-                            onClick = onOpenSyncStatus,
-                        )
-                    }
                 }
+                Hairline(inset = 16.dp)
             }
 
             /* ---------------- 阅读 ---------------- */
             item("read") {
-                SmallTitle(text = "阅读")
-                SettingsCard {
-                    ReadingPreview(state)
-                    HorizontalDivider(color = scheme.dividerLine)
-                    SuperDropdown(
-                        items = listOf("上下滚动", "左右翻页"),
-                        selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
-                        title = "阅读方式",
-                        onSelectedIndexChange = {
-                            vm.updateReadingMode(
-                                if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
-                            )
-                        },
-                    )
-                    SliderRow(
-                        title = "字号",
-                        valueLabel = "${state.fontSizeSp.roundToInt()}sp",
-                        value = state.fontSizeSp.coerceIn(12f, 32f),
-                        onValueChange = vm::updateFontSize,
-                        minValue = 12f,
-                        maxValue = 32f,
-                        decimalPlaces = 0,
-                    )
-                    SliderRow(
-                        title = "行距",
-                        valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
-                        value = state.lineHeight.coerceIn(1.3f, 2.4f),
-                        onValueChange = vm::updateLineHeight,
-                        minValue = 1.3f,
-                        maxValue = 2.4f,
-                        decimalPlaces = 2,
-                    )
-                    SliderRow(
-                        title = "字距",
-                        valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
-                        value = state.letterSpacingEm.coerceIn(0f, 0.12f),
-                        onValueChange = vm::updateLetterSpacing,
-                        minValue = 0f,
-                        maxValue = 0.12f,
-                        decimalPlaces = 3,
-                    )
-                    SliderRow(
-                        title = "段距",
-                        valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
-                        value = state.paragraphSpacing.coerceIn(0f, 2f),
-                        onValueChange = vm::updateParagraphSpacing,
-                        minValue = 0f,
-                        maxValue = 2f,
-                        decimalPlaces = 2,
-                    )
-                    SliderRow(
-                        title = "页边距",
-                        valueLabel = "${state.pagePadding}dp",
-                        value = state.pagePadding.toFloat().coerceIn(12f, 48f),
-                        onValueChange = { vm.updatePagePadding(it.roundToInt()) },
-                        minValue = 12f,
-                        maxValue = 48f,
-                        decimalPlaces = 0,
-                    )
-                    HorizontalDivider(color = scheme.dividerLine)
-                    SuperDropdown(
-                        items = listOf("宋体", "黑体"),
-                        selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
-                        title = "字体",
-                        onSelectedIndexChange = { index ->
-                            vm.updateFontFamily(
-                                if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
-                            )
-                        },
-                    )
-                    SuperDropdown(
-                        items = AutoScrollChoices,
-                        selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
-                        title = "自动滚动",
-                        onSelectedIndexChange = vm::updateAutoScrollSpeed,
-                    )
-                    SuperSwitch(
-                        checked = state.firstLineIndent,
-                        onCheckedChange = vm::updateFirstLineIndent,
-                        title = "首行缩进",
-                        summary = "每段首行缩进两个字符",
-                    )
-                    SuperSwitch(
-                        checked = state.keepScreenOn,
-                        onCheckedChange = vm::updateKeepScreenOn,
-                        title = "保持常亮",
-                        summary = "阅读时不熄屏",
-                    )
-                    HorizontalDivider(color = scheme.dividerLine)
-                    PaletteRow(
-                        selectedId = state.themePreset,
-                        onSelect = vm::updateThemePreset,
-                    )
-                    HorizontalDivider(color = scheme.dividerLine)
-                    SuperDropdown(
-                        items = DirectionChoices.map { it.first },
-                        selectedIndex = DirectionChoices
-                            .indexOfFirst { it.second == state.comicDirection }
-                            .coerceAtLeast(0),
-                        title = "漫画方向",
-                        onSelectedIndexChange = { index ->
-                            vm.updateComicDirection(DirectionChoices[index].second)
-                        },
-                    )
-                }
+                GroupLabel(text = "阅读")
+                Hairline(inset = 16.dp)
+                ReadingPreview(state)
+                Hairline(inset = 16.dp)
+                SuperDropdown(
+                    items = listOf("上下滚动", "左右翻页"),
+                    selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
+                    title = "阅读方式",
+                    onSelectedIndexChange = {
+                        vm.updateReadingMode(
+                            if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                        )
+                    },
+                )
+                Hairline(inset = 16.dp)
+                SliderRow(
+                    title = "字号",
+                    valueLabel = "${state.fontSizeSp.roundToInt()}sp",
+                    value = state.fontSizeSp.coerceIn(12f, 32f),
+                    onValueChange = vm::updateFontSize,
+                    minValue = 12f,
+                    maxValue = 32f,
+                    decimalPlaces = 0,
+                )
+                Hairline(inset = 16.dp)
+                SliderRow(
+                    title = "行距",
+                    valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
+                    value = state.lineHeight.coerceIn(1.3f, 2.4f),
+                    onValueChange = vm::updateLineHeight,
+                    minValue = 1.3f,
+                    maxValue = 2.4f,
+                    decimalPlaces = 2,
+                )
+                Hairline(inset = 16.dp)
+                SliderRow(
+                    title = "字距",
+                    valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
+                    value = state.letterSpacingEm.coerceIn(0f, 0.12f),
+                    onValueChange = vm::updateLetterSpacing,
+                    minValue = 0f,
+                    maxValue = 0.12f,
+                    decimalPlaces = 3,
+                )
+                Hairline(inset = 16.dp)
+                SliderRow(
+                    title = "段距",
+                    valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
+                    value = state.paragraphSpacing.coerceIn(0f, 2f),
+                    onValueChange = vm::updateParagraphSpacing,
+                    minValue = 0f,
+                    maxValue = 2f,
+                    decimalPlaces = 2,
+                )
+                Hairline(inset = 16.dp)
+                SliderRow(
+                    title = "页边距",
+                    valueLabel = "${state.pagePadding}dp",
+                    value = state.pagePadding.toFloat().coerceIn(12f, 48f),
+                    onValueChange = { vm.updatePagePadding(it.roundToInt()) },
+                    minValue = 12f,
+                    maxValue = 48f,
+                    decimalPlaces = 0,
+                )
+                Hairline(inset = 16.dp)
+                SuperDropdown(
+                    items = listOf("宋体", "黑体"),
+                    selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
+                    title = "字体",
+                    onSelectedIndexChange = { index ->
+                        vm.updateFontFamily(
+                            if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                        )
+                    },
+                )
+                Hairline(inset = 16.dp)
+                SuperDropdown(
+                    items = AutoScrollChoices,
+                    selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
+                    title = "自动滚动",
+                    onSelectedIndexChange = vm::updateAutoScrollSpeed,
+                )
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.firstLineIndent,
+                    onCheckedChange = vm::updateFirstLineIndent,
+                    title = "首行缩进",
+                    summary = "每段首行缩进两个字符",
+                )
+                Hairline(inset = 16.dp)
+                SuperSwitch(
+                    checked = state.keepScreenOn,
+                    onCheckedChange = vm::updateKeepScreenOn,
+                    title = "保持常亮",
+                    summary = "阅读时不熄屏",
+                )
+                Hairline(inset = 16.dp)
+                PaletteRow(
+                    selectedId = state.themePreset,
+                    onSelect = vm::updateThemePreset,
+                )
+                Hairline(inset = 16.dp)
+                SuperDropdown(
+                    items = DirectionChoices.map { it.first },
+                    selectedIndex = DirectionChoices
+                        .indexOfFirst { it.second == state.comicDirection }
+                        .coerceAtLeast(0),
+                    title = "漫画方向",
+                    onSelectedIndexChange = { index ->
+                        vm.updateComicDirection(DirectionChoices[index].second)
+                    },
+                )
+                Hairline(inset = 16.dp)
             }
 
             /* ---------------- 本机 ---------------- */
             item("local") {
-                SmallTitle(text = "本机")
-                SettingsCard {
-                    ValueRow(title = "本机正文", value = formatSize(state.localBytes))
-                    ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes))
-                    ValueRow(
-                        title = "磁盘缓存",
-                        value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
-                        valueColor = if (state.cacheIsZero) scheme.primary else null,
-                    )
-                    BasicComponent(
-                        title = "清空内存缓存",
-                        summary = "3.0 起正文不留磁盘副本",
-                        onClick = { vm.clearMemoryCache() },
-                        rightActions = {
-                            Text(
-                                text = "清理",
-                                fontSize = 13.sp,
-                                color = scheme.primary,
-                                maxLines = 1,
-                            )
-                        },
-                    )
-                    HorizontalDivider(color = scheme.dividerLine)
-                    ValueRow(title = "本机版本", value = state.appVersion)
-                    ValueRow(
-                        title = "桌面端",
-                        value = state.serverVersion.ifBlank { "未连接" },
-                    )
-                    SuperArrow(
-                        title = "诊断信息",
-                        summary = state.connectionDetail.ifBlank { "还没有连过桌面端" },
-                        rightText = if (showDiagnostics) "收起" else "展开",
-                        onClick = { showDiagnostics = !showDiagnostics },
-                    )
-                    if (showDiagnostics) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                            Text(
-                                text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
-                                fontSize = 11.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = scheme.onSurfaceVariantSummary,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "连接状态：${state.connection.label}",
-                                fontSize = 11.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = scheme.onSurfaceVariantSummary,
-                            )
-                        }
+                GroupLabel(text = "本机")
+                Hairline(inset = 16.dp)
+                ValueRow(title = "本机正文", value = formatSize(state.localBytes))
+                Hairline(inset = 16.dp)
+                ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes))
+                Hairline(inset = 16.dp)
+                ValueRow(
+                    title = "磁盘缓存",
+                    value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
+                    valueColor = if (state.cacheIsZero) scheme.primary else null,
+                )
+                Hairline(inset = 16.dp)
+                BasicComponent(
+                    title = "清空内存缓存",
+                    summary = "3.0 起正文不留磁盘副本",
+                    onClick = { vm.clearMemoryCache() },
+                    rightActions = {
+                        Text(
+                            text = "清理",
+                            fontSize = 13.sp,
+                            color = scheme.primary,
+                            maxLines = 1,
+                        )
+                    },
+                )
+                Hairline(inset = 16.dp)
+                ValueRow(title = "本机版本", value = state.appVersion)
+                Hairline(inset = 16.dp)
+                ValueRow(
+                    title = "桌面端",
+                    value = state.serverVersion.ifBlank { "未连接" },
+                )
+                Hairline(inset = 16.dp)
+                SuperArrow(
+                    title = "诊断信息",
+                    summary = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                    rightText = if (showDiagnostics) "收起" else "展开",
+                    onClick = { showDiagnostics = !showDiagnostics },
+                )
+                if (showDiagnostics) {
+                    Hairline(inset = 16.dp)
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        Text(
+                            text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                            fontSize = 11.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = scheme.onSurfaceVariantSummary,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "连接状态：${state.connection.label}",
+                            fontSize = 11.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = scheme.onSurfaceVariantSummary,
+                        )
                     }
                 }
+                Hairline(inset = 16.dp)
                 val message = state.message ?: shelf.message
                 if (!message.isNullOrBlank()) {
                     Text(
@@ -489,13 +506,13 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onBack),
+                Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "返回",
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(19.dp),
                     tint = scheme.onSurface,
                 )
             }
@@ -503,30 +520,18 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
         Text(
             text = "设置",
             modifier = Modifier.padding(start = 8.dp, top = 2.dp),
-            fontSize = 30.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
         )
         Text(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 10.dp),
-            fontSize = 11.5.sp,
+            modifier = Modifier.padding(start = 8.dp, top = 3.dp, bottom = 8.dp),
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
             color = scheme.onSurfaceVariantSummary,
         )
     }
-}
-
-/* ---------------- 组内容器 ---------------- */
-
-/** Miuix 官方 Card，内边距交给每一行自己，保证行文字与组标题对齐。 */
-@Composable
-private fun SettingsCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 16.dp,
-        insideMargin = PaddingValues(0.dp),
-        content = content,
-    )
 }
 
 /* ---------------- 行零件（Miuix 没提供的两样） ---------------- */
@@ -553,7 +558,8 @@ private fun SliderRow(
             )
             Text(
                 text = valueLabel,
-                fontSize = 13.sp,
+                fontSize = 12.5.sp,
+                fontFamily = FontFamily.Monospace,
                 color = scheme.onSurfaceVariantSummary,
             )
         }
@@ -578,6 +584,7 @@ private fun ValueRow(title: String, value: String, valueColor: Color? = null) {
             Text(
                 text = value,
                 fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
                 color = valueColor ?: scheme.onSurfaceVariantSummary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -609,9 +616,9 @@ private fun ReadingPreview(state: SettingsUiState) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(preset.bg)
-                .border(0.5.dp, preset.line, RoundedCornerShape(14.dp))
+                .border(0.5.dp, preset.line, RoundedCornerShape(8.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
             Text(
@@ -634,7 +641,8 @@ private fun ReadingPreview(state: SettingsUiState) {
                 text = "${state.fontSizeSp.roundToInt()}sp · 行距 " +
                     String.format(Locale.US, "%.2f", state.lineHeight) + " · 段距 " +
                     String.format(Locale.US, "%.2f", state.paragraphSpacing),
-                fontSize = 10.5.sp,
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
                 color = preset.soft,
                 maxLines = 1,
             )
@@ -646,7 +654,7 @@ private fun ReadingPreview(state: SettingsUiState) {
 @Composable
 private fun PaletteRow(selectedId: String, onSelect: (String) -> Unit) {
     val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -659,21 +667,21 @@ private fun PaletteRow(selectedId: String, onSelect: (String) -> Unit) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(6.dp))
                             .background(palette.bg)
                             .border(
-                                width = 2.dp,
+                                width = if (selected) 2.dp else 0.5.dp,
                                 color = if (selected) scheme.primary else scheme.dividerLine,
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(6.dp),
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (selected) {
                             Box(
                                 Modifier
-                                    .size(7.dp)
-                                    .clip(RoundedCornerShape(4.dp))
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
                                     .background(scheme.primary)
                             )
                         }
