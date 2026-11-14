@@ -209,6 +209,60 @@ fun HyperSheet(
     }
 }
 
+/**
+ * 发丝线：把列表行分开，靠线而不是靠卡片底。
+ *
+ * [inset] 是左缩进，用来让线与行文字对齐；缩进后仍贯穿到右边缘。
+ */
+@Composable
+fun Hairline(modifier: Modifier = Modifier, inset: Dp = 0.dp) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .padding(start = inset)
+            .height(0.6.dp)
+            .background(MiuixTheme.colorScheme.dividerLine)
+    )
+}
+
+/**
+ * 分组标题：小字号、拉字距、灰，像表格的分栏注释。
+ * 与行文字左对齐（[RowInset]），右侧可以带一个计数。
+ */
+@Composable
+fun GroupLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    trailing: String? = null,
+    inset: Dp = RowInset,
+    topGap: Dp = 24.dp,
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(start = inset, end = inset, top = topGap, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 1.2.sp,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            maxLines = 1,
+        )
+        if (trailing != null) {
+            Text(
+                text = trailing,
+                fontSize = 10.5.sp,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 /** 面板里的分组标题：12sp 半粗、拉开字距，上方 20dp、下方 8dp。 */
 @Composable
 fun HyperSectionLabel(text: String, modifier: Modifier = Modifier) {

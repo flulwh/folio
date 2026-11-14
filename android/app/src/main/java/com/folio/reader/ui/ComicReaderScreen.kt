@@ -140,34 +140,41 @@ fun ComicReaderScreen(
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Row(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            Column(
+                Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xE61C1D21))
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(Color(0xE6000000), Color(0x00000000))
+                        )
+                    ),
             ) {
-                DarkIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
-                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(
-                        text = book?.title.orEmpty(),
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.92f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "第 ${if (comic.chapterNo > 0) comic.chapterNo else comic.chapterIndex + 1} 话 · " +
-                            "第 ${comic.page + 1}/${comic.total} 页",
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.55f),
-                        maxLines = 1,
-                    )
+                Row(
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(start = 6.dp, end = 6.dp, bottom = 12.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    DarkIconButton(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
+                    Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                        Text(
+                            text = book?.title.orEmpty(),
+                            fontSize = 13.5.sp,
+                            color = Color.White.copy(alpha = 0.92f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "第 ${if (comic.chapterNo > 0) comic.chapterNo else comic.chapterIndex + 1} 话 · " +
+                                "第 ${comic.page + 1}/${comic.total} 页",
+                            fontSize = 10.5.sp,
+                            color = Color.White.copy(alpha = 0.52f),
+                            maxLines = 1,
+                        )
+                    }
+                    DarkIconButton(Icons.AutoMirrored.Filled.List, "选择话", { vm.toggleComicToc() })
                 }
-                DarkIconButton(Icons.AutoMirrored.Filled.List, "选择话", { vm.toggleComicToc() })
             }
         }
 
@@ -177,12 +184,10 @@ fun ComicReaderScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 14.dp)
-                    .padding(bottom = if (comic.controls) 112.dp else 18.dp)
+                    .padding(bottom = if (comic.controls) 150.dp else 18.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xE61C1D21))
-                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                    .background(Color(0xCC000000))
+                    .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -214,43 +219,46 @@ fun ComicReaderScreen(
             Column(
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xE61C1D21))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(Color(0x00000000), Color(0xF2000000))
+                        )
+                    )
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 24.dp, bottom = 4.dp),
             ) {
                 LinearProgressIndicator(
                     progress = comic.chapterProgress.coerceIn(0f, 1f),
-                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     DarkTextAction("上一话", comic.hasPrevChapter) { vm.prevComicChapter() }
                     Spacer(Modifier.weight(1f))
                     Text(
                         text = "${comic.page + 1} / ${comic.total}",
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         color = Color.White.copy(alpha = 0.86f),
                     )
                     Spacer(Modifier.weight(1f))
                     DarkTextAction("下一话", comic.hasNextChapter) { vm.nextComicChapter() }
                 }
+                Box(Modifier.fillMaxWidth().height(0.6.dp).background(Color.White.copy(alpha = 0.12f)))
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
                         .clickable { vm.toggleComicToc() }
-                        .padding(vertical = 8.dp),
+                        .padding(vertical = 10.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(text = "目录", modifier = Modifier.weight(1f), fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f))
                         Text(
                             text = "${comic.toc.size} 话 →",
                             fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = Color.White.copy(alpha = 0.52f),
                         )
                     }
                 }

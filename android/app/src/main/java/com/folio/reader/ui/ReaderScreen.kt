@@ -387,12 +387,10 @@ fun ReaderScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(horizontal = 14.dp)
                     .padding(bottom = if (reader.controls) 156.dp else 16.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(palette.surface.copy(alpha = 0.97f))
-                    .padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                    .background(palette.surface)
+                    .padding(start = 20.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
