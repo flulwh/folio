@@ -100,6 +100,7 @@ fun ReaderScreen(
     val settings by vm.settingsState.collectAsState()
     val listState = rememberLazyListState()
     val scrollTarget by vm.scrollTarget.collectAsState()
+    val pageTurn by vm.pageTurn.collectAsState()
 
     var scrubbing by remember { mutableStateOf(false) }
     var sliderValue by remember { mutableFloatStateOf(0f) }
@@ -171,6 +172,23 @@ fun ReaderScreen(
         }
     }
 
+    // 翻页：一屏的 88%，刚好让上一屏的最后一行留在视野里当锚点。
+    // 已经到头 / 到顶就顺势换章 —— 翻页手势在章节末尾不该「什么都点不动」。
+    LaunchedEffect(pageTurn.seq) {
+        if (pageTurn.seq == 0L) return@LaunchedEffect
+        val info = listState.layoutInfo
+        val viewport = info.viewportEndOffset - info.viewportStartOffset
+        if (viewport <= 0) return@LaunchedEffect
+        val step = viewport * 0.88f
+        if (pageTurn.direction > 0) {
+            val consumed = listState.scrollBy(step)
+            if (consumed < step * 0.1f && reader.hasNextChapter) vm.nextChapter()
+        } else {
+            val consumed = listState.scrollBy(-step)
+            if (consumed > -step * 0.1f && reader.hasPrevChapter) vm.prevChapter()
+        }
+    }
+
     LaunchedEffect(listState, book?.id) {
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
@@ -233,12 +251,23 @@ fun ReaderScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        // 正文（点击切换顶/底栏显隐）
+        // 正文：左 30% 上一页 / 右 30% 下一页 / 中间切换顶底栏
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(book?.id) {
-                    detectTapGestures(onTap = { vm.toggleControls() })
+                .pointerInput(book?.id, settings.tapToTurn) {
+                    detectTapGestures(onTap = { offset ->
+                        if (!settings.tapToTurn) {
+                            vm.toggleControls()
+                        } else {
+                            val edge = size.width * 0.3f
+                            when {
+                                offset.x < edge -> vm.requestPageTurn(-1)
+                                offset.x > size.width - edge -> vm.requestPageTurn(1)
+                                else -> vm.toggleControls()
+                            }
+                        }
+                    })
                 },
         ) {
             when {
@@ -707,6 +736,8 @@ fun ReaderScreen(
             onPagePadding = vm::updatePagePadding,
             onAutoScrollSpeed = vm::updateAutoScrollSpeed,
             onKeepScreenOn = vm::updateKeepScreenOn,
+            onTapToTurn = vm::updateTapToTurn,
+            onVolumeKeysTurn = vm::updateVolumeKeysTurn,
             onDismiss = { vm.toggleStyle() },
         )
     }

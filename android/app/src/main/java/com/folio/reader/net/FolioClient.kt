@@ -4,8 +4,10 @@ import com.folio.reader.core.HashUtils
 import com.folio.reader.core.LocalBook
 import com.folio.reader.core.Origin
 import com.folio.reader.core.ProgressEntry
+import com.folio.reader.core.ReaderMark
 import com.folio.reader.core.ServerState
 import com.folio.reader.core.TocChapter
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
@@ -47,6 +49,9 @@ data class Capabilities(
 
     /** 设备管理（T07）：桌面端能收心跳、发指令、收回执。 */
     val supportsDevices: Boolean get() = apiVersion >= 2 && features.contains("devices")
+
+    /** 双端痕迹同步：桌面端能读写 `/api/marks`。 */
+    val supportsMarks: Boolean get() = apiVersion >= 2 && features.contains("marks")
 
     companion object {
         /** 桌面端 2.6.0 起才是 apiVersion 2；小于它的要提示升级。 */
@@ -178,6 +183,27 @@ data class ChunkResult(
     val id: String? = null,
     val title: String? = null,
     val created: Boolean = false,
+)
+
+/**
+ * `/api/marks` 的拉取结果。
+ *
+ * [supported] 为 false 表示桌面端还没有痕迹接口（2.8.x 之前），
+ * 调用方应静默跳过，绝不能因此把同步判成失败。
+ */
+data class MarksSnapshot(
+    val supported: Boolean,
+    val ok: Boolean = false,
+    val marks: Map<String, List<ReaderMark>> = emptyMap(),
+    val message: String = "",
+)
+
+/** 回写痕迹的结果。`marks` 是桌面端合并后的那一本书的最终状态。 */
+data class MarksPushResult(
+    val supported: Boolean,
+    val ok: Boolean = false,
+    val marks: List<ReaderMark> = emptyList(),
+    val message: String = "",
 )
 
 /** 一次整文件下载的结果。 */
@@ -382,6 +408,105 @@ class FolioClient(
         body.put("data", entry.toJson(kind))
         val json = requestJson("/api/progress", "POST", timeoutMs, body.toString())
         return json.optBoolean("ok", false)
+    }
+
+    /* ---------------- 3.3：双端痕迹 ---------------- */
+
+    /**
+     * 拉取桌面端全部痕迹（书 id → 列表）。
+     *
+     * 桌面端没有这条路由时返回 `supported = false`，**不抛异常**：
+     * 老版本桌面端照样能同步书架与进度，不应该因为痕迹让整次同步失败。
+     */
+    fun fetchMarks(timeoutMs: Int = 15000): MarksSnapshot {
+        val json = markRequest("/api/marks", "GET", timeoutMs)
+            ?: return MarksSnapshot(supported = false)
+        if (!json.optBoolean("ok", false)) {
+            return MarksSnapshot(
+                supported = true,
+                message = json.optString("error").ifBlank { "读取痕迹失败" },
+            )
+        }
+        return MarksSnapshot(
+            supported = true,
+            ok = true,
+            marks = parseMarks(json.optJSONObject("marks")),
+        )
+    }
+
+    /**
+     * 把一本书的合并结果写回桌面端。
+     *
+     * @param id 桌面端的书 id
+     * @param marks 需要新增 / 覆盖的痕迹（已按 [ReaderMark.syncKey] 归一）
+     * @param remove 需要删除的 [ReaderMark.syncKey]
+     * @return 桌面端合并后的最终列表
+     */
+    fun pushMarks(
+        id: String,
+        marks: List<ReaderMark>,
+        remove: List<String>,
+        timeoutMs: Int = 15000,
+    ): MarksPushResult {
+        val body = JSONObject().apply {
+            put("id", id)
+            put("marks", JSONArray().apply { marks.forEach { put(it.toJson()) } })
+            put("remove", JSONArray().apply { remove.forEach { put(it) } })
+        }
+        val json = markRequest("/api/marks", "POST", timeoutMs, body)
+            ?: return MarksPushResult(supported = false)
+        if (!json.optBoolean("ok", false)) {
+            return MarksPushResult(
+                supported = true,
+                message = json.optString("error").ifBlank { "痕迹没有写回桌面端" },
+            )
+        }
+        return MarksPushResult(
+            supported = true,
+            ok = true,
+            marks = parseMarkList(json.optJSONArray("marks"), id),
+        )
+    }
+
+    private fun parseMarks(root: JSONObject?): Map<String, List<ReaderMark>> {
+        if (root == null) return emptyMap()
+        val out = LinkedHashMap<String, List<ReaderMark>>()
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val bookId = keys.next()
+            val list = parseMarkList(root.optJSONArray(bookId), bookId)
+            if (list.isNotEmpty()) out[bookId] = list
+        }
+        return out
+    }
+
+    private fun parseMarkList(array: JSONArray?, bookId: String): List<ReaderMark> {
+        if (array == null) return emptyList()
+        val out = ArrayList<ReaderMark>(array.length())
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            ReaderMark.fromJson(bookId, item)?.let(out::add)
+        }
+        return out
+    }
+
+    /** 痕迹接口统一入口；404 / 501 视为桌面端不支持。 */
+    private fun markRequest(
+        path: String,
+        method: String,
+        timeoutMs: Int,
+        body: JSONObject? = null,
+    ): JSONObject? = try {
+        requestJson(path, method, timeoutMs, body?.toString())
+    } catch (err: FolioException) {
+        when {
+            err.status == 404 || err.status == 501 -> null
+            err.status == 401 -> throw err
+            err.status in 400..499 -> JSONObject()
+                .put("ok", false)
+                .put("error", err.message.orEmpty())
+            else -> throw err
+        }
     }
 
     /** 封面字节；拿不到返回 null。 */

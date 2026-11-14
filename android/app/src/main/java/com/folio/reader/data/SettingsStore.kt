@@ -81,6 +81,25 @@ class SettingsStore(context: Context) {
         get() = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true)
         set(value) = prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
 
+    /**
+     * 点屏幕左右两侧翻页。默认开。
+     *
+     * 关掉后点击只切换顶 / 底栏（3.2 之前的行为），给习惯纯滚动的用户留退路。
+     */
+    var tapToTurn: Boolean
+        get() = prefs.getBoolean(KEY_TAP_TURN, true)
+        set(value) = prefs.edit().putBoolean(KEY_TAP_TURN, value).apply()
+
+    /**
+     * 音量键翻页。默认开。
+     *
+     * 上键上一页、下键下一页 —— 单手拿手机时大拇指正好落在音量键上，
+     * 不需要把手挪到屏幕底部。关掉后音量键恢复调音量。
+     */
+    var volumeKeysTurn: Boolean
+        get() = prefs.getBoolean(KEY_VOLUME_TURN, true)
+        set(value) = prefs.edit().putBoolean(KEY_VOLUME_TURN, value).apply()
+
     /** 漫画默认阅读方向：`vertical` 竖向连续 / `horizontal` 横向逐页。 */
     var comicDirection: String
         get() = prefs.getString(KEY_COMIC_DIRECTION, COMIC_VERTICAL) ?: COMIC_VERTICAL
@@ -214,6 +233,8 @@ class SettingsStore(context: Context) {
         private const val KEY_FIRST_LINE_INDENT = "first_line_indent"
         private const val KEY_AUTO_SCROLL_SPEED = "auto_scroll_speed"
         private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+        private const val KEY_TAP_TURN = "tap_to_turn"
+        private const val KEY_VOLUME_TURN = "volume_keys_turn"
         private const val KEY_FONT_FAMILY = "font_family"
         private const val KEY_THEME_PRESET = "theme_preset"
         private const val KEY_COMIC_DIRECTION = "comic_direction"

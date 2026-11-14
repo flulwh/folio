@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.2.0：整机 UI 重做 + 书签 / 划线 / 搜索 / 自动滚动。设备头里的
+        // 3.3.0：翻页手势 / 音量键 + 双端痕迹同步。设备头里的
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 4
-        versionName = "3.2.0"
+        versionCode = 5
+        versionName = "3.3.0"
         vectorDrawables.useSupportLibrary = true
     }
 

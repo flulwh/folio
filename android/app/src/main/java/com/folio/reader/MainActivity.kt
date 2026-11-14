@@ -1,6 +1,7 @@
 package com.folio.reader
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -8,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -34,6 +36,9 @@ class MainActivity : ComponentActivity() {
 
     private val vm: AppViewModel by viewModels()
 
+    /** 当前路由：音量键只在小说阅读页里翻页，设置页照常调音量。 */
+    private var route: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -42,6 +47,13 @@ class MainActivity : ComponentActivity() {
             val deleteConfirm by vm.deleteConfirm.collectAsState()
             FolioTheme(preset = settings.themePreset) {
                 val navController = rememberNavController()
+                DisposableEffect(navController) {
+                    val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, destination, _ ->
+                        route = destination.route
+                    }
+                    navController.addOnDestinationChangedListener(listener)
+                    onDispose { navController.removeOnDestinationChangedListener(listener) }
+                }
                 Box(Modifier.fillMaxSize()) {
                     NavHost(navController = navController, startDestination = ROUTE_SHELF) {
                         composable(ROUTE_SHELF) {
@@ -111,6 +123,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 音量键翻页：只在小说阅读页消费，其他页面保持系统音量行为。
+     * 开关在排版面板「06 翻页」里，关掉后这里直接放行。
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (route == ROUTE_NOVEL && vm.onVolumeKey(keyCode)) return true
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onStart() {

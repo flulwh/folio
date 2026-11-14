@@ -135,7 +135,9 @@ dataDir/
 | GET | `/api/chapter/:id?i=N` | 云端书第 N 章正文；`i` 省略时取当前章 |
 | GET | `/api/cover/:id` | 封面：本地缓存有就发文件，否则 302 到源站 |
 | POST | `/api/progress` | `{id, data}`，按 `updatedAt` 合并；只接受书架里存在的书 |
-| GET | `/api/events` | SSE：`hello` / `progress` / `books` / `config` |
+| GET | `/api/marks` | 整份 `marks.json`（书 id → 痕迹列表），供 Android 拉取 |
+| POST | `/api/marks` | `{id, marks, remove}`，按 `kind\|chapterNo\|paraIndex` 归一后合并写盘 |
+| GET | `/api/events` | SSE：`hello` / `progress` / `books` / `marks` / `config` |
 
 ### 进度合并
 
@@ -144,6 +146,13 @@ dataDir/
 mergeProgressEntry(current, incoming) // updatedAt 新的一方赢，字段浅合并
 mergeProgress(current, patch)         // 整份合并，只在真有变化时返回新对象
 ```
+
+### 痕迹合并
+
+两端 id 都是各自生成的，不能拿来对齐。`POST /api/marks` 用
+`kind|chapterNo|paraIndex`（云端书带章号）作为稳定键，同一键只留一条；
+`updatedAt` 新的一方胜出。删除由手机端算好 `remove` 列表显式传过来 ——
+服务端不存墓碑，`marks.json` 的结构仍与旧版本完全兼容。
 
 面板在 `pagehide` / 切后台时用 `lastIndex`（最后一次滚动确认的段落索引）补存一次，
 **不重新测量**：卸载时滚动条消失、视口变化会让布局偏移几段，重算会把位置写偏。

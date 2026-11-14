@@ -24,13 +24,41 @@ class MarkStore(
     @Synchronized
     fun read(bookId: String): List<ReaderMark> {
         val root = JsonIo.readObject(file) ?: return emptyList()
+        return parse(bookId, root)
+    }
+
+    /** 整份痕迹（书 id → 列表），双端同步一次读完，不按书反复开文件。 */
+    @Synchronized
+    fun readAll(): Map<String, List<ReaderMark>> {
+        val root = JsonIo.readObject(file) ?: return emptyMap()
+        val out = LinkedHashMap<String, List<ReaderMark>>()
+        val keys = root.keys()
+        while (keys.hasNext()) {
+            val bookId = keys.next()
+            val list = parse(bookId, root)
+            if (list.isNotEmpty()) out[bookId] = list
+        }
+        return out
+    }
+
+    /** 用整份合并结果覆盖某本书（同步拉回 / 合并落盘）。 */
+    @Synchronized
+    fun writeAll(bookId: String, marks: List<ReaderMark>): List<ReaderMark> {
+        val root = JsonIo.readObject(file) ?: JSONObject()
+        val sorted = marks.distinctBy { it.syncKey }.sortedWith(ORDER)
+        root.put(bookId, toArray(sorted))
+        JsonIo.write(file, root)
+        return sorted
+    }
+
+    private fun parse(bookId: String, root: JSONObject): List<ReaderMark> {
         val array = root.optJSONArray(bookId) ?: return emptyList()
         val out = ArrayList<ReaderMark>(array.length())
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
             ReaderMark.fromJson(bookId, item)?.let(out::add)
         }
-        return out.sortedWith(compareBy({ it.paraIndex }, { it.createdAt }))
+        return out.sortedWith(ORDER)
     }
 
     /** 同一段落同类型只保留一条（重复点书签 = 取消/改写，而不是堆一摞）。 */
@@ -45,13 +73,13 @@ class MarkStore(
                 ReaderMark.fromJson(mark.bookId, item)?.let(current::add)
             }
         }
-        current.removeAll {
-            it.paraIndex == mark.paraIndex && it.kind == mark.kind
-        }
+        // 同一处痕迹 = 同一 syncKey（段落 + 类型 + 云端书的章号）。
+        // 只比段落号会让两章的 P.3 互相顶掉。
+        current.removeAll { it.syncKey == mark.syncKey }
         current += mark
         root.put(mark.bookId, toArray(current))
         JsonIo.write(file, root)
-        return current.sortedWith(compareBy({ it.paraIndex }, { it.createdAt }))
+        return current.sortedWith(ORDER)
     }
 
     @Synchronized
@@ -66,7 +94,7 @@ class MarkStore(
         }
         root.put(bookId, toArray(kept))
         JsonIo.write(file, root)
-        return kept.sortedWith(compareBy({ it.paraIndex }, { it.createdAt }))
+        return kept.sortedWith(ORDER)
     }
 
     /** 改笔记；同时把书签升级为划线，方便「先收藏、后补一句话」。 */
@@ -82,6 +110,7 @@ class MarkStore(
                 mark.copy(
                     note = note,
                     kind = if (note.isBlank()) ReaderMark.KIND_BOOKMARK else ReaderMark.KIND_HIGHLIGHT,
+                    updatedAt = System.currentTimeMillis(),
                 )
             } else {
                 mark
@@ -89,7 +118,7 @@ class MarkStore(
         }
         root.put(bookId, toArray(updated))
         JsonIo.write(file, root)
-        return updated.sortedWith(compareBy({ it.paraIndex }, { it.createdAt }))
+        return updated.sortedWith(ORDER)
     }
 
     /** 引擎删书时一起清掉，避免痕迹文件越攒越大。 */
@@ -109,5 +138,8 @@ class MarkStore(
 
     companion object {
         private const val FILE_MARKS = "marks.json"
+
+        /** 云端书按章号排序（本机书 chapterNo 恒为 -1，退化成按段落排）。 */
+        private val ORDER = compareBy<ReaderMark>({ it.chapterNo }, { it.paraIndex }, { it.createdAt })
     }
 }

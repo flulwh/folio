@@ -34,7 +34,7 @@ const LIMITS = { transfer: MAX_TRANSFER, chunk: CHUNK, chunkBody: MAX_CHUNK_BODY
 /** 接口版本：手机端拿它判断「桌面端太旧」。2 = 2.6.0 起的能力集。 */
 const API_VERSION = 2;
 /** ping 里的能力位：手机据此开关功能，不认识的忽略即可。 */
-const API_FEATURES = ['library', 'upload', 'download', 'range', 'comic', 'devices'];
+const API_FEATURES = ['library', 'upload', 'download', 'range', 'comic', 'devices', 'marks'];
 const SSE_PING = 25000;
 /** 手机快照上限 256KB（PRD §2.1）。 */
 const MAX_SNAPSHOT_BODY = 256 * 1024;
@@ -397,6 +397,46 @@ function contentDisposition(name) {
 /*  服务本体                                                            */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/*  痕迹（书签 / 划线 / 笔记）                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 同一处痕迹的稳定键，必须与 Android `ReaderMark.syncKey` 完全一致：
+ * `kind|chapterNo|paraIndex`。两端的 id 都是各自生成的，不能拿来对齐。
+ */
+function markKeyOf(mark) {
+  return `${mark.kind || 'bookmark'}|${Number(mark.chapterNo) || -1}|${Number(mark.paraIndex) || 0}`;
+}
+
+/** 谁更新；老数据没有 updatedAt 时退回 createdAt。 */
+function markStampOf(mark) {
+  return Number(mark.updatedAt) || Number(mark.createdAt) || 0;
+}
+
+/** 只收已知字段并截断长文本，防止远端把 marks.json 灌成几十 MB。 */
+function cleanMark(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const paraIndex = Number(raw.paraIndex);
+  if (!Number.isFinite(paraIndex) || paraIndex < 0) return null;
+  const chapterNo = Number(raw.chapterNo);
+  const chapterIndex = Number(raw.chapterIndex);
+  const createdAt = Number(raw.createdAt) || Date.now();
+  const updatedAt = markStampOf(raw) || createdAt;
+  return {
+    id: String(raw.id || '').slice(0, 128) || crypto.randomUUID(),
+    paraIndex: Math.floor(paraIndex),
+    chapter: String(raw.chapter || '').slice(0, 200),
+    chapterIndex: Number.isFinite(chapterIndex) ? Math.floor(chapterIndex) : 0,
+    chapterNo: Number.isFinite(chapterNo) ? Math.floor(chapterNo) : -1,
+    excerpt: String(raw.excerpt || '').slice(0, 2000),
+    note: String(raw.note || '').slice(0, 4000),
+    kind: raw.kind === 'highlight' ? 'highlight' : 'bookmark',
+    createdAt,
+    updatedAt,
+  };
+}
+
 /**
  * @param {object} opts
  * @param {object} opts.files       主进程的 json 路径表（books / progress / settings）
@@ -405,6 +445,7 @@ function contentDisposition(name) {
  * @param {(file:string, data:any)=>any} opts.writeJson
  * @param {(level:string, msg:string, meta?:any)=>void} [opts.log]
  * @param {(merged:object, bookId:string)=>void} [opts.onRemoteProgress]
+ * @param {(all:object, bookId:string)=>void} [opts.onRemoteMarks] 手机写回痕迹后的回推（渲染层刷新）
  * @param {(book:object)=>({file?:string,url?:string}|null)} [opts.resolveCover]
  * @param {()=>string} [opts.getVersion]
  * @param {object|null} [opts.comic] 漫画取图代理（createComicService 的返回值）
@@ -420,6 +461,7 @@ export function createLanService(opts) {
     writeJson,
     log = () => {},
     onRemoteProgress = () => {},
+    onRemoteMarks = () => {},
     resolveCover = () => null,
     getVersion = () => '',
     // 云端书的目录/正文由主进程提供（那里才有书源引擎与磁盘缓存）。
@@ -1398,6 +1440,84 @@ export function createLanService(opts) {
         return;
       }
       sendText(res, 404, 'not found');
+      return;
+    }
+
+    /* ---------- 3.3.0：双端痕迹（书签 / 划线 / 笔记） ---------- */
+
+    if (pathname === '/api/marks' && method === 'GET') {
+      sendJson(res, 200, { ok: true, marks: readJson(files.marks, {}) || {} });
+      return;
+    }
+
+    if (pathname === '/api/marks' && method === 'POST') {
+      if (!allowWrite) {
+        sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入」' });
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(await readBody(req));
+      } catch {
+        sendJson(res, 400, { ok: false, error: 'bad json' });
+        return;
+      }
+      const id = String(payload?.id || '').slice(0, 512);
+      if (!id) {
+        sendJson(res, 400, { ok: false, error: 'missing id' });
+        return;
+      }
+      const incoming = Array.isArray(payload?.marks) ? payload.marks : [];
+      const remove = Array.isArray(payload?.remove) ? payload.remove.map(String) : [];
+
+      const all = readJson(files.marks, {}) || {};
+      const byKey = new Map();
+      const current = Array.isArray(all[id]) ? all[id] : [];
+      for (const item of current) {
+        const mark = cleanMark(item);
+        if (mark) byKey.set(markKeyOf(mark), mark);
+      }
+
+      let added = 0;
+      let updated = 0;
+      let removed = 0;
+      for (const raw of incoming) {
+        const mark = cleanMark(raw);
+        if (!mark) continue;
+        const key = markKeyOf(mark);
+        const old = byKey.get(key);
+        if (!old) {
+          byKey.set(key, mark);
+          added += 1;
+        } else if (markStampOf(mark) >= markStampOf(old)) {
+          // 手机已经做过一次 newer-wins 合并；同毫秒也接受，避免两端来回推
+          byKey.set(key, mark);
+          updated += 1;
+        }
+      }
+      for (const key of remove) {
+        if (byKey.delete(key)) removed += 1;
+      }
+
+      const next = Array.from(byKey.values()).sort(
+        (a, b) => a.chapterNo - b.chapterNo || a.paraIndex - b.paraIndex || a.createdAt - b.createdAt,
+      );
+      all[id] = next;
+      const result = writeJson(files.marks, all);
+      if (result && result.ok === false) {
+        sendJson(res, 500, { ok: false, error: result.error || '写入失败' });
+        return;
+      }
+      if (added || updated || removed) {
+        log('info', `局域网写入痕迹：${id}`, { added, updated, removed });
+        publish('marks', { bookId: id, at: Date.now() });
+        try {
+          onRemoteMarks(all, id);
+        } catch (err) {
+          log('warn', `回推痕迹给桌面端失败：${err?.message || err}`);
+        }
+      }
+      sendJson(res, 200, { ok: true, marks: next, added, updated, removed });
       return;
     }
 

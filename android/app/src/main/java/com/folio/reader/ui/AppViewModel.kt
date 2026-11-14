@@ -24,10 +24,9 @@ import com.folio.reader.core.comicPercent
 import com.folio.reader.data.ConnectionManager
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.DeleteConfirmer
-import com.folio.reader.data.MarkStore
 import com.folio.reader.data.SettingsStore
 import com.folio.reader.net.LanDiscovery
-import java.io.File
+import android.view.KeyEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -63,8 +62,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val sync = container.sync
     private val images = container.images
     /** 书签 / 划线：与进度分开一份文件，见 [MarkStore]。 */
-    private val marks = MarkStore(File(getApplication<Application>().filesDir, "library"))
+    private val marks = container.marks
+    private val marksSync = container.marksSync
     private var searchJob: Job? = null
+    private var marksSyncJob: Job? = null
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -89,6 +90,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 目录跳章用的目标段落，由列表状态消费后清空。 */
     private val _scrollTarget = MutableStateFlow(-1)
     val scrollTarget: StateFlow<Int> = _scrollTarget.asStateFlow()
+
+    /**
+     * 翻页请求：`seq` 自增代表「新的一次」，`direction` 1 下一页 / -1 上一页。
+     *
+     * 阅读页是自由滚动的 LazyColumn，翻页需要知道视口高度，所以由 ReaderScreen
+     * 消费后自己 scrollBy；ViewModel 只负责收手势与音量键，不替 UI 决定像素。
+     * `seq = 0` 是初始值，打开一本书时重置，避免把上次的请求补执行一次。
+     */
+    private val _pageTurn = MutableStateFlow(PageTurn())
+    val pageTurn: StateFlow<PageTurn> = _pageTurn.asStateFlow()
 
     /** 封面缓存：字节用 LruCache，位图用 StateFlow 驱动重组。 */
     private val coverBytes = LruCache<String, ByteArray>(24)
@@ -279,16 +290,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             // 清单搬完之后再对齐进度：书 id 可能刚被归并过，晚一步更不容易丢
             withContext(Dispatchers.IO) { progressSync.pullAndMerge() }
             val flushed = withContext(Dispatchers.IO) { progressSync.flushPending() }
+            // 痕迹同样等书 id 稳定后再合并；老桌面端没有 /api/marks 时静默跳过
+            val marksOutcome = withContext(Dispatchers.IO) { marksSync.sync() }
+            if (marksOutcome.changed) refreshOpenMarks()
 
             // T08：同步收尾顺手拉一次排队指令（桌面端没有设备接口时是空列表，不报错）。
             // 逐条串行 + 每条独立回执，执行完不单独提示：书架在下面统一 reload 一次就够了。
             withContext(Dispatchers.IO) { runCatching { sync.runPendingCommands(deleteConfirmer) } }
 
+            val marksNote = when {
+                !marksOutcome.supported -> null
+                marksOutcome.failed > 0 -> marksOutcome.message
+                marksOutcome.changed -> "痕迹已对齐"
+                else -> null
+            }
             val message = when {
                 !outcome.ok -> outcome.message
                 silent && outcome.ok -> null
-                flushed.failed > 0 -> "${outcome.message} · ${flushed.message}"
-                else -> outcome.message
+                flushed.failed > 0 -> listOfNotNull(outcome.message, flushed.message, marksNote)
+                    .joinToString(" · ")
+                else -> listOfNotNull(outcome.message, marksNote).joinToString(" · ")
             }
             _shelf.update { it.copy(syncing = false, message = message) }
             reloadLocal()
@@ -334,6 +355,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         images.clear()
+        _pageTurn.value = PageTurn()
         _reader.value = ReaderUiState(book = book, loading = true)
         viewModelScope.launch {
             books.touchRead(book.id)
@@ -342,6 +364,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 openLocalBook(book)
             }
+            // 打开就顺手对齐一次痕迹：刚在桌面端划的线，进书就能看到
+            scheduleMarksSync()
         }
     }
 
@@ -598,6 +622,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _reader.update { it.copy(controls = !it.controls) }
     }
 
+    /**
+     * 请求翻一页（1 下一页 / -1 上一页）。
+     *
+     * 翻页是「读下去」的动作，自动滚动还在跑就先停掉 —— 否则手指刚点完下一页，
+     * 自动滚动又把页面拖回去，看起来像点击失灵。
+     */
+    fun requestPageTurn(direction: Int) {
+        if (direction == 0) return
+        val state = _reader.value
+        if (state.book == null || state.paragraphs.isEmpty()) return
+        if (state.autoScroll) _reader.update { it.copy(autoScroll = false) }
+        _pageTurn.update {
+            PageTurn(seq = it.seq + 1, direction = if (direction > 0) 1 else -1)
+        }
+    }
+
+    /**
+     * 音量键翻页（由 Activity 的 `onKeyDown` 转发）。
+     *
+     * @return true 表示这次按键已被阅读器消费，不再调音量
+     */
+    fun onVolumeKey(keyCode: Int): Boolean {
+        if (!settings.volumeKeysTurn) return false
+        val direction = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> 1
+            KeyEvent.KEYCODE_VOLUME_UP -> -1
+            else -> return false
+        }
+        val state = _reader.value
+        // 正文还没排好时不抢音量键，否则用户会以为音量失灵
+        if (state.book == null || state.paragraphs.isEmpty()) return false
+        requestPageTurn(direction)
+        return true
+    }
+
     fun scrollToParagraph(paraIndex: Int) {
         _scrollTarget.value = paraIndex
     }
@@ -703,6 +762,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { marks.put(mark) }
             _reader.update { it.copy(marks = list) }
+            scheduleMarksSync()
         }
     }
 
@@ -711,6 +771,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { marks.remove(book.id, id) }
             _reader.update { it.copy(marks = list) }
+            scheduleMarksSync()
         }
     }
 
@@ -720,7 +781,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { marks.updateNote(book.id, id, note) }
             _reader.update { it.copy(marks = list) }
+            scheduleMarksSync()
         }
+    }
+
+    /**
+     * 改动痕迹后延迟推一次。
+     *
+     * 连续划几段不应该发几次请求；1.2 秒足够把一次阅读动作收拢成一次同步。
+     * 失败完全静默：痕迹已经在本机落盘，下次打开书 / 回前台还会再试。
+     */
+    private fun scheduleMarksSync() {
+        if (!settings.hasServer) return
+        marksSyncJob?.cancel()
+        marksSyncJob = viewModelScope.launch {
+            delay(1200)
+            val outcome = withContext(Dispatchers.IO) { marksSync.sync() }
+            if (outcome.changed) refreshOpenMarks()
+        }
+    }
+
+    /** 同步拉回后把当前打开的书刷新一遍，不用退出重进。 */
+    private suspend fun refreshOpenMarks() {
+        val book = _reader.value.book ?: return
+        val list = withContext(Dispatchers.IO) { marks.read(book.id) }
+        if (_reader.value.book?.id == book.id) _reader.update { it.copy(marks = list) }
     }
 
     /** 跳到某条痕迹所在段落；云端书跨章时先把目标章拉下来。 */
@@ -1377,6 +1462,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 firstLineIndent = settings.firstLineIndent,
                 autoScrollSpeed = settings.autoScrollSpeed,
                 keepScreenOn = settings.keepScreenOn,
+                tapToTurn = settings.tapToTurn,
+                volumeKeysTurn = settings.volumeKeysTurn,
                 fontFamily = settings.fontFamily,
                 themePreset = settings.themePreset,
                 pagePadding = settings.pagePadding,
@@ -1452,6 +1539,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateKeepScreenOn(value: Boolean) {
         settings.keepScreenOn = value
         _settings.update { it.copy(keepScreenOn = value) }
+    }
+
+    fun updateTapToTurn(value: Boolean) {
+        settings.tapToTurn = value
+        _settings.update { it.copy(tapToTurn = value) }
+    }
+
+    fun updateVolumeKeysTurn(value: Boolean) {
+        settings.volumeKeysTurn = value
+        _settings.update { it.copy(volumeKeysTurn = value) }
     }
 
     fun updateFontFamily(value: String) {

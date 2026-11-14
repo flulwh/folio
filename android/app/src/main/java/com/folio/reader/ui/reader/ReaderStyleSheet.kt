@@ -47,7 +47,7 @@ private const val SPECIMEN_TWO =
     "排版不是装饰，而是一种秩序：一页里所有的数字都该对齐，所有的分隔都该只留一条线。"
 
 /**
- * 排版弹层：字样试样 + 正文 / 字体 / 底色 / 版面 / 自动滚动五组设置。
+ * 排版弹层：字样试样 + 正文 / 字体 / 底色 / 版面 / 自动滚动 / 翻页六组设置。
  *
  * 所有改动即时生效，滑块直接回调，不做二次确认。
  */
@@ -64,6 +64,8 @@ fun ReaderStyleSheet(
     onPagePadding: (Int) -> Unit,
     onAutoScrollSpeed: (Int) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
+    onTapToTurn: (Boolean) -> Unit,
+    onVolumeKeysTurn: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val specimenStyle = TextStyle(
@@ -207,6 +209,26 @@ fun ReaderStyleSheet(
                 label = "保持屏幕常亮",
                 checked = state.keepScreenOn,
                 onCheckedChange = onKeepScreenOn,
+            )
+
+            /* 06 翻页 */
+            Spacer(Modifier.height(20.dp))
+            FolioSectionHeader(number = "06", title = "翻页")
+            FolioSwitchRow(
+                label = "点两侧翻页",
+                checked = state.tapToTurn,
+                onCheckedChange = onTapToTurn,
+            )
+            FolioSwitchRow(
+                label = "音量键翻页",
+                checked = state.volumeKeysTurn,
+                onCheckedChange = onVolumeKeysTurn,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "左侧上一页 / 右侧下一页，中间切换工具栏；音量上键上一页、下键下一页。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }

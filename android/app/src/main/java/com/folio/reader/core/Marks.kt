@@ -31,8 +31,21 @@ data class ReaderMark(
      * 云端正文按章加载，段落号只在本章内有意义，跳转必须带章号。
      */
     val chapterNo: Int = -1,
+    /**
+     * 最后一次改动时间。双端同步按它判「谁更新」—— 只写笔记不改 [createdAt]，
+     * 没有这个字段的话，桌面端后来补的笔记会被手机上更早的版本覆盖。
+     */
+    val updatedAt: Long = createdAt,
 ) {
     val isBookmark: Boolean get() = kind == KIND_BOOKMARK
+
+    /**
+     * 双端对齐用的稳定键。
+     *
+     * id 是各端自己生成的 UUID，同一个位置在两端的 id 必然不同；
+     * 段落锚点 + 类型（云端书再加章号）才是同一处痕迹的真相。
+     */
+    val syncKey: String get() = "$kind|$chapterNo|$paraIndex"
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -44,6 +57,7 @@ data class ReaderMark(
         put("note", note)
         put("kind", kind)
         put("createdAt", createdAt)
+        put("updatedAt", updatedAt)
     }
 
     companion object {
@@ -69,6 +83,7 @@ data class ReaderMark(
             kind = kind,
             chapterIndex = chapterIndex,
             chapterNo = chapterNo,
+            updatedAt = System.currentTimeMillis(),
         )
 
         fun fromJson(bookId: String, json: JSONObject): ReaderMark? {
@@ -85,6 +100,8 @@ data class ReaderMark(
                 createdAt = json.optLong("createdAt", 0L),
                 chapterIndex = json.optInt("chapterIndex", 0),
                 chapterNo = json.optInt("chapterNo", -1),
+                // 老数据没有 updatedAt：退回 createdAt，行为与引入前完全一致。
+                updatedAt = json.optLong("updatedAt", json.optLong("createdAt", 0L)),
             )
         }
     }

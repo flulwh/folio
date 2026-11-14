@@ -1270,6 +1270,10 @@ function ensureLanService() {
     onRemoteProgress: (progress, bookId) => {
       broadcast('lan:progress', { progress, bookId, at: Date.now() });
     },
+    // 手机写回痕迹：marks.json 已经由 lan.js 合并落盘，这里只让渲染层跟上。
+    onRemoteMarks: (marks, bookId) => {
+      broadcast('lan:marks', { marks, bookId, at: Date.now() });
+    },
     // 手机上传完一本：渲染层的书架要立刻出现这本新书，不用等用户手动刷新。
     onBooksChanged: (id) => {
       broadcast('lan:books', { id, reason: 'upload', at: Date.now() });
