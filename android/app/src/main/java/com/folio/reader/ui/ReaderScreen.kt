@@ -236,9 +236,9 @@ fun ReaderScreen(
     }
 
     val bottomContentPadding = when {
-        reader.controls -> 220.dp
-        reader.error != null -> 82.dp
-        else -> 84.dp
+        reader.controls -> 150.dp
+        reader.error != null -> 76.dp
+        else -> 44.dp
     }
 
     Box(Modifier.fillMaxSize().background(palette.background)) {
@@ -298,7 +298,7 @@ fun ReaderScreen(
                     contentPadding = PaddingValues(
                         start = settings.pagePadding.dp,
                         end = settings.pagePadding.dp,
-                        top = 96.dp,
+                        top = 80.dp,
                         bottom = bottomContentPadding,
                     ),
                 ) {
@@ -326,48 +326,58 @@ fun ReaderScreen(
             }
         }
 
-        // ---------------- 顶栏 ----------------
+        // ---------------- 顶栏（渐变遮罩，不占正文高度） ----------------
         AnimatedVisibility(
             visible = reader.controls,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
-            Row(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            Column(
+                Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(palette.surface.copy(alpha = 0.94f))
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(palette.background.copy(alpha = 0.96f), palette.background.copy(alpha = 0f))
+                        )
+                    ),
             ) {
-                HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
-                Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(
-                        text = book?.title.orEmpty(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = palette.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = reader.chapterTitle.ifBlank { "—" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.onSurfaceVariantSummary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(52.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
+                    Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
+                        Text(
+                            text = reader.chapterTitle.ifBlank { book?.title.orEmpty() },
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (reader.chapterTitle.isNotBlank()) {
+                            Text(
+                                text = book?.title.orEmpty(),
+                                fontSize = 10.5.sp,
+                                color = palette.onSurfaceVariantSummary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    val bookmarked = reader.paraIndex in bookmarkedParas
+                    HyperRoundIcon(
+                        icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = if (bookmarked) "取消书签" else "加书签",
+                        onClick = { vm.toggleBookmark() },
+                        tint = if (bookmarked) palette.primary else palette.onSurface,
                     )
                 }
-                val bookmarked = reader.paraIndex in bookmarkedParas
-                HyperRoundIcon(
-                    icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                    contentDescription = if (bookmarked) "取消书签" else "加书签",
-                    onClick = { vm.toggleBookmark() },
-                    tint = if (bookmarked) palette.primary else palette.onSurface,
-                )
-                HyperRoundIcon(Icons.Default.Search, "搜索", { vm.toggleSearch() })
             }
         }
 
@@ -378,7 +388,7 @@ fun ReaderScreen(
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp)
-                    .padding(bottom = if (reader.controls) 224.dp else 18.dp)
+                    .padding(bottom = if (reader.controls) 156.dp else 16.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
                     .background(palette.surface.copy(alpha = 0.97f))
@@ -418,23 +428,36 @@ fun ReaderScreen(
         ) {
             Column(
                 modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(palette.surface.copy(alpha = 0.94f))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            listOf(palette.background.copy(alpha = 0f), palette.background.copy(alpha = 0.97f))
+                        )
+                    )
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 20.dp, bottom = 2.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    Chevron("‹", reader.hasPrevChapter) { vm.prevChapter() }
                     Text(
                         text = percentLabel,
-                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Medium,
                         color = palette.primary,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = chapterLabel,
+                        fontSize = 11.sp,
+                        color = palette.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.weight(1f))
                     HyperMeta(remainingLabel)
-                    Spacer(Modifier.width(10.dp))
-                    HyperMeta(if (paged) "翻页" else "滚动")
+                    Chevron("›", reader.hasNextChapter) { vm.nextChapter() }
                 }
                 Slider(
                     progress = shownPercent.coerceIn(0f, 100f) / 100f,
@@ -443,30 +466,17 @@ fun ReaderScreen(
                         sliderValue = it
                     },
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    height = 26.dp,
+                    height = 22.dp,
                     decimalPlaces = 3,
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth().height(36.dp),
+                    Modifier.fillMaxWidth().height(44.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ChapterNavAction("上一章", reader.hasPrevChapter) { vm.prevChapter() }
-                    Text(
-                        text = chapterLabel,
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.onSurfaceVariantSummary,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    ChapterNavAction("下一章", reader.hasNextChapter) { vm.nextChapter() }
-                }
-                Spacer(Modifier.height(2.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     HyperActionCell(
                         label = "目录",
-                        icon = { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.MenuBook, null, modifier = Modifier.size(20.dp)) },
+                        icon = { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.MenuBook, null, modifier = Modifier.size(19.dp)) },
                         active = reader.showToc,
                         onClick = { vm.toggleToc() },
                         modifier = Modifier.weight(1f),
@@ -477,7 +487,7 @@ fun ReaderScreen(
                             androidx.compose.material3.Icon(
                                 if (reader.paraIndex in bookmarkedParas) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                                 null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(19.dp),
                             )
                         },
                         active = reader.showMarks,
@@ -486,14 +496,14 @@ fun ReaderScreen(
                     )
                     HyperActionCell(
                         label = "搜索",
-                        icon = { androidx.compose.material3.Icon(Icons.Default.Search, null, modifier = Modifier.size(20.dp)) },
+                        icon = { androidx.compose.material3.Icon(Icons.Default.Search, null, modifier = Modifier.size(19.dp)) },
                         active = reader.search.open,
                         onClick = { vm.toggleSearch() },
                         modifier = Modifier.weight(1f),
                     )
                     HyperActionCell(
                         label = "排版",
-                        icon = { androidx.compose.material3.Icon(Icons.Default.Tune, null, modifier = Modifier.size(20.dp)) },
+                        icon = { androidx.compose.material3.Icon(Icons.Default.Tune, null, modifier = Modifier.size(19.dp)) },
                         active = reader.showStyle,
                         onClick = { vm.toggleStyle() },
                         modifier = Modifier.weight(1f),
@@ -504,7 +514,7 @@ fun ReaderScreen(
                             androidx.compose.material3.Icon(
                                 if (reader.autoScroll) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                 null,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(19.dp),
                             )
                         },
                         active = reader.autoScroll,
@@ -732,14 +742,14 @@ private fun ParagraphBlock(
     }
 }
 
-/** 一章导航的左右触摸区。 */
+/** 上一章 / 下一章的窄箭头，和进度信息挤在同一行。 */
 @Composable
-private fun ChapterNavAction(label: String, enabled: Boolean, onClick: () -> Unit) {
+private fun Chevron(glyph: String, enabled: Boolean, onClick: () -> Unit) {
     val palette = MiuixTheme.colorScheme
     Box(
-        modifier = Modifier
-            .width(64.dp)
-            .height(36.dp)
+        Modifier
+            .size(30.dp)
+            .clip(androidx.compose.foundation.shape.CircleShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -749,8 +759,8 @@ private fun ChapterNavAction(label: String, enabled: Boolean, onClick: () -> Uni
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
+            text = glyph,
+            fontSize = 18.sp,
             color = if (enabled) palette.onSurface else palette.disabledOnSurface,
             maxLines = 1,
         )

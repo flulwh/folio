@@ -48,6 +48,8 @@ import com.folio.reader.ui.miuix.HyperSectionTitle
 import com.folio.reader.ui.miuix.HyperSegmented
 import com.folio.reader.ui.miuix.HyperSliderRow
 import com.folio.reader.ui.miuix.HyperSwitchRow
+import com.folio.reader.ui.miuix.PageMargin
+import com.folio.reader.ui.miuix.RowInset
 import java.util.Locale
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Button
@@ -310,7 +312,7 @@ fun SettingsScreen(
             item("style") {
                 HyperSectionTitle("排版")
                 HyperGroup {
-                    Column(Modifier.padding(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
                         HyperSegmented(
                             options = listOf("上下滚动", "左右翻页"),
                             selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
@@ -378,7 +380,7 @@ fun SettingsScreen(
                         checked = state.keepScreenOn,
                         onCheckedChange = vm::updateKeepScreenOn,
                     )
-                    Column(Modifier.padding(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
                         HyperSegmented(
                             options = listOf("宋体", "黑体"),
                             selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
@@ -452,7 +454,7 @@ fun SettingsScreen(
             item("comic") {
                 HyperSectionTitle("漫画")
                 HyperGroup {
-                    Column(Modifier.padding(10.dp)) {
+                    Column(Modifier.padding(12.dp)) {
                         HyperSegmented(
                             options = DirectionChoices.map { it.first },
                             selectedIndex = DirectionChoices
@@ -557,7 +559,7 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
             .fillMaxWidth()
             .background(scheme.background)
             .statusBarsPadding()
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = PageMargin),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -583,7 +585,7 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
         Text(
             text = "设置",
             modifier = Modifier.padding(top = 4.dp),
-            fontSize = 30.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
         )

@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.0：Miuix（HyperOS）整体换肤 + 滚动 / 翻页双阅读模式。设备头里的
+        // 3.4.1：收紧 HUD、统一间距与字号层级。设备头里的
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 6
-        versionName = "3.4.0"
+        versionCode = 7
+        versionName = "3.4.1"
         vectorDrawables.useSupportLibrary = true
     }
 
