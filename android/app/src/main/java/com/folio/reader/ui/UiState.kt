@@ -1,5 +1,6 @@
 package com.folio.reader.ui
 
+import com.folio.reader.BuildConfig
 import com.folio.reader.core.Book
 import com.folio.reader.core.Chapter
 import com.folio.reader.core.Origin
@@ -445,7 +446,13 @@ data class SettingsUiState(
     val discovered: List<String> = emptyList(),
     val searching: Boolean = false,
     val message: String? = null,
-    val appVersion: String = "3.0.0",
+    /**
+     * 设置页「本机版本」。
+     *
+     * 直接读打包配置，和 `versionName` / `X-Folio-App-Version` 同一个真相；
+     * 这里曾写死过 `3.0.0`，发到 3.4.x 后设置页仍显示旧版本。
+     */
+    val appVersion: String = BuildConfig.VERSION_NAME,
     val serverVersion: String = "",
 ) {
     /** 磁盘缓存是真的空（设置页拿它画对勾）。 */

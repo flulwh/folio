@@ -4,6 +4,12 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。桌面端版本号唯一来源是 `package.json`；
 Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
+## [Android 3.4.8] — 2026-11-14
+
+**修复：设置页「本机版本」一直显示 3.0.0。**
+
+- 设置页顶部与「关于」里的本机版本改为直接读 `BuildConfig.VERSION_NAME`，与安装包 `versionName`、设备页上报的 `X-Folio-App-Version` 同源，不再有写死的常量跟着发版漂移
+
 ## [Android 3.4.7] — 2026-11-14
 
 **性能与省电优化：打开书不再卡首帧，桌面端没开时不再反复唤醒网卡。**
