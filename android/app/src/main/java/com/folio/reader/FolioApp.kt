@@ -56,7 +56,13 @@ class AppContainer(app: Application) {
     /** 字体商店：字体文件在 `filesDir/fonts/`，目录缓存在 `filesDir/library/`。 */
     val fonts = FontStore(app.filesDir)
 
-    val fontRepository = FontRepository(fonts) { connection.client() }
+    val fontRepository = FontRepository(
+        store = fonts,
+        desktop = { connection.client() },
+        bundled = {
+            app.assets.open("font-catalog.json").bufferedReader(Charsets.UTF_8).use { it.readText() }
+        },
+    )
 
     val cloud = CloudChapterSource(
         clientProvider = { connection.client() },

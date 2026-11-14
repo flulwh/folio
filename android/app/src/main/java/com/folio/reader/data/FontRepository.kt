@@ -10,7 +10,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** 目录结果：[source] = `network` / `cache`。 */
+/** 目录结果：[source] = `network` / `cache` / `bundled`。 */
 data class CatalogResult(
     val fonts: List<CatalogFont>,
     val source: String,
@@ -34,6 +34,13 @@ class FontInstallException(message: String, cause: Throwable? = null) : Exceptio
 class FontRepository(
     private val store: FontStore,
     private val desktop: () -> FolioClient?,
+    /**
+     * 安装包里随附的目录快照。
+     *
+     * 首次打开商店时既没有缓存、又连不上 GitHub（国内很常见），
+     * 没有这份兜底就只能看到一句「字体目录获取失败」。
+     */
+    private val bundled: () -> String? = { null },
 ) {
 
     suspend fun catalog(force: Boolean = false): CatalogResult = withContext(Dispatchers.IO) {
@@ -59,9 +66,22 @@ class FontRepository(
                     error = err.message.orEmpty(),
                 )
             } else {
-                throw FontInstallException("字体目录获取失败：${err.message.orEmpty().ifBlank { "网络不通" }}", err)
+                bundledCatalog() ?: throw FontInstallException(
+                    "字体目录获取失败：${err.message.orEmpty().ifBlank { "网络不通" }}",
+                    err,
+                )
             }
         }
+    }
+
+    /** 网络与缓存都拿不到时用安装包里的快照，并把它写成缓存。 */
+    private fun bundledCatalog(): CatalogResult? {
+        val text = runCatching { bundled() }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val fonts = runCatching { FontCatalog.parse(text) }.getOrDefault(emptyList())
+        if (fonts.isEmpty()) return null
+        val now = System.currentTimeMillis()
+        runCatching { store.writeCatalogCache(text, now) }
+        return CatalogResult(fonts, "bundled", now)
     }
 
     /**

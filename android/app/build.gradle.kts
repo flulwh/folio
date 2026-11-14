@@ -12,9 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.5.2：新增与桌面端同源的字体商店（versionCode 18）。
-        versionCode = 18
-        versionName = "3.5.2"
+        // 3.5.3：修字体商店首次打开报错（内置目录兜底）与已装字体重复 key 崩溃（versionCode 19）。
+        versionCode = 19
+        versionName = "3.5.3"
         vectorDrawables.useSupportLibrary = true
     }
 

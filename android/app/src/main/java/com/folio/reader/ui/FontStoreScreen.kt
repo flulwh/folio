@@ -94,7 +94,8 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
             }
 
-            items(storeState.installed, key = { it.id }) { font ->
+            // key 必须跨 section 唯一：已安装和目录里会出现同一款字体
+            items(storeState.installed, key = { "installed-${it.id}" }) { font ->
                 InstalledFontRow(
                     font = font,
                     family = installedFamilies[font.id],
@@ -144,7 +145,7 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
             }
 
-            items(storeState.catalog, key = { it.id }) { font ->
+            items(storeState.catalog, key = { "catalog-${it.id}" }) { font ->
                 val installed = storeState.installed.firstOrNull { it.id == font.id }
                 CatalogFontRow(
                     font = font,
@@ -162,10 +163,10 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
 
             item {
                 Text(
-                    text = if (storeState.source == "cache") {
-                        "当前显示的是本地缓存目录，联网后会更新。字体来自各上游开源项目（OFL-1.1），只装在手机本地。"
-                    } else {
-                        "字体来自各上游开源项目（OFL-1.1），只装在手机本地，不上传任何数据。"
+                    text = when (storeState.source) {
+                        "cache" -> "当前显示的是本地缓存目录，联网后会更新。字体来自各上游开源项目（OFL-1.1），只装在手机本地。"
+                        "bundled" -> "当前显示的是安装包自带的目录，联网后「刷新」会更新。字体来自各上游开源项目（OFL-1.1），只装在手机本地。"
+                        else -> "字体来自各上游开源项目（OFL-1.1），只装在手机本地，不上传任何数据。"
                     },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                     fontSize = 11.sp,

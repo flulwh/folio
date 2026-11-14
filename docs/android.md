@@ -204,7 +204,10 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
   `GET /api/font/:id/download`（桌面端 2.9.4+，且那台机器要先装过同一款字体）
 - 落盘前依次校验：`.part` 长度等于 `file.size`、sha256 等于 `file.sha256`、文件头是 ttf / otf / ttc 的 magic；
   任一项不符就删掉 `.part`，不写清单
-- 目录缓存 7 天，断网时用缓存打开商店，安装仍需要网络
+- 目录缓存 7 天；缓存过期又连不上 GitHub 时用**安装包自带的快照**（`assets/font-catalog.json`）打开商店，
+  联网后「刷新」再换回远端；安装仍需要网络或桌面端
+- 已安装与商店两段列表的 LazyColumn key 带 `installed-` / `catalog-` 前缀，
+  同一款字体同时出现在两段时不会因重复 key 崩溃
 - 选中状态是 `folio_settings.xml` 的 `user_font_id`，为空时用 `font_family`（宋体 / 黑体）；
   删除当前字体会把 `user_font_id` 清空，自动回落
 - 正文与排版预览都走 `ui/FontFamilies.kt`：按「路径 + 大小 + mtime」缓存最近 4 款 FontFamily，

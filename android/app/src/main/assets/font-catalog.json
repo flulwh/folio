@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "updatedAt": "2026-11-15",
+  "fonts": [
+    {
+      "id": "lxgw-wenkai",
+      "version": 1,
+      "name": "霞鹜文楷",
+      "family": "LXGW WenKai",
+      "category": "kai",
+      "description": "基于 Klee One 的手写楷体，横细竖粗、笔画带书写的呼吸感，长文阅读不累眼。",
+      "preview": "空山新雨后，天气晚来秋。明月松间照，清泉石上流。竹喧归浣女，莲动下渔舟。",
+      "homepage": "https://github.com/lxgw/LxgwWenKai",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/lxgw/LxgwWenKai/blob/main/OFL.txt"
+      },
+      "file": {
+        "format": "ttf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/lxgw-wenkai.ttf",
+        "size": 25928940,
+        "sha256": "2d73eea94ad808999d90c0000c239a84a33b09d4bc6ab6c5b8bbf1eda8a7fc8b"
+      }
+    },
+    {
+      "id": "lxgw-neo-xihei",
+      "version": 1,
+      "name": "霞鹜新晰黑",
+      "family": "LXGW Neo XiHei",
+      "category": "hei",
+      "description": "在思源黑体基础上重绘字形的新黑体，字面更紧凑、笔画更利落，正文与标题都合适。",
+      "preview": "字里行间，风过留声。读书之乐，在于忘了时间，也忘了自己坐在哪里。",
+      "homepage": "https://github.com/lxgw/LxgwNeoXiHei",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/lxgw/LxgwNeoXiHei/blob/main/LICENSE.md"
+      },
+      "file": {
+        "format": "ttf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/lxgw-neo-xihei.ttf",
+        "size": 7475784,
+        "sha256": "2e938517d1bb2d23c452829bac6c2830a4577d9eebbad22445c5c4191eb4308f"
+      }
+    },
+    {
+      "id": "source-han-serif",
+      "version": 1,
+      "name": "思源宋体",
+      "family": "Noto Serif CJK SC",
+      "category": "song",
+      "description": "Adobe 与 Google 合作的开源宋体，字形端正、笔画交代清楚，屏读与印刷皆宜。",
+      "preview": "落霞与孤鹜齐飞，秋水共长天一色。渔舟唱晚，响穷彭蠡之滨。",
+      "homepage": "https://github.com/notofonts/noto-cjk",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/notofonts/noto-cjk/blob/main/Serif/LICENSE"
+      },
+      "file": {
+        "format": "otf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/source-han-serif.otf",
+        "size": 24543080,
+        "sha256": "2a2eae2628df83556c54018c41e20fa532c1b862c5256ae8b3f23feb918d12ca"
+      }
+    },
+    {
+      "id": "source-han-sans",
+      "version": 1,
+      "name": "思源黑体",
+      "family": "Noto Sans CJK SC",
+      "category": "hei",
+      "description": "与思源宋体同源的无衬线黑体，结构清晰、字形匀称，小字号下也容易辨认。",
+      "preview": "清晨的光落在书页上，字迹安静而清楚。翻过一页，窗外的鸟叫了一声。",
+      "homepage": "https://github.com/notofonts/noto-cjk",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/notofonts/noto-cjk/blob/main/Sans/LICENSE"
+      },
+      "file": {
+        "format": "otf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/source-han-sans.otf",
+        "size": 16437364,
+        "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b"
+      }
+    },
+    {
+      "id": "smiley-sans",
+      "version": 1,
+      "name": "得意黑",
+      "family": "Smiley Sans",
+      "category": "display",
+      "description": "带倾斜手绘感的展示黑体，标题和短句很有精神；字形偏异形，长篇正文慎用。",
+      "preview": "今天也要好好读书！",
+      "homepage": "https://github.com/atelier-anchor/smiley-sans",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/atelier-anchor/smiley-sans/blob/main/LICENSE"
+      },
+      "file": {
+        "format": "ttf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/smiley-sans.ttf",
+        "size": 2629764,
+        "sha256": "b447d7e781f08bc95c4c9f23ba71ed2b8ebb639aa7184485c71c4ca5afcd25c4"
+      }
+    },
+    {
+      "id": "zhuque-fangsong",
+      "version": 1,
+      "name": "朱雀仿宋",
+      "family": "Zhuque Fangsong",
+      "category": "fangsong",
+      "description": "纤细的开源仿宋，笔画清瘦、古籍气息浓，适合诗词、散文与引用段落。",
+      "preview": "床前明月光，疑是地上霜。举头望明月，低头思故乡。",
+      "homepage": "https://github.com/TrionesType/zhuque",
+      "license": {
+        "spdx": "OFL-1.1",
+        "name": "SIL Open Font License 1.1",
+        "url": "https://github.com/TrionesType/zhuque/blob/main/LICENSE.txt"
+      },
+      "file": {
+        "format": "ttf",
+        "url": "https://github.com/flulwh/folio-fonts/releases/download/v1/zhuque-fangsong.ttf",
+        "size": 8824084,
+        "sha256": "558c62730844fe54ba220146ed62f859d4e2880188d92d985f8921c6e3743bc4"
+      }
+    }
+  ]
+}
