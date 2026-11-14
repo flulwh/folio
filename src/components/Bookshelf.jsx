@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMotionKit } from '../motion-kit.js';
 import { cleanSourceName } from '../utils/text.js';
-import { useAppActions, useBooks, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
+import { useAppActions, useBooks, useDevices, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
 import SourcePanel from './SourcePanel.jsx';
 import LogPanel from './LogPanel.jsx';
 import Segmented from './Segmented.jsx';
@@ -43,6 +43,20 @@ const COVER_PALETTES = [
   { a: [268, 30, 82], b: [272, 26, 65], ink: [270, 32, 19] }, // violet
 ];
 
+/** 右键菜单项：没有独立 CSS 文件时用内联样式，跟随主题变量。 */
+const MENU_ITEM_STYLE = {
+  display: 'block',
+  width: '100%',
+  padding: '8px 10px',
+  border: 0,
+  borderRadius: 8,
+  background: 'transparent',
+  color: 'inherit',
+  font: 'inherit',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
 function coverStyle(book) {
   const seed = book.hue ?? hashHue(book.name || 'book');
   const p = COVER_PALETTES[seed % COVER_PALETTES.length];
@@ -53,7 +67,7 @@ function coverStyle(book) {
   };
 }
 
-function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick, variants }) {
+function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, coverTick, variants }) {
   const percentValue = Math.min(100, Math.max(0, percent || 0));
   const finished = percentValue >= 99.5;
   const coverTickValue = coverTick; // 批量封面就绪后重新求一次地址
@@ -66,6 +80,7 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, index, coverTick, 
       layout
       custom={index}
       onClick={() => onOpen(book)}
+      onContextMenu={(e) => onContext?.(e, book)}
     >
       <button
         className={`book-cover${coverSrc ? ' has-art' : ''}`}
@@ -161,10 +176,20 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
     [kit]
   );
   const books = useBooks();
+  const devices = useDevices();
   const progress = useProgress();
   const sources = useSources();
-  const { addBookFromText, addBookFromPicker, removeBook, restoreBook, notify } = useAppActions();
+  const {
+    addBookFromText,
+    addBookFromPicker,
+    removeBook,
+    restoreBook,
+    notify,
+    devices: deviceActions,
+  } = useAppActions();
   const [query, setQuery] = useState('');
+  // 书架右键菜单：{ x, y, book }。没有现成菜单机制，这里做一份最小的。
+  const [contextMenu, setContextMenu] = useState(null);
   const [sort, setSort] = useState(() => {
     try {
       const saved = localStorage.getItem('folio:shelf-sort');
@@ -221,6 +246,91 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
       return 0;
     },
     [progress]
+  );
+
+  /** 只有本地且带 40 位 contentHash 的书才能推给手机；云端书只能在线读。 */
+  const canSendToDevice = useCallback(
+    (book) => Boolean(book && book.kind !== 'cloud' && /^[0-9a-f]{40}$/i.test(String(book.contentHash || ''))),
+    []
+  );
+
+  const openContextMenu = useCallback((event, book) => {
+    if (!event?.preventDefault) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const width = 190;
+    const height = 96;
+    setContextMenu({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
+      book,
+    });
+  }, []);
+
+  // 点空白、滚动、按 Esc 都关掉右键菜单。
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const close = () => setContextMenu(null);
+    const onKey = (event) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
+  const sendToDevice = useCallback(
+    async (book) => {
+      setContextMenu(null);
+      if (!canSendToDevice(book)) {
+        notify('这本书没有可用的内容哈希，暂时不能发送到手机', 'error');
+        return;
+      }
+      // 设备列表可能刚变化（手机刚连上/断开），发送前先拉一次最新值。
+      const refreshed = await deviceActions.refresh();
+      const list = refreshed?.ok && Array.isArray(refreshed.devices) ? refreshed.devices : devices;
+      const target = [...(Array.isArray(list) ? list : [])]
+        .filter((item) => item && !item.lost)
+        .sort((a, b) => Number(Boolean(b.online)) - Number(Boolean(a.online)) || Number(b.lastSeenAt || 0) - Number(a.lastSeenAt || 0))[0];
+      if (!target) {
+        notify('还没有手机连接过，用手机 App 连一次就会出现', 'info');
+        return;
+      }
+      const result = await deviceActions.enqueue({
+        deviceId: target.id,
+        type: 'push-book',
+        payload: {
+          hash: String(book.contentHash).toLowerCase(),
+          title: book.name,
+          size: Number(book.size) || 0,
+        },
+      });
+      if (!result?.ok) {
+        const message =
+          result?.error === 'bad_hash'
+            ? '这本书缺少有效的内容哈希，暂时不能发送'
+            : result?.error === 'not_found'
+              ? '目标手机记录已失效，请重新连接后再试'
+              : '发送失败，请稍后再试';
+        notify(message, 'error');
+        return;
+      }
+      notify(
+        result.duplicate
+          ? `《${book.name}》已经在待执行队列里`
+          : target.online
+            ? `已发送到「${target.name}」`
+            : '已加入待执行队列，手机连接后自动执行（7 天内有效）'
+      );
+    },
+    [canSendToDevice, deviceActions, devices, notify]
   );
 
   const lastReading = useMemo(() => {
@@ -568,6 +678,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                   percent={percentOf(book)}
                   onOpen={onOpenBook}
                   onDelete={setPendingDelete}
+                  onContext={openContextMenu}
                   onCache={(b) => {
                     setCacheStats(null);
                     setCacheBook(b);
@@ -586,6 +697,50 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
           <kbd>/</kbd> 搜索 <kbd>拖拽</kbd> 导入 <kbd>?</kbd> 快捷键
         </span>
       </footer>
+
+      {contextMenu && (
+        <div
+          role="menu"
+          aria-label="书籍操作"
+          style={{
+            position: 'fixed',
+            left: contextMenu.x,
+            top: contextMenu.y,
+            zIndex: 1200,
+            minWidth: 180,
+            padding: 6,
+            borderRadius: 12,
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--line)',
+            boxShadow: 'var(--shadow-card)',
+            color: 'var(--text)',
+          }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {canSendToDevice(contextMenu.book) && (
+            <button
+              type="button"
+              role="menuitem"
+              style={MENU_ITEM_STYLE}
+              onClick={() => sendToDevice(contextMenu.book)}
+            >
+              发送到手机
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            style={MENU_ITEM_STYLE}
+            onClick={() => {
+              const target = contextMenu.book;
+              setContextMenu(null);
+              setPendingDelete(target);
+            }}
+          >
+            从书架移除
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {dragging && (

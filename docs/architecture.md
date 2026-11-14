@@ -42,6 +42,7 @@ electron/          主进程
 ├── cloudstore.js    云端章节磁盘缓存（独立文件，便于 sources.js 整体懒加载）
 ├── fontmeta.js      字体文件族名解析（ttf/otf/woff，零依赖）
 ├── logger.js        按天滚动日志 + 内存 ring + IPC 耗时 span
+├── devicestore.js   设备记录与指令队列（devices.json）
 ├── lan.js           局域网 HTTP 服务：鉴权、路由、进度合并、SSE
 ├── lan-panel.html   面板骨架（不参与 vite 构建）
 ├── lan-panel.css    面板样式
@@ -103,19 +104,28 @@ tools/               回归与验证脚本（见 performance.md）
 
 ## 四、局域网面板为什么是「一份数据」
 
-面板没有自己的存储，也没有云服务。它读写的就是桌面端的那两个文件：
+面板没有自己的存储，也没有云服务。它读写的就是桌面端的那几份文件：
 
 ```
 dataDir/
 ├── books.json      书架（元信息）
 ├── progress.json   阅读进度（每本书一条，按 updatedAt 合并）
+├── devices.json    设备档案、指令队列、最近 50 条 history
 └── books/*.txt     本地书正文副本
 ```
 
 写入永远是「读盘 → 按 `updatedAt` 合并 → 写盘」，所以两端不存在「谁是主」的问题。
 内存里的渲染层副本靠 SSE / IPC 推送对齐。
 
-详细架构、接口表与安全边界见 [lan-panel.md](lan-panel.md)。
+设备管理（2.7）也共用同一套 SSE：`/api/events` 除 `book` / `progress` 外再发
+`device`（在线翻转）与 `command`（指令入队）两种事件；手机侧四条路由
+（`/api/device/heartbeat`、`/api/device/snapshot`、`/api/device/commands`、
+`/api/device/commands/:id/receipt`）只做「收指令 / 收回执」，文件本身仍走 2.6 的
+分块上传与 Range 下载。`apiVersion` 保持 2，能力靠 `features` 里的 `devices` 表达。
+设备的 `online` 是派生值，不落盘。
+
+详细架构、接口表与安全边界见 [lan-panel.md](lan-panel.md)；
+设备管理的协议与状态机见 [arch-device-manager.md](arch-device-manager.md)。
 
 ---
 

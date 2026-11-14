@@ -37,6 +37,7 @@ const MISSING = Symbol('missing');
 // 和「这一片的值恰好是 null」（比如没有提示条）区分开。
 const AppActionsContext = createContext(MISSING);
 const BooksContext = createContext(MISSING);
+const DevicesContext = createContext(MISSING);
 const ProgressContext = createContext(MISSING);
 const SettingsContext = createContext(MISSING);
 const ThemeContext = createContext(MISSING);
@@ -137,6 +138,38 @@ const api = {
     window.readerAPI?.lanStatus ? window.readerAPI.lanStatus() : Promise.resolve({ running: false, urls: [] }),
   lanOpen: (url) =>
     window.readerAPI?.lanOpen ? window.readerAPI.lanOpen(url) : Promise.resolve({ ok: false }),
+  // 设备管理与指令队列：只有桌面版有；浏览器预览退化成「不可用」。
+  // 入队/改名/清空全部经主进程 IPC，渲染层不直连 LAN HTTP。
+  devices: {
+    list: () =>
+      window.readerAPI?.devices?.list
+        ? window.readerAPI.devices.list()
+        : Promise.resolve({ ok: false, devices: [], error: '需要桌面版' }),
+    rename: (payload) =>
+      window.readerAPI?.devices?.rename
+        ? window.readerAPI.devices.rename(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+    remove: (payload) =>
+      window.readerAPI?.devices?.remove
+        ? window.readerAPI.devices.remove(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+    enqueue: (payload) =>
+      window.readerAPI?.devices?.enqueue
+        ? window.readerAPI.devices.enqueue(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+    cancel: (payload) =>
+      window.readerAPI?.devices?.cancel
+        ? window.readerAPI.devices.cancel(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+    clear: (payload) =>
+      window.readerAPI?.devices?.clear
+        ? window.readerAPI.devices.clear(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+    retry: (payload) =>
+      window.readerAPI?.devices?.retry
+        ? window.readerAPI.devices.retry(payload)
+        : Promise.resolve({ ok: false, error: '需要桌面版' }),
+  },
   pickBook: () => window.readerAPI?.pickBook?.(),
   // 正文存成 books/ 下的副本，书架 json 只留元数据
   addBookContent: async (payload) => {
@@ -404,6 +437,7 @@ function debounce(fn, wait) {
 
 export function AppProvider({ children }) {
   const [books, setBooks] = useState([]);
+  const [devices, setDevices] = useState([]);
   const [progress, setProgress] = useState({});
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [sources, setSources] = useState([]);
@@ -551,6 +585,76 @@ export function AppProvider({ children }) {
       }
     };
   }, []);
+
+  // 手机上传落盘后主进程推 lan:books。books.json 已经由主进程写好，
+  // 这里重新读一遍并换进内存 —— 和首次加载走同一条 api.getBooks 路径，
+  // 不另造取数方式。内存里还没落盘的本地改动按 id 保留，避免和防抖写入打架。
+  useEffect(() => {
+    let cancelled = false;
+    const off = window.readerAPI?.onLanBooks?.(() => {
+      Promise.resolve(api.getBooks())
+        .then((stored) => {
+          if (cancelled || !Array.isArray(stored)) return;
+          setBooks((prev) => {
+            const known = new Set(stored.map((item) => item?.id).filter(Boolean));
+            const pending = prev.filter((item) => item?.id && !known.has(item.id));
+            return pending.length ? [...pending, ...stored] : stored;
+          });
+        })
+        .catch(() => {
+          /* 读失败就等下一次事件，不打断正在进行的操作 */
+        });
+    });
+    return () => {
+      cancelled = true;
+      try {
+        off?.();
+      } catch {
+        /* 窗口正在销毁时 removeListener 可能抛错 */
+      }
+    };
+  }, []);
+
+  // 设备列表：IPC 的读接口，所有 action 完成后也复用它刷新。
+  const refreshDevices = useCallback(async () => {
+    const result = await api.devices.list();
+    if (result?.ok && Array.isArray(result.devices)) setDevices(result.devices);
+    return result;
+  }, []);
+
+  // 设备在线/离线（lan:device）与队列变化（lan:command）都重拉一次；
+  // 和 onLanBooks 一样，cleanup 必须摘监听，否则热更新会叠加。
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      api.devices
+        .list()
+        .then((result) => {
+          if (cancelled || !result?.ok || !Array.isArray(result.devices)) return;
+          setDevices(result.devices);
+        })
+        .catch(() => {
+          /* 主进程还没注册 devices:list（旧版本）时静默忽略 */
+        });
+    };
+    load();
+    const offDevice = window.readerAPI?.onLanDevice?.(load);
+    const offCommand = window.readerAPI?.onLanCommand?.(load);
+    return () => {
+      cancelled = true;
+      try {
+        offDevice?.();
+      } catch {
+        /* 窗口正在销毁 */
+      }
+      try {
+        offCommand?.();
+      } catch {
+        /* 窗口正在销毁 */
+      }
+    };
+  }, []);
+
   const dismissToast = useCallback(() => setToast(null), []);
   const notify = useCallback((message, tone = 'info', options = {}) => {
     const id = Math.random().toString(36).slice(2);
@@ -976,6 +1080,41 @@ export function AppProvider({ children }) {
       lanStop: api.lanStop,
       lanStatus: api.lanStatus,
       lanOpen: api.lanOpen,
+      // 设备页：list 直接读 IPC，改写类 action 成功后顺手刷新设备列表。
+      devices: {
+        list: api.devices.list,
+        refresh: refreshDevices,
+        rename: async (payload) => {
+          const result = await api.devices.rename(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+        remove: async (payload) => {
+          const result = await api.devices.remove(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+        enqueue: async (payload) => {
+          const result = await api.devices.enqueue(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+        cancel: async (payload) => {
+          const result = await api.devices.cancel(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+        clear: async (payload) => {
+          const result = await api.devices.clear(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+        retry: async (payload) => {
+          const result = await api.devices.retry(payload);
+          if (result?.ok) refreshDevices();
+          return result;
+        },
+      },
       appInfo: api.appInfo,
       logTail: api.logTail,
       logInfo: api.logInfo,
@@ -1021,6 +1160,7 @@ export function AppProvider({ children }) {
       toggleRule,
       removeRule,
       clearRules,
+      refreshDevices,
     ]
   );
 
@@ -1041,7 +1181,8 @@ export function AppProvider({ children }) {
   return (
     <AppActionsContext.Provider value={actions}>
       <BooksContext.Provider value={books}>
-        <ProgressContext.Provider value={progress}>
+        <DevicesContext.Provider value={devices}>
+          <ProgressContext.Provider value={progress}>
           <SettingsContext.Provider value={settings}>
             <ThemeContext.Provider value={themeState}>
               <SourcesContext.Provider value={sources}>
@@ -1060,6 +1201,7 @@ export function AppProvider({ children }) {
             </ThemeContext.Provider>
           </SettingsContext.Provider>
         </ProgressContext.Provider>
+        </DevicesContext.Provider>
       </BooksContext.Provider>
     </AppActionsContext.Provider>
   );
@@ -1087,6 +1229,11 @@ export function useAppActions() {
 /** 书架条目。 */
 export function useBooks() {
   return useSlice(BooksContext, 'useBooks');
+}
+
+/** 已连接过的手机/平板（含 online/lost/pending 派生值）。 */
+export function useDevices() {
+  return useSlice(DevicesContext, 'useDevices');
 }
 
 /** 阅读进度（高频：滚动时频繁变化）。 */
@@ -1141,6 +1288,7 @@ export function useToast() {
 export function useApp() {
   const actions = useAppActions();
   const books = useBooks();
+  const devices = useDevices();
   const progress = useProgress();
   const settings = useSettings();
   const themeState = useThemeState();
@@ -1154,6 +1302,7 @@ export function useApp() {
     () => ({
       ...actions,
       books,
+      devices,
       progress,
       settings,
       ...themeState,
@@ -1167,6 +1316,7 @@ export function useApp() {
     [
       actions,
       books,
+      devices,
       progress,
       settings,
       themeState,

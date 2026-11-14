@@ -8,6 +8,9 @@ import { domainToUnicode } from 'url';
 import { createCloudStore } from './cloudstore.js';
 import { createLogger } from './logger.js';
 import { createLanService, lanAddresses } from './lan.js';
+import { createDeviceStore } from './devicestore.js';
+import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
+import { configureBookFile } from './bookfile.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
 
@@ -886,6 +889,9 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     bootLanFromSettings().catch(() => {});
   }, 1200);
 
+  // 老书架补齐 contentHash（手机端做 hash 差集的前提），再晚一点跑，彻底让开启动路径。
+  backfillContentHashesLater();
+
   if (dataDirInfo.fallback) {
     logCrash(`数据目录不可写，已改用 ${dataDir}（原：${dataDirInfo.preferred}）`);
     setTimeout(() => {
@@ -1186,6 +1192,38 @@ function lanLog(level, message, meta) {
   }
 }
 
+/**
+ * 启动时后台补齐 books.json 里缺失的 contentHash。
+ *
+ * 为什么放在后台：老书架可能有几百本、每本几 MB，同步算完要几秒，
+ * 不能拦着窗口显示。补齐的意义是让手机第一次连上来就能直接做 hash 差集，
+ * 而不是下载完整本再发现「其实我早就有这本」。
+ */
+function backfillContentHashesLater() {
+  setTimeout(() => {
+    try {
+      const kit = configureBookFile({ booksDir, files, readJson, writeJson, log: lanLog });
+      const result = kit.backfillContentHashes();
+      if (result.changed) lanLog('info', `已补齐 ${result.changed} 本书的 contentHash`);
+      // 没用完的上传残片（超过一天）顺手清掉，别让 books/.incoming 越攒越多
+      const swept = kit.sweepIncoming();
+      if (swept) lanLog('info', `已清理 ${swept} 个过期的上传残片`);
+    } catch (err) {
+      lanLog('warn', `补齐 contentHash 失败：${err?.message || err}`);
+    }
+  }, 3000);
+}
+
+/**
+ * 设备记录/指令队列：整个进程只建一份，LAN 服务与后续 IPC 共用同一份内存态
+ * （SSE 计数在内存里，多份实例会各算各的）。
+ */
+let deviceStore = null;
+function ensureDeviceStore() {
+  if (!deviceStore) deviceStore = createDeviceStore({ dataDir, readJson, writeJson });
+  return deviceStore;
+}
+
 function ensureLanService() {
   if (lanService) return lanService;
   lanService = createLanService({
@@ -1229,6 +1267,33 @@ function ensureLanService() {
     // 正在看的书架 / 阅读器立刻跟上。
     onRemoteProgress: (progress, bookId) => {
       broadcast('lan:progress', { progress, bookId, at: Date.now() });
+    },
+    // 手机上传完一本：渲染层的书架要立刻出现这本新书，不用等用户手动刷新。
+    onBooksChanged: (id) => {
+      broadcast('lan:books', { id, reason: 'upload', at: Date.now() });
+    },
+    // 漫画取图：清单复用 cloud:chapter-images 那条链路（书源规则 + 清单磁盘缓存），
+    // 单页字节用 fetchCoverResponse 抓（带 Referer / 12s 超时 / 重试 1 次）。
+    // 两档缓存都在 lan-comic.js 的内存里，退出即消失，不落盘。
+    comic: createComicService({
+      images: (book, index) => {
+        const settings = readJson(files.settings, {}) || {};
+        return loadCloudChapterImages({
+          sourceId: book?.sourceId,
+          bookUrl: book?.bookUrl,
+          index: Number(index) || 0,
+          book: { name: book?.name, author: book?.author, bookUrl: book?.bookUrl, raw: book?.raw },
+          proxy: settings.proxy || '',
+        });
+      },
+      fetchImage: (url, referer) => fetchComicImage(url, referer),
+      log: (level, message, meta) => lanLog(level, message, meta),
+    }),
+    // 设备管理：SSE 连接/断开与 90s 活跃窗口共同决定在线态；
+    // 变化时推给渲染层，设备页不用轮询。
+    devices: ensureDeviceStore(),
+    onDeviceChanged: (id, online) => {
+      broadcast('lan:device', { id, online, at: Date.now() });
     },
   });
   return lanService;
@@ -1293,6 +1358,85 @@ ipcMain.handle('lan:open', async (_e, url) => {
     return { ok: false, error: err?.message || String(err) };
   }
 });
+
+/* ---------- 设备管理（渲染层 IPC） ---------- */
+
+/** devicestore 的异常 → IPC 结果，绝不让 "Error invoking remote method" 冒到渲染层。 */
+function ipcDeviceError(err) {
+  const code = err?.code === 'bad_type' ? 'unknown_type' : err?.code || 'devices_failed';
+  return { ok: false, error: code, message: err?.message || String(err) };
+}
+
+function runDeviceAction(fn) {
+  try {
+    return fn();
+  } catch (err) {
+    return ipcDeviceError(err);
+  }
+}
+
+/** 入队后：手机若开着 SSE 会立刻拉取；桌面渲染层也要刷队列计数。 */
+function notifyDeviceCommand(deviceId, commandId) {
+  const payload = { deviceId, commandId, at: Date.now() };
+  try {
+    if (lanService?.running) lanService.publish('command', payload);
+  } catch {
+    /* 推送失败不影响已落盘的队列 */
+  }
+  broadcast('lan:command', payload);
+}
+
+ipcMain.handle('devices:list', () =>
+  runDeviceAction(() => ({ ok: true, devices: ensureDeviceStore().list() })),
+);
+
+ipcMain.handle('devices:rename', (_e, payload) =>
+  runDeviceAction(() => {
+    const device = ensureDeviceStore().rename(payload?.id, payload?.name);
+    return { ok: true, device };
+  }),
+);
+
+ipcMain.handle('devices:remove', (_e, payload) =>
+  runDeviceAction(() => {
+    ensureDeviceStore().remove(payload?.id);
+    return { ok: true };
+  }),
+);
+
+ipcMain.handle('devices:enqueue', (_e, payload) =>
+  runDeviceAction(() => {
+    const result = ensureDeviceStore().enqueue({
+      deviceId: payload?.deviceId,
+      type: payload?.type,
+      payload: payload?.payload,
+      batchId: payload?.batchId,
+    });
+    notifyDeviceCommand(payload?.deviceId, result.command.id);
+    return { ok: true, command: result.command, duplicate: result.duplicate === true };
+  }),
+);
+
+ipcMain.handle('devices:cancel', (_e, payload) =>
+  runDeviceAction(() => {
+    ensureDeviceStore().cancel(payload?.deviceId, payload?.commandId);
+    return { ok: true };
+  }),
+);
+
+ipcMain.handle('devices:clear', (_e, payload) =>
+  runDeviceAction(() => {
+    const result = ensureDeviceStore().clear(payload?.deviceId);
+    return { ok: true, cleared: result.cleared };
+  }),
+);
+
+ipcMain.handle('devices:retry', (_e, payload) =>
+  runDeviceAction(() => {
+    const result = ensureDeviceStore().retry(payload?.deviceId, payload?.commandId);
+    return { ok: true, command: result.command };
+  }),
+);
 
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
@@ -2477,13 +2621,36 @@ async function loadCloudChapter({ sourceId, bookUrl, index, url, chapter, book, 
 
 ipcMain.handle('cloud:chapter', (_e, payload = {}) => loadCloudChapter(payload));
 
-ipcMain.handle('cloud:chapter-images', async (_e, { sourceId, bookUrl, index, url, chapter, book, proxy } = {}) => {
+/**
+ * 取云端漫画某一话的图片地址清单。
+ * 抽成函数是因为两条链路都要用：渲染层的 IPC（桌面端漫画阅读器），
+ * 以及局域网面板的漫画代理（手机只拿 total，拿不到 URL）。
+ */
+async function loadCloudChapterImages({ sourceId, bookUrl, index, url, chapter, book, proxy } = {}) {
   const source = findSource(sourceId);
   if (!source) return { error: '书源不存在或已删除' };
 
-  const toc = cloudStore.readToc(sourceId, bookUrl);
-  const entry = toc?.chapters?.[index] || null;
-  const chapterUrl = url || entry?.url;
+  let toc = cloudStore.readToc(sourceId, bookUrl);
+  let entry = toc?.chapters?.[index] || null;
+  let chapterUrl = url || entry?.url;
+  if (!chapterUrl) {
+    // 手机可能在这本书还没被桌面端打开过时就请求某一话（目录还没落盘）：
+    // 先补一次目录再取，否则漫画阅读器会直接卡在「这一话不存在」。
+    try {
+      const settings = readJson(files.settings, {}) || {};
+      await loadCloudToc({
+        sourceId,
+        bookUrl,
+        book: book || null,
+        proxy: proxy || settings.proxy || '',
+      });
+      toc = cloudStore.readToc(sourceId, bookUrl);
+      entry = toc?.chapters?.[index] || null;
+      chapterUrl = url || entry?.url;
+    } catch {
+      /* 补不到就按原来的方式报错 */
+    }
+  }
   if (!chapterUrl) return { error: '缺少章节地址' };
 
   const cacheFile = path.join(
@@ -2523,7 +2690,41 @@ ipcMain.handle('cloud:chapter-images', async (_e, { sourceId, bookUrl, index, ur
   } catch (err) {
     return { error: err?.message || '图片列表获取失败' };
   }
-});
+}
+
+ipcMain.handle('cloud:chapter-images', (_e, payload = {}) => loadCloudChapterImages(payload));
+
+/**
+ * 给局域网漫画代理取一页图。
+ * 复用封面的抓取逻辑（12s 超时、重试 1 次、带 Referer），但**不**复用 cacheCover ——
+ * 那会把漫画页写进 covers/ 缓存目录，既占磁盘又违反「漫画页不落盘」。
+ *
+ * @param {string} url 源站图片地址（只在主进程里存在，绝不外发）
+ * @param {string} referer 源站要求的 Referer
+ * @returns {Promise<{buffer:Buffer, type:string}|{tooLarge:true}|null>}
+ */
+async function fetchComicImage(url, referer) {
+  const target = String(url || '').trim();
+  if (!/^https?:\/\//i.test(target)) return null;
+  const res = await fetchCoverResponse(target, { referer, timeout: 12000, retries: 1 });
+  if (!res?.ok) return null;
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > COMIC_MAX_IMAGE) return { tooLarge: true };
+  const buffer = Buffer.from(await res.arrayBuffer());
+  if (!buffer.length) return null;
+  if (buffer.length > COMIC_MAX_IMAGE) return { tooLarge: true };
+  // 源站出错时常返回一个 HTML 错误页，别把网页当图片发给手机
+  if (/^\s*<(!doctype|html)/i.test(buffer.subarray(0, 64).toString('utf8'))) return null;
+  const declaredType = String(res.headers.get('content-type') || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (declaredType.startsWith('image/')) return { buffer, type: declaredType };
+  const fromName = (target.match(/\.(jpe?g|png|webp|gif|avif|bmp)(?:\?|#|$)/i) || [])[1];
+  const ext = fromName ? fromName.toLowerCase() : 'jpg';
+  const type = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+  return { buffer, type };
+}
 
 ipcMain.handle('cloud:cache-stats', (_e, { sourceId, bookUrl, total } = {}) => {
   const indexes = cloudStore.cachedIndexes(sourceId, bookUrl);

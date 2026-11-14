@@ -1,14 +1,29 @@
 package com.folio.reader.ui
 
 import android.app.Application
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.LruCache
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.compose.ui.graphics.asImageBitmap
 import com.folio.reader.FolioApp
 import com.folio.reader.core.Book
+import com.folio.reader.core.BookImporter
 import com.folio.reader.core.BookKind
+import com.folio.reader.core.JsonIo
+import com.folio.reader.core.PageKey
 import com.folio.reader.core.ProgressEntry
 import com.folio.reader.core.TextParser
+import com.folio.reader.core.TocChapter
+import com.folio.reader.core.comicPercent
+import com.folio.reader.data.ConnectionManager
+import com.folio.reader.data.ConnectionState
+import com.folio.reader.data.DeleteConfirmer
+import com.folio.reader.data.SettingsStore
+import com.folio.reader.net.LanDiscovery
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,20 +31,32 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 全局状态。
  *
- * 进度保存分两层：本地立刻记在内存里，0.6 秒防抖落盘；
- * 网络回写节流 1.5 秒，连不上就记进 pending，联网后补写。
+ * 分工（与架构文档 §1.5 一致）：
+ *  - **书架真相**在 `books.json`，桌面端清单只用来算差集；
+ *  - **连接状态**只由 [ConnectionManager] 判定，UI 不各写一套文案；
+ *  - **云端正文零缓存**：小说经 `CloudChapterSource`（3 章内存），
+ *    漫画经 `ImageLoader`（按字节内存 LRU），两者都不碰磁盘；
+ *  - 进度：本地 0.6 秒防抖落盘，1.5 秒后回写桌面端，失败挂 `pending.json`。
  */
 class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val container = (app as FolioApp).container
     private val settings = container.settings
-    private val library = container.library
-    private val offline = container.offline
+    private val books = container.books
+    private val progressStore = container.progress
+    private val syncState = container.syncState
+    private val files = container.files
+    private val importer = container.importer
+    private val cloud = container.cloud
+    private val connection = container.connection
+    private val progressSync = container.progressSync
     private val sync = container.sync
+    private val images = container.images
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -37,236 +64,436 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _reader = MutableStateFlow(ReaderUiState())
     val reader: StateFlow<ReaderUiState> = _reader.asStateFlow()
 
+    private val _comic = MutableStateFlow(ComicUiState())
+    val comic: StateFlow<ComicUiState> = _comic.asStateFlow()
+
+    /** 已解码的漫画页（内存）。key 是 `(书, 话, 页)`。 */
+    private val _comicPictures = MutableStateFlow<Map<PageKey, ImageBitmap>>(emptyMap())
+    val comicPictures: StateFlow<Map<PageKey, ImageBitmap>> = _comicPictures.asStateFlow()
+
     private val _settings = MutableStateFlow(SettingsUiState())
     val settingsState: StateFlow<SettingsUiState> = _settings.asStateFlow()
+
+    /** T11：桌面端要求删「唯一副本」时，等用户点确认的弹层状态。 */
+    private val deleteConfirms = DeleteConfirmQueue()
+    val deleteConfirm: StateFlow<DeleteConfirmState?> = deleteConfirms.request
 
     /** 目录跳章用的目标段落，由列表状态消费后清空。 */
     private val _scrollTarget = MutableStateFlow(-1)
     val scrollTarget: StateFlow<Int> = _scrollTarget.asStateFlow()
 
     /** 封面缓存：字节用 LruCache，位图用 StateFlow 驱动重组。 */
-    private val coverBytes = android.util.LruCache<String, ByteArray>(24)
-    private val _covers = MutableStateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap>>(emptyMap())
-    val covers: StateFlow<Map<String, androidx.compose.ui.graphics.ImageBitmap>> = _covers.asStateFlow()
-
-    fun loadCover(book: Book) {
-        if (_covers.value.containsKey(book.id)) return
-        viewModelScope.launch {
-            val bytes = coverBytes.get(book.id) ?: runCatching {
-                sync.client().fetchCover(book.id)
-            }.getOrNull()
-            if (bytes == null) return@launch
-            coverBytes.put(book.id, bytes)
-            val bitmap = android.graphics.BitmapFactory
-                .decodeByteArray(bytes, 0, bytes.size)
-                ?.asImageBitmap()
-            if (bitmap != null) {
-                _covers.update { it + (book.id to bitmap) }
-            }
-        }
-    }
-
-    fun scrollToParagraph(paraIndex: Int) {
-        _scrollTarget.value = paraIndex
-    }
-
-    fun clearScrollTarget() {
-        _scrollTarget.value = -1
-    }
-
-    fun setFilter(filter: String) {
-        _shelf.update { it.copy(filter = filter) }
-    }
+    private val coverBytes = LruCache<String, ByteArray>(24)
+    private val _covers = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
+    val covers: StateFlow<Map<String, ImageBitmap>> = _covers.asStateFlow()
 
     private var progressMap: MutableMap<String, ProgressEntry> = mutableMapOf()
-    private var pending: MutableSet<String> = mutableSetOf()
     private var persistJob: Job? = null
     private var pushJob: Job? = null
+    private var comicProgressJob: Job? = null
+
+    /** 发现请求的序号：自增即取消上一次（一次性广播 + 5 秒窗口）。 */
+    private var discoverSeq = 0
+
+    /** 已预取过下一话的（书 + 话），避免翻页时重复预取。 */
+    private val prefetchedChapters = HashSet<String>()
 
     init {
         reloadLocal()
         loadSettingsState()
-        // 打开 App 先同步一次，书架不用等用户手动点。
-        if (settings.hasServer && settings.autoSync) {
-            syncNow(silent = true)
+        if (settings.hasServer) {
+            viewModelScope.launch { bootstrap() }
         }
+    }
+
+    /* ---------------- 启动 ---------------- */
+
+    private suspend fun bootstrap() {
+        val health = withContext(Dispatchers.IO) { connection.check(force = false) }
+        applyHealth(health)
+        if (!health.ok) return
+        if (settings.autoSync) syncNow(silent = true)
     }
 
     /* ---------------- 本地数据 ---------------- */
 
     fun reloadLocal() {
-        progressMap = library.readProgress()
-        pending = library.readPending()
-        val books = library.readBooks()
+        progressMap = progressStore.read()
+        // 按 id 去重：迁移或并发写若在 books.json 里留下同一个 id 的两条，
+        // 后面所有以 id 为 key 的地方（LazyColumn key、进度索引、同步状态）都会打架。
+        val list = books.read().distinctBy { it.id }
+        val states = syncState.read()
         _shelf.update {
             it.copy(
-                books = books,
+                books = list,
                 progress = progressMap.toMap(),
-                offlineIds = computeOfflineIds(books),
-                cloudOfflineChapters = computeCloudCache(books),
+                syncStates = states,
+                offlineIds = list.filter { book -> book.hasLocalFile }.map { book -> book.id }.toSet(),
+                localBytes = list.filter { book -> book.hasLocalFile }.sumOf { book -> book.size },
+                lastSyncAt = syncState.lastSyncAt(),
+                hideRemoteWhenOffline = settings.hideRemoteWhenOffline,
+            )
+        }
+        _settings.update { it.copy(conflictCount = _shelf.value.conflictCount) }
+    }
+
+    /* ---------------- 连接 ---------------- */
+
+    private fun applyHealth(health: ConnectionManager.Health) {
+        _shelf.update {
+            it.copy(
+                connection = health.state,
+                connectionLabel = if (health.ok) health.detail else health.message,
+                serverVersion = health.serverVersion,
+            )
+        }
+        _settings.update {
+            it.copy(
+                connection = health.state,
+                connectionDetail = health.detail,
+                serverVersion = health.serverVersion,
             )
         }
     }
 
-    private fun computeOfflineIds(books: List<Book>): Set<String> {
-        val ids = mutableSetOf<String>()
-        for (book in books) {
-            if (book.isCloud) {
-                if (offline.cachedCloudChapters(book.id).isNotEmpty()) ids.add(book.id)
-            } else if (offline.hasLocalBook(book.id)) {
-                ids.add(book.id)
+    fun testConnection() {
+        viewModelScope.launch {
+            val health = withContext(Dispatchers.IO) { connection.check(force = true) }
+            applyHealth(health)
+            _shelf.update {
+                it.copy(
+                    message = when {
+                        health.ok -> "连上了桌面端"
+                        health.state == ConnectionState.NEED_RECONNECT ->
+                            "地址或访问码改过了，再连一次"
+                        else -> health.message
+                    },
+                )
             }
+            // 刚连上：立刻把在线通道搭起来，不用等下一次前后台切换
+            if (health.ok) startDeviceChannel()
         }
-        return ids
     }
 
-    private fun computeCloudCache(books: List<Book>): Map<String, Set<Int>> {
-        val map = HashMap<String, Set<Int>>()
-        for (book in books) {
-            if (!book.isCloud) continue
-            val cached = offline.cachedCloudChapters(book.id)
-            if (cached.isNotEmpty()) map[book.id] = cached
+    /** 断开连接：只清状态，不删书（本机的书照样能读）。 */
+    fun disconnect() {
+        stopDeviceChannel()
+        connection.reset()
+        applyHealth(ConnectionManager.Health(ConnectionState.UNKNOWN, ConnectionState.UNKNOWN.label))
+        _shelf.update { it.copy(message = "已断开桌面端") }
+    }
+
+    /** 回前台：最多查一次健康检查，连着就顺手同步。 */
+    fun onForeground() {
+        if (!settings.hasServer) return
+        viewModelScope.launch {
+            val health = withContext(Dispatchers.IO) { connection.onForeground() }
+            applyHealth(health)
+            if (health.ok && settings.autoSync && !_shelf.value.syncing) {
+                syncNow(silent = true)
+            }
         }
-        return map
+    }
+
+    /* ---------------- T09：前台在线通道 ---------------- */
+
+    /**
+     * 开 SSE 长连接（ON_START 调）。
+     *
+     * 只在「有地址 + 是 Wi-Fi（若开了仅 Wi-Fi）」时连接；桌面端没有设备接口时
+     * 通道会自己静默退出，这里不做任何状态展示。
+     */
+    fun startDeviceChannel() {
+        if (!settings.hasServer) return
+        if (settings.wifiOnly && !onWifi()) return
+        connection.channel.start {
+            val outcomes = sync.runPendingCommands(confirmer = deleteConfirmer)
+            if (outcomes.isNotEmpty()) reloadLocal()
+        }
+    }
+
+    /** 关 SSE（ON_STOP 调）。App 一退到后台连接就断，离线态自然出现。 */
+    fun stopDeviceChannel() {
+        connection.channel.stop()
+    }
+
+    /* ---------------- T11：删除唯一副本的确认 ---------------- */
+
+    /**
+     * 真实的「删唯一副本」确认器：挂起等用户点弹层。
+     *
+     * 默认实现 `DeleteConfirmer.REJECT` 会一律拒绝 —— 功能上是安全的，但等于
+     * 「唯一副本永远删不掉」。这里把决定权交给用户，并且**只在用户点确认后**才
+     * 放行删除；弹层被取消/替换时按拒绝处理（见 [DeleteConfirmQueue]）。
+     */
+    private val deleteConfirmer: DeleteConfirmer = deleteConfirms
+
+    /** 用户点了确认 / 取消。 */
+    fun answerDeleteConfirm(allow: Boolean) {
+        deleteConfirms.answer(allow)
+    }
+
+    /** 当前是不是 Wi-Fi（「仅在 Wi-Fi 下同步」开关用）。 */
+    private fun onWifi(): Boolean {
+        val app = getApplication<Application>()
+        val manager = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
+            as? android.net.ConnectivityManager ?: return true
+        val network = manager.activeNetwork ?: return false
+        val caps = manager.getNetworkCapabilities(network) ?: return false
+        return caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
     }
 
     /* ---------------- 同步 ---------------- */
 
     fun syncNow(silent: Boolean = false) {
         if (_shelf.value.syncing) return
+        if (!settings.hasServer) {
+            _shelf.update { it.copy(message = "先填地址和访问码") }
+            return
+        }
+        if (settings.wifiOnly && !onWifi()) {
+            _shelf.update { it.copy(message = "设置了只在 Wi-Fi 下同步，现在不是 Wi-Fi") }
+            return
+        }
         _shelf.update { it.copy(syncing = true) }
         viewModelScope.launch {
-            val outcome = sync.sync()
-            _shelf.update {
-                it.copy(
-                    syncing = false,
-                    online = outcome.ok,
-                    message = if (silent && outcome.ok) null else outcome.message,
-                    lastSyncAt = settings.lastSyncAt,
-                )
+            val health = withContext(Dispatchers.IO) { connection.check(force = !silent) }
+            applyHealth(health)
+            if (!health.ok) {
+                _shelf.update { it.copy(syncing = false, message = health.message) }
+                return@launch
             }
+
+            val outcome = sync.sync(
+                downloadOnly = false,
+                autoTransferUnder20MB = settings.autoTransferUnder20MB,
+            )
+            // 清单搬完之后再对齐进度：书 id 可能刚被归并过，晚一步更不容易丢
+            withContext(Dispatchers.IO) { progressSync.pullAndMerge() }
+            val flushed = withContext(Dispatchers.IO) { progressSync.flushPending() }
+
+            // T08：同步收尾顺手拉一次排队指令（桌面端没有设备接口时是空列表，不报错）。
+            // 逐条串行 + 每条独立回执，执行完不单独提示：书架在下面统一 reload 一次就够了。
+            withContext(Dispatchers.IO) { runCatching { sync.runPendingCommands(deleteConfirmer) } }
+
+            val message = when {
+                !outcome.ok -> outcome.message
+                silent && outcome.ok -> null
+                flushed.failed > 0 -> "${outcome.message} · ${flushed.message}"
+                else -> outcome.message
+            }
+            _shelf.update { it.copy(syncing = false, message = message) }
+            reloadLocal()
+            loadSettingsState()
+        }
+    }
+
+    /** 同步状态页的单条「重试」。 */
+    fun retrySync(book: Book) {
+        viewModelScope.launch {
+            if (book.hasLocalFile) {
+                // 本机书：走一次整体同步，把上传补上
+                syncNow(silent = false)
+                return@launch
+            }
+            _shelf.update { it.copy(message = "正在重试《${book.title}》…") }
+            val outcome = sync.pullBook(book.remoteId ?: book.id)
+            _shelf.update { it.copy(message = outcome.message) }
             reloadLocal()
         }
     }
 
     fun dismissMessage() {
         _shelf.update { it.copy(message = null) }
+        _settings.update { it.copy(message = null) }
     }
 
-    /* ---------------- 阅读 ---------------- */
+    /** 关掉「未连接桌面端」横幅（本次进程内不再弹）。 */
+    fun dismissBanner() {
+        _shelf.update { it.copy(bannerDismissed = true) }
+    }
+
+    /** 列表已经滚到要高亮的那本之后调用。 */
+    fun clearHighlight() {
+        _shelf.update { it.copy(highlightId = null) }
+    }
+
+    /* ---------------- 小说阅读 ---------------- */
 
     fun openBook(book: Book) {
+        if (book.isComic) {
+            openComic(book)
+            return
+        }
+        images.clear()
         _reader.value = ReaderUiState(book = book, loading = true)
         viewModelScope.launch {
+            books.touchRead(book.id)
             if (book.isCloud) {
-                val (toc, offlineOnly) = sync.loadToc(book)
-                if (toc.isEmpty()) {
-                    _reader.value = ReaderUiState(
-                        book = book,
-                        error = if (offlineOnly) "离线状态下没有这本书的缓存章节" else "拿不到目录，确认桌面端已打开",
-                    )
-                    return@launch
-                }
-                val entry = progressMap[book.id]
-                // toc 里的 index 是真实章号；离线兜底时列表还可能是稀疏的，
-                // 所以按章号找下标，而不是直接拿章号当位置。
-                val target = entry?.chapter ?: toc.first().index
-                val startIndex = toc.indexOfFirst { it.index == target }.coerceAtLeast(0)
-                _reader.update { it.copy(toc = toc) }
-                loadChapter(book, startIndex, entry)
+                openCloudBook(book)
             } else {
-                val (text, fromCache) = sync.loadLocalText(book)
-                if (text == null) {
-                    _reader.value = ReaderUiState(
-                        book = book,
-                        error = "这本书还没下到手机，连上桌面端再打开一次",
-                    )
-                    return@launch
-                }
-                val parsed = TextParser.parseBook(text)
-                val entry = progressMap[book.id]
-                val index = (entry?.paraIndex ?: 0).coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
-                val chapterIndex = TextParser.chapterIndexForPara(parsed.chapters, index)
-                _reader.value = ReaderUiState(
-                    book = book,
-                    paragraphs = parsed.paragraphs,
-                    chapters = parsed.chapters,
-                    chapterIndex = chapterIndex,
-                    chapterTitle = parsed.chapters.getOrNull(chapterIndex)?.title.orEmpty(),
-                    paraIndex = index,
-                    percent = percentOf(index, parsed.paragraphs.size, 0, 0),
-                    offline = fromCache,
-                )
-                recordProgress(book, buildEntry(book, index, chapterIndex, parsed.chapters))
+                openLocalBook(book)
             }
         }
     }
 
-    /**
-     * 载入云端书的某一章。[index] 是目录列表里的位置。
-     *
-     * 离线时如果这一章没缓存，退到离它最近的已缓存章节，而不是直接报错 ——
-     * 用户断网后想看的往往是之前读过的部分。
-     */
-    private suspend fun loadChapter(
-        book: Book,
-        index: Int,
-        entry: ProgressEntry?,
-        allowFallback: Boolean = true,
-    ) {
-        val current = _reader.value
-        val toc = if (current.toc.isEmpty()) sync.loadToc(book).first else current.toc
-        if (toc.isEmpty()) {
-            _reader.update { it.copy(loading = false, error = "拿不到目录，确认桌面端已打开") }
+    /** 本机书：正文就在 `books/<id>.txt`，断网也能读。 */
+    private suspend fun openLocalBook(book: Book) {
+        val text = withContext(Dispatchers.IO) { files.readText(book.id) }
+        if (text.isNullOrBlank()) {
+            _reader.value = ReaderUiState(
+                book = book,
+                error = "这本书还没下到手机，连接桌面端后可以下载全文",
+            )
             return
         }
-        val position = index.coerceIn(0, toc.size - 1)
-        val chapterNo = toc[position].index
-        val (text, fromCache) = sync.loadCloudChapter(book, chapterNo)
-        if (text == null) {
-            if (allowFallback) {
-                val cached = offline.cachedCloudChapters(book.id)
-                if (com.folio.reader.core.ChapterFallback.shouldFallback(cached, chapterNo)) {
-                    val nearest = com.folio.reader.core.ChapterFallback.nearest(cached, chapterNo)
-                    val fallbackIndex = if (nearest != null) toc.indexOfFirst { it.index == nearest } else -1
-                    if (fallbackIndex >= 0) {
-                        loadChapter(book, fallbackIndex, null, allowFallback = false)
-                        _reader.update { it.copy(offline = true, error = null) }
-                        return
-                    }
-                }
-            }
+        val parsed = TextParser.parseBook(text)
+        val entry = progressMap[book.id]
+        val index = (entry?.paraIndex ?: 0).coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
+        val chapterIndex = TextParser.chapterIndexForPara(parsed.chapters, index)
+        _reader.value = ReaderUiState(
+            book = book,
+            paragraphs = parsed.paragraphs,
+            chapters = parsed.chapters,
+            chapterIndex = chapterIndex,
+            chapterTitle = parsed.chapters.getOrNull(chapterIndex)?.title.orEmpty(),
+            paraIndex = index,
+            percent = percentOf(index, parsed.paragraphs.size, 0, 0),
+            offline = true,
+        )
+        recordProgress(book, buildEntry(book, index, chapterIndex, parsed.chapters))
+    }
+
+    /** 云端书：先取目录，再按章取正文（正文只进内存）。 */
+    private suspend fun openCloudBook(book: Book) {
+        if (!_shelf.value.online) {
+            _reader.value = ReaderUiState(
+                book = book,
+                error = "云端书需要连接桌面端才能阅读",
+            )
+            return
+        }
+        val toc = withContext(Dispatchers.IO) { runCatching { cloud.toc(book.id) } }
+        val chapters = toc.getOrNull()?.chapters.orEmpty()
+        if (chapters.isEmpty()) {
+            val reason = toc.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+            _reader.value = ReaderUiState(
+                book = book,
+                error = reason ?: "拿不到目录，确认桌面端已打开",
+            )
+            return
+        }
+        val entry = progressMap[book.id]
+        val target = entry?.chapter ?: chapters.first().index
+        val position = chapters.indexOfFirst { it.index == target }.coerceAtLeast(0)
+        _reader.update { it.copy(toc = chapters) }
+        readCloudChapter(book, chapters, position, entry)
+    }
+
+    private suspend fun readCloudChapter(
+        book: Book,
+        toc: List<TocChapter>,
+        position: Int,
+        entry: ProgressEntry?,
+    ) {        val safePosition = position.coerceIn(0, toc.size - 1)
+        val chapterNo = toc[safePosition].index
+        val loaded = withContext(Dispatchers.IO) {
+            runCatching { cloud.chapter(book.id, chapterNo) }
+        }
+        val text = loaded.getOrNull()?.text
+        if (text.isNullOrBlank()) {
+            val reason = loaded.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
             _reader.update {
-                it.copy(loading = false, error = "这一章还没缓存，连上桌面端再读")
+                it.copy(loading = false, error = reason ?: "连接已断开 · 重试")
             }
             return
         }
         val parsed = TextParser.parseBook(text)
         val resume = if (entry != null && entry.chapter == chapterNo) (entry.paraIndex ?: 0) else 0
         val paraIndex = resume.coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
-        _reader.value = ReaderUiState(
-            book = book,
-            paragraphs = parsed.paragraphs,
-            chapters = parsed.chapters,
-            toc = toc,
-            chapterIndex = position,
-            chapterTitle = toc[position].title,
-            paraIndex = paraIndex,
-            percent = percentOf(paraIndex, parsed.paragraphs.size, position, toc.size),
-            offline = fromCache,
-        )
-        recordProgress(book, buildEntry(book, paraIndex, position, parsed.chapters, chapterNo))
+        _reader.update {
+            it.copy(
+                loading = false,
+                error = null,
+                paragraphs = parsed.paragraphs,
+                chapters = parsed.chapters,
+                toc = toc,
+                chapterIndex = safePosition,
+                chapterTitle = toc[safePosition].title,
+                paraIndex = paraIndex,
+                percent = percentOf(paraIndex, parsed.paragraphs.size, safePosition, toc.size),
+                offline = loaded.getOrNull()?.fromCache == true,
+            )
+        }
+        recordProgress(book, buildEntry(book, paraIndex, safePosition, parsed.chapters, chapterNo))
+        prefetchNextChapter(book, toc, safePosition)
+    }
+
+    /**
+     * 翻章失败后的「重试」。
+     *
+     * 失败时 `readCloudChapter` 只写 `error`，已经读到的 `paragraphs` 原封不动留着，
+     * 所以这里重试不会把正文清空 —— 用户看到的是「内容还在，底下提示重试」。
+     */
+    fun retryChapter() {
+        val state = _reader.value
+        val book = state.book ?: return
+        _reader.update { it.copy(error = null) }
+        viewModelScope.launch {
+            when {
+                state.isCloud && state.toc.isEmpty() -> {
+                    _reader.update { it.copy(loading = true) }
+                    openCloudBook(book)
+                }
+                state.isCloud -> readCloudChapter(book, state.toc, state.chapterIndex, progressMap[book.id])
+                state.paragraphs.isEmpty() -> {
+                    _reader.update { it.copy(loading = true) }
+                    openLocalBook(book)
+                }
+                // 本机书正文在本地，能显示就不会有 error，兜底什么都不做。
+                else -> Unit
+            }
+        }
+    }
+
+    /** 顺手把下一章拉进内存，翻章时不用等。失败一律吞掉。 */
+    private fun prefetchNextChapter(book: Book, toc: List<TocChapter>, position: Int) {
+        val next = toc.getOrNull(position + 1)?.index ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { cloud.prefetch(book.id, listOf(next)) }
+        }
     }
 
     fun switchChapter(index: Int) {
         val state = _reader.value
         val book = state.book ?: return
-        if (index == state.chapterIndex && state.paragraphs.isNotEmpty()) return
-        if (index < 0 || (state.toc.isNotEmpty() && index >= state.toc.size)) return
-        _reader.update { it.copy(loading = true, error = null, showToc = false) }
-        viewModelScope.launch {
-            loadChapter(book, index, progressMap[book.id])
+        if (index < 0) return
+        if (state.isCloud) {
+            if (state.toc.isEmpty() || index >= state.toc.size) return
+            if (index == state.chapterIndex && state.paragraphs.isNotEmpty()) return
+            _reader.update { it.copy(loading = true, error = null, showToc = false) }
+            viewModelScope.launch {
+                readCloudChapter(book, state.toc, index, progressMap[book.id])
+            }
+        } else {
+            val chapter = state.chapters.getOrNull(index) ?: return
+            _reader.update {
+                it.copy(chapterIndex = index, chapterTitle = chapter.title, showToc = false)
+            }
+            scrollToParagraph(chapter.paraIndex)
+            updatePosition(chapter.paraIndex)
         }
+    }
+
+    fun prevChapter() = jumpChapter(-1)
+
+    fun nextChapter() = jumpChapter(1)
+
+    private fun jumpChapter(delta: Int) {
+        val state = _reader.value
+        val target = state.chapterIndex + delta
+        if (target < 0 || target >= state.chapterCount) return
+        switchChapter(target)
     }
 
     /** 拖动进度条。 */
@@ -287,7 +514,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             } else {
                 _reader.update { it.copy(loading = true) }
                 viewModelScope.launch {
-                    loadChapter(book, chapter, null)
+                    readCloudChapter(book, state.toc, chapter, null)
                     val after = _reader.value
                     val target = (ratio * (after.paragraphs.size - 1).coerceAtLeast(0)).toInt()
                         .coerceIn(0, (after.paragraphs.size - 1).coerceAtLeast(0))
@@ -333,9 +560,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _reader.update { it.copy(showToc = !it.showToc) }
     }
 
+    fun toggleStyle() {
+        _reader.update { it.copy(showStyle = !it.showStyle) }
+    }
+
+    fun toggleControls() {
+        _reader.update { it.copy(controls = !it.controls) }
+    }
+
+    fun scrollToParagraph(paraIndex: Int) {
+        _scrollTarget.value = paraIndex
+    }
+
+    fun clearScrollTarget() {
+        _scrollTarget.value = -1
+    }
+
     fun closeReader() {
         flush()
+        images.clear()
+        cloud.clear()
         _reader.value = ReaderUiState()
+        // T10：退出阅读器是快照的三个触发点之一（刚读完的书 lastReadAt / 进度都变了）。
+        // 60s 内重复会被 SyncEngine 自己挡掉，这里不用再判断。
+        viewModelScope.launch { runCatching { sync.reportSnapshot() } }
     }
 
     private fun percentOf(paraIndex: Int, paraCount: Int, chapterIndex: Int, tocTotal: Int): Double {
@@ -373,6 +621,275 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
+    /* ---------------- 漫画阅读 ---------------- */
+
+    fun openComic(book: Book) {
+        cloud.clear()
+        images.clear()
+        _comicPictures.value = emptyMap()
+        prefetchedChapters.clear()
+        _comic.value = ComicUiState(
+            book = book,
+            loading = true,
+            direction = settings.comicDirection,
+        )
+        viewModelScope.launch {
+            books.touchRead(book.id)
+            if (!_shelf.value.online) {
+                _comic.update { it.copy(loading = false, error = "云端书需要连接桌面端才能阅读") }
+                return@launch
+            }
+            val toc = withContext(Dispatchers.IO) { runCatching { cloud.toc(book.id) } }
+            val chapters = toc.getOrNull()?.chapters.orEmpty()
+            if (chapters.isEmpty()) {
+                val reason = toc.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                _comic.update {
+                    it.copy(loading = false, error = reason ?: "拿不到话列表，确认桌面端已打开")
+                }
+                return@launch
+            }
+            val entry = progressMap[book.id]
+            val target = entry?.chapter ?: chapters.first().index
+            val position = chapters.indexOfFirst { it.index == target }.coerceAtLeast(0)
+            loadComicChapter(book, chapters, position, book.comicPage ?: 0)
+        }
+    }
+
+    private suspend fun loadComicChapter(
+        book: Book,
+        toc: List<TocChapter>,
+        position: Int,
+        startPage: Int,
+    ) {
+        val safePosition = position.coerceIn(0, toc.size - 1)
+        val chapterNo = toc[safePosition].index
+        val pages = withContext(Dispatchers.IO) {
+            runCatching { connection.client().comicPages(book.id, chapterNo) }
+        }
+        val total = pages.getOrNull()?.total ?: 0
+        if (total <= 0) {
+            val reason = pages.exceptionOrNull()?.message?.takeIf { it.isNotBlank() }
+                ?: "这一话没有图片"
+            _comic.update {
+                it.copy(loading = false, error = reason)
+            }
+            return
+        }
+        val page = startPage.coerceIn(0, total - 1)
+        _comic.update {
+            it.copy(
+                book = book,
+                toc = toc,
+                chapterIndex = safePosition,
+                chapterNo = chapterNo,
+                chapterTitle = toc[safePosition].title,
+                total = total,
+                page = page,
+                loading = false,
+                error = null,
+                pageErrors = emptyMap(),
+            )
+        }
+        requestComicPage(page)
+        recordComicProgress(book, toc, safePosition, chapterNo, page, total, immediate = true)
+        maybePrefetchNextChapter(book, toc, safePosition, page, total)
+    }
+
+    /** 请求某一页（已在缓存/已失败的直接跳过）。 */
+    fun requestComicPage(page: Int) {
+        val state = _comic.value
+        val book = state.book ?: return
+        if (page < 0 || (state.total > 0 && page >= state.total)) return
+        if (state.pageErrors.containsKey(page)) return
+        val key = PageKey.of(book.id, state.chapterNo, page)
+        if (_comicPictures.value.containsKey(key)) return
+        viewModelScope.launch {
+            val bitmap = images.load(key).await()
+            if (bitmap == null) {
+                val reason = probeComicPageError(book, state.chapterNo, page)
+                _comic.update { it.copy(pageErrors = it.pageErrors + (page to reason)) }
+            } else {
+                _comicPictures.update { it + (key to bitmap.asImageBitmap()) }
+            }
+        }
+    }
+
+    /**
+     * 失败页的「重试」：先清掉失败标记，再走一次加载。
+     */
+    fun retryComicPage(page: Int) {
+        _comic.update { it.copy(pageErrors = it.pageErrors - page) }
+        requestComicPage(page)
+    }
+
+    /**
+     * 取失败原因。
+     *
+     * `ImageLoader` 只回 null（它自己打了日志），但 UI 要显示「为什么失败」，
+     * 所以失败时再探一次接口把服务端/网络的原始文案拿回来 —— 只在失败路径上多一次请求。
+     */
+    private suspend fun probeComicPageError(book: Book, chapterNo: Int, page: Int): String {
+        val error = withContext(Dispatchers.IO) {
+            runCatching {
+                connection.client().comicPage(book.id, chapterNo, page).use { it.input.readBytes() }
+            }.exceptionOrNull()
+        }
+        return error?.message?.takeIf { it.isNotBlank() } ?: "这一页没取到"
+    }
+
+    /** 当前页变化（滚动或翻页触发）。 */
+    fun onComicPageChanged(page: Int) {
+        val state = _comic.value
+        val book = state.book ?: return
+        if (page == state.page || page < 0) return
+        _comic.update { it.copy(page = page) }
+        requestComicPage(page)
+        requestComicPage(page + 1)
+        requestComicPage(page + 2)
+        if (page - 1 >= 0) requestComicPage(page - 1)
+        recordComicProgress(book, state.toc, state.chapterIndex, state.chapterNo, page, state.total, false)
+        maybePrefetchNextChapter(book, state.toc, state.chapterIndex, page, state.total)
+    }
+
+    fun switchComicChapter(index: Int) {
+        val state = _comic.value
+        val book = state.book ?: return
+        if (index < 0 || index >= state.toc.size) return
+        if (index == state.chapterIndex && state.total > 0) return
+        _comic.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            loadComicChapter(book, state.toc, index, 0)
+        }
+    }
+
+    fun prevComicChapter() {
+        val state = _comic.value
+        if (!state.hasPrevChapter) return
+        switchComicChapter(state.chapterIndex - 1)
+    }
+
+    fun nextComicChapter() {
+        val state = _comic.value
+        if (!state.hasNextChapter) return
+        switchComicChapter(state.chapterIndex + 1)
+    }
+
+    fun toggleComicControls() {
+        _comic.update { it.copy(controls = !it.controls) }
+    }
+
+    /** 话选择抽屉的显隐。 */
+    fun toggleComicToc() {
+        _comic.update { it.copy(showToc = !it.showToc) }
+    }
+
+    /**
+     * 重试整话：`ComicReaderScreen` 的「重试」按钮走这里。
+     *
+     * 只清错误标记与失败页记录，已经加载成功的页继续用内存里的图，
+     * 不整份重来（重来会把用户翻到的位置打回第一页）。
+     */
+    fun reloadComic() {
+        val state = _comic.value
+        val book = state.book ?: return
+        _comic.update { it.copy(loading = true, error = null, pageErrors = emptyMap()) }
+        viewModelScope.launch {
+            if (state.toc.isEmpty()) {
+                // 连目录都没拿到 —— 整份重开。
+                openComic(book)
+                return@launch
+            }
+            loadComicChapter(book, state.toc, state.chapterIndex, state.page)
+        }
+    }
+
+    /** 读到本话 80% 就预取下一话的页清单与前两张。 */
+    private fun maybePrefetchNextChapter(
+        book: Book,
+        toc: List<TocChapter>,
+        position: Int,
+        page: Int,
+        total: Int,
+    ) {
+        if (total <= 0) return
+        if ((page + 1).toFloat() / total < 0.8f) return
+        val next = toc.getOrNull(position + 1) ?: return
+        val stamp = "${book.id}#${next.index}"
+        if (!prefetchedChapters.add(stamp)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val pages = connection.client().comicPages(book.id, next.index)
+                for (index in 0 until minOf(2, pages.total)) {
+                    val key = PageKey.of(book.id, next.index, index)
+                    val bitmap = images.load(key).await()
+                    if (bitmap != null) {
+                        _comicPictures.update { it + (key to bitmap.asImageBitmap()) }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 漫画进度：对齐到「话」级。
+     *
+     * `chapter` / `windowBase` / `paraIndex` 都写话序号（与桌面端口径一致），
+     * `percent` 由 [comicPercent] 算（话位置 + 话内页比例）；话内页号只落本机
+     * （`LocalBook.comicPage`），不进 `ProgressEntry`，因此不会污染桌面端。
+     */
+    private fun recordComicProgress(
+        book: Book,
+        toc: List<TocChapter>,
+        position: Int,
+        chapterNo: Int,
+        page: Int,
+        total: Int,
+        immediate: Boolean,
+    ) {
+        val percent = comicPercent(
+            chapterIndex = position,
+            pageIndex = page,
+            pageCount = total,
+            chapterCount = toc.size,
+        )
+        val title = toc.getOrNull(position)?.title.orEmpty()
+        val entry = ProgressEntry(
+            id = book.id,
+            paraIndex = chapterNo,
+            chapter = chapterNo,
+            chapterIndex = chapterNo,
+            chapterTitle = title,
+            windowBase = chapterNo,
+            percent = percent,
+            updatedAt = System.currentTimeMillis(),
+        )
+        progressMap[book.id] = entry
+        _shelf.update { it.copy(progress = progressMap.toMap()) }
+        comicProgressJob?.cancel()
+        comicProgressJob = viewModelScope.launch {
+            if (!immediate) delay(700)
+            progressStore.write(progressMap)
+            withContext(Dispatchers.IO) { progressSync.push(book, entry) }
+        }
+    }
+
+    /** 关掉漫画阅读器：把话内页号落到本地，释放图片内存。 */
+    fun closeComic() {
+        val state = _comic.value
+        val book = state.book
+        if (book != null) {
+            val current = books.findById(book.id)
+            if (current != null) {
+                books.upsert(current.copy(comicPage = state.page))
+            }
+        }
+        flush()
+        images.clear()
+        cloud.clear()
+        _comicPictures.value = emptyMap()
+        _comic.value = ComicUiState(direction = settings.comicDirection)
+    }
+
     /* ---------------- 进度落盘与回写 ---------------- */
 
     private fun recordProgress(book: Book, entry: ProgressEntry) {
@@ -381,87 +898,289 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         persistJob?.cancel()
         persistJob = viewModelScope.launch {
             delay(600)
-            library.writeProgress(progressMap)
+            progressStore.write(progressMap)
         }
         pushJob?.cancel()
         pushJob = viewModelScope.launch {
             delay(1500)
-            val ok = sync.pushProgress(book, entry)
+            val ok = withContext(Dispatchers.IO) { progressSync.push(book, entry) }
             if (ok) {
-                pending.remove(book.id)
-                library.writePending(pending)
-                _shelf.update { it.copy(online = true) }
+                _shelf.update { it.copy(connection = ConnectionState.CONNECTED) }
             } else {
-                pending.add(book.id)
-                library.writePending(pending)
                 _shelf.update {
-                    it.copy(
-                        online = false,
-                        message = "进度先存在手机里，连上桌面端会自动补同步",
-                    )
+                    it.copy(message = "进度先存在手机里，连上桌面端会自动补同步")
                 }
             }
         }
     }
 
-    /** 立刻把进度写盘并尝试回写。 */
+    /** 立刻把进度写盘并尝试补写。 */
     fun flush() {
         persistJob?.cancel()
-        library.writeProgress(progressMap)
-        val dirty = pending.toList()
+        progressStore.write(progressMap)
+        val dirty = progressStore.readPending()
         if (dirty.isEmpty()) return
         viewModelScope.launch {
-            var ok = true
-            for (id in dirty) {
-                val book = _shelf.value.books.find { it.id == id } ?: continue
-                val entry = progressMap[id] ?: continue
-                if (!sync.pushProgress(book, entry)) {
-                    ok = false
-                    continue
-                }
-                pending.remove(id)
+            val outcome = withContext(Dispatchers.IO) { progressSync.flushPending() }
+            if (outcome.ok) {
+                _shelf.update { it.copy(message = "进度已同步到桌面端") }
             }
-            library.writePending(pending)
-            if (ok) _shelf.update { it.copy(online = true, message = "进度已同步到桌面端") }
         }
+    }
+
+    /* ---------------- 封面 ---------------- */
+
+    fun loadCover(book: Book) {
+        if (_covers.value.containsKey(book.id)) return
+        if (book.cover == null) return
+        viewModelScope.launch {
+            val bytes = coverBytes.get(book.id) ?: withContext(Dispatchers.IO) {
+                runCatching {
+                    connection.client().fetchCover(book.remoteId ?: book.id)
+                }.getOrNull()
+            }
+            if (bytes == null) return@launch
+            coverBytes.put(book.id, bytes)
+            val bitmap = android.graphics.BitmapFactory
+                .decodeByteArray(bytes, 0, bytes.size)
+                ?.asImageBitmap()
+            if (bitmap != null) {
+                _covers.update { it + (book.id to bitmap) }
+            }
+        }
+    }
+
+    /* ---------------- 书架动作 ---------------- */
+
+    fun setFilter(filter: String) {
+        _shelf.update { it.copy(filter = filter) }
+    }
+
+    fun setQuery(query: String) {
+        _shelf.update { it.copy(query = query) }
+    }
+
+    /** 把一本桌面端的书整本下到手机（之后断网也能读）。 */
+    fun downloadOffline(book: Book) {
+        if (book.isCloud) {
+            _shelf.update { it.copy(message = "云端书需要连接桌面端才能阅读") }
+            return
+        }
+        if (book.hasLocalFile) {
+            _shelf.update { it.copy(message = "《${book.title}》已经在本机了") }
+            return
+        }
+        viewModelScope.launch {
+            _shelf.update { it.copy(message = "正在下载《${book.title}》…") }
+            val outcome = sync.pullBook(book.remoteId ?: book.id)
+            _shelf.update { it.copy(message = outcome.message) }
+            reloadLocal()
+        }
+    }
+
+    /**
+     * 删除本机副本（本机书的长按菜单）。
+     *
+     * 正文与条目一起删，否则 `books/` 里会留下没人引用的孤儿文件。
+     */
+    fun deleteLocalCopy(book: Book) {
+        removeEntry(book, message = "已删除《${book.title}》的本机副本")
+    }
+
+    /**
+     * 从手机书架移除（桌面端书的长按菜单）。
+     *
+     * 桌面端那份不动：下次同步会重新出现，这是预期行为（手机只是「不看了」）。
+     * 如果这本已经下到手机，正文也一并删掉。
+     */
+    fun removeFromShelf(book: Book) {
+        removeEntry(book, message = "已从手机书架移除《${book.title}》")
+    }
+
+    private fun removeEntry(book: Book, message: String) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                files.delete(book.id)
+                books.remove(book.id)
+                syncState.remove(book.id)
+                progressStore.remove(book.id)
+                cloud.clear(book.id)
+            }
+            _covers.update { it - book.id }
+            coverBytes.remove(book.id)
+            _shelf.update { it.copy(message = message) }
+            reloadLocal()
+        }
+    }
+
+    /* ---------------- 导入 ---------------- */
+
+    /**
+     * 导入多个文件（SAF 多选）。
+     *
+     * 逐个导入是为了给出「2/5」这种进度：一本 20MB 的 txt 在低端机上要几百毫秒，
+     * 选十本时如果什么都不显示，用户会以为没反应。
+     */
+    fun importDocuments(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            _shelf.update {
+                it.copy(importing = true, importLabel = "正在导入 0/${uris.size}…", message = null)
+            }
+            var importedId: String? = null
+            var importedTitle = ""
+            var duplicateTitle = ""
+            var failedReason = ""
+            var importedCount = 0
+            var duplicateCount = 0
+            var failedCount = 0
+
+            uris.forEachIndexed { index, uri ->
+                _shelf.update { it.copy(importLabel = "正在导入 ${index + 1}/${uris.size}…") }
+                when (val outcome = withContext(Dispatchers.IO) { importOne(uri) }) {
+                    is BookImporter.Outcome.Imported -> {
+                        importedCount += 1
+                        importedId = outcome.book.id
+                        importedTitle = outcome.book.title
+                    }
+                    is BookImporter.Outcome.Duplicate -> {
+                        duplicateCount += 1
+                        duplicateTitle = books.findById(outcome.existingId)?.title.orEmpty()
+                    }
+                    is BookImporter.Outcome.Failed -> {
+                        failedCount += 1
+                        if (failedReason.isBlank()) failedReason = outcome.reason
+                    }
+                }
+            }
+
+            val message = when {
+                uris.size == 1 && importedCount == 1 -> "《$importedTitle》已加入书架"
+                uris.size == 1 && duplicateCount == 1 -> "《${duplicateTitle.ifBlank { "这本书" }}》已在书架里"
+                uris.size == 1 && failedCount == 1 -> failedReason
+                failedCount > 0 && importedCount > 0 ->
+                    "导入 $importedCount 本，$failedCount 本失败：$failedReason"
+                failedCount > 0 -> "导入失败：$failedReason"
+                duplicateCount > 0 && importedCount == 0 -> "这些书已经在书架里了"
+                else -> "已导入 $importedCount 本"
+            }
+            _shelf.update {
+                it.copy(
+                    importing = false,
+                    importLabel = "",
+                    message = message,
+                    highlightId = importedId,
+                )
+            }
+            loadSettingsState()
+            reloadLocal()
+        }
+    }
+
+    private fun importOne(uri: Uri): BookImporter.Outcome {
+        val app = getApplication<Application>()
+        val name = displayNameOf(uri)
+        val bytes = runCatching {
+            app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        }.getOrNull() ?: return BookImporter.Outcome.Failed("读不到这个文件")
+        if (bytes.size > BookImporter.INTAKE_LIMIT) {
+            return BookImporter.Outcome.Failed("这本超过 30MB，只能放在桌面端阅读")
+        }
+        return importer.importBytes(name, bytes)
+    }
+
+    private fun displayNameOf(uri: Uri): String {
+        val app = getApplication<Application>()
+        val fromProvider = runCatching {
+            app.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull()
+        return fromProvider?.takeIf { it.isNotBlank() }
+            ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+            ?: "未命名.txt"
     }
 
     /* ---------------- 设置 ---------------- */
 
     fun loadSettingsState() {
-        _settings.value = SettingsUiState(
-            serverUrl = settings.serverUrl,
-            token = settings.token,
-            fontScale = settings.fontScale,
-            lineHeight = settings.lineHeight,
-            pagePadding = settings.pagePadding,
-            accent = settings.accent.toLong() and 0xFFFFFFFFL,
-            paper = settings.paper.toLong() and 0xFFFFFFFFL,
-            ink = settings.ink.toLong() and 0xFFFFFFFFL,
-            autoSync = settings.autoSync,
-            autoCache = settings.autoCache,
-            cacheSize = offline.cacheSize(),
-        )
+        val app = getApplication<Application>()
+        _settings.update {
+            it.copy(
+                serverUrl = settings.serverUrl,
+                token = settings.token,
+                fontSizeSp = settings.fontSizeSp,
+                lineHeight = settings.lineHeight,
+                fontFamily = settings.fontFamily,
+                themePreset = settings.themePreset,
+                pagePadding = settings.pagePadding,
+                comicDirection = settings.comicDirection,
+                accent = settings.accent.toLong() and 0xFFFFFFFFL,
+                paper = settings.paper.toLong() and 0xFFFFFFFFL,
+                ink = settings.ink.toLong() and 0xFFFFFFFFL,
+                autoSync = settings.autoSync,
+                autoTransferUnder20MB = settings.autoTransferUnder20MB,
+                wifiOnly = settings.wifiOnly,
+                hideRemoteWhenOffline = settings.hideRemoteWhenOffline,
+                connection = connection.cachedHealth().state,
+                connectionDetail = connection.cachedHealth().detail,
+                serverVersion = connection.cachedHealth().serverVersion,
+                lastSyncAt = syncState.lastSyncAt(),
+                conflictCount = _shelf.value.conflictCount,
+                localBytes = files.root().walkTopDown().filter { it.isFile }.sumOf { it.length() },
+                memoryBytes = cloud.cacheBytes + images.sizeBytes(),
+                // 恒 0 自证：直接读 cacheDir 实际占用，而不是写死 0
+                cacheBytes = JsonIo.sizeOf(app.cacheDir),
+            )
+        }
     }
 
     fun updateServerUrl(value: String) {
         settings.serverUrl = value
-        _settings.update { it.copy(serverUrl = value) }
+        connection.noteConfigChanged()
+        // 旧连接还带着旧地址：先断开，测试连接成功后 testConnection 会重新拉起
+        connection.channel.stop()
+        _settings.update { it.copy(serverUrl = value, connection = connection.cachedHealth().state) }
     }
 
     fun updateToken(value: String) {
         settings.token = value
-        _settings.update { it.copy(token = value) }
+        connection.noteConfigChanged()
+        connection.channel.stop()
+        _settings.update { it.copy(token = value, connection = connection.cachedHealth().state) }
     }
 
-    fun updateFontScale(value: Float) {
-        settings.fontScale = value
-        _settings.update { it.copy(fontScale = value) }
+    /* --- 排版：小说 --- */
+
+    fun updateFontSize(value: Float) {
+        val size = value.coerceIn(14f, 28f)
+        settings.fontSizeSp = size
+        _settings.update { it.copy(fontSizeSp = size) }
     }
 
     fun updateLineHeight(value: Float) {
         settings.lineHeight = value
         _settings.update { it.copy(lineHeight = value) }
+    }
+
+    fun updateFontFamily(value: String) {
+        settings.fontFamily = value
+        _settings.update { it.copy(fontFamily = value) }
+    }
+
+    fun updateThemePreset(preset: String) {
+        val (paper, ink) = colorsOf(preset)
+        settings.themePreset = preset
+        settings.paper = paper
+        settings.ink = ink
+        _settings.update {
+            it.copy(
+                themePreset = preset,
+                paper = paper.toLong() and 0xFFFFFFFFL,
+                ink = ink.toLong() and 0xFFFFFFFFL,
+            )
+        }
     }
 
     fun updatePagePadding(value: Int) {
@@ -474,89 +1193,87 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _settings.update { it.copy(accent = value.toLong() and 0xFFFFFFFFL) }
     }
 
-    fun updatePaper(value: Int) {
-        settings.paper = value
-        _settings.update { it.copy(paper = value.toLong() and 0xFFFFFFFFL) }
+    /* --- 排版：漫画 --- */
+
+    fun updateComicDirection(value: String) {
+        settings.comicDirection = value
+        _settings.update { it.copy(comicDirection = value) }
+        _comic.update { it.copy(direction = value) }
     }
 
-    fun updateInk(value: Int) {
-        settings.ink = value
-        _settings.update { it.copy(ink = value.toLong() and 0xFFFFFFFFL) }
-    }
+    /* --- 同步开关 --- */
 
     fun updateAutoSync(value: Boolean) {
         settings.autoSync = value
         _settings.update { it.copy(autoSync = value) }
-        if (value) {
-            com.folio.reader.work.SyncWorker.schedule(getApplication())
-        } else {
-            com.folio.reader.work.SyncWorker.cancel(getApplication())
-        }
     }
 
-    fun updateAutoCache(value: Boolean) {
-        settings.autoCache = value
-        _settings.update { it.copy(autoCache = value) }
+    fun updateAutoTransfer(value: Boolean) {
+        settings.autoTransferUnder20MB = value
+        _settings.update { it.copy(autoTransferUnder20MB = value) }
     }
 
-    /** 把一本书拉到本地，之后断网也能读。 */
-    fun downloadOffline(book: Book) {
-        viewModelScope.launch {
-            _shelf.update { it.copy(message = "正在下载《${book.title}》…") }
-            val cached = sync.downloadForOffline(book)
-            _shelf.update {
-                it.copy(
-                    message = when {
-                        cached < 0 -> "下载失败，确认桌面端已打开"
-                        book.isCloud -> "《${book.title}》已缓存前 $cached 章，其余章节联网时自动缓存"
-                        else -> "《${book.title}》已下到手机，断网也能读"
-                    },
-                    offlineIds = computeOfflineIds(it.books),
-                    cloudOfflineChapters = computeCloudCache(it.books),
-                )
-            }
-        }
+    fun updateWifiOnly(value: Boolean) {
+        settings.wifiOnly = value
+        _settings.update { it.copy(wifiOnly = value) }
     }
 
-    fun clearCache() {
-        sync.clearCache()
+    fun updateHideRemote(value: Boolean) {
+        settings.hideRemoteWhenOffline = value
+        _settings.update { it.copy(hideRemoteWhenOffline = value) }
+        _shelf.update { it.copy(hideRemoteWhenOffline = value) }
+    }
+
+    /** 清掉内存缓存（章节 + 图片 + 封面）。磁盘上本来就没有缓存可清。 */
+    fun clearMemoryCache() {
+        cloud.clear()
+        images.clear()
+        _comicPictures.value = emptyMap()
+        coverBytes.evictAll()
+        _covers.value = emptyMap()
         loadSettingsState()
-        _shelf.update {
-            it.copy(
-                offlineIds = computeOfflineIds(it.books),
-                cloudOfflineChapters = computeCloudCache(it.books),
-                message = "离线缓存已清空",
-            )
-        }
+        _settings.update { it.copy(message = "内存缓存已清空，磁盘缓存本来就是 0") }
     }
 
-    /** 局域网内搜索桌面端。 */
+    /** 局域网内搜索桌面端：一次性广播 + 5 秒窗口，可取消。 */
     fun discover(onFound: (List<String>) -> Unit) {
+        val seq = ++discoverSeq
+        _settings.update { it.copy(searching = true, message = null) }
         viewModelScope.launch {
-            val found = com.folio.reader.net.LanDiscovery.discover(1500)
-            _settings.update { it.copy(discovered = found) }
-            onFound(found)
+            val found = withContext(Dispatchers.IO) {
+                LanDiscovery.discover { seq != discoverSeq }
+            }
+            if (seq != discoverSeq) return@launch
+            val urls = found.map { it.url }
+            _settings.update { it.copy(discovered = urls, searching = false) }
+            _shelf.update {
+                it.copy(message = if (urls.isEmpty()) "没搜到桌面端，确认同一 Wi-Fi" else "找到 ${urls.size} 台桌面端")
+            }
+            onFound(urls)
         }
     }
 
-    /** 测试能不能连上桌面端。 */
-    fun testConnection() {
-        viewModelScope.launch {
-            if (!settings.hasServer) {
-                _shelf.update { it.copy(message = "先填地址和访问码") }
-                return@launch
-            }
-            val ok = sync.client().ping()
-            _shelf.update {
-                it.copy(
-                    online = ok,
-                    message = if (ok) "连上了桌面端" else "连不上，检查地址、端口和访问码",
-                )
-            }
-        }
+    /** 取消正在进行的搜索。 */
+    fun cancelDiscover() {
+        discoverSeq += 1
+        _settings.update { it.copy(searching = false) }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        connection.channel.stop()
+        images.clear()
+        cloud.clear()
     }
 
     companion object {
         const val KIND_LOCAL = BookKind.LOCAL
+
+        /** 底色预设 → (背景, 文字)。夜间模式也走同一套 Material 主题，不另开分支。 */
+        fun colorsOf(preset: String): Pair<Int, Int> = when (preset) {
+            SettingsStore.THEME_CREAM -> 0xFFF5EAD3.toInt() to 0xFF3B3226.toInt()
+            SettingsStore.THEME_NIGHT -> 0xFF15171A.toInt() to 0xFFC9CDD4.toInt()
+            else -> 0xFFFBF8F1.toInt() to 0xFF23201C.toInt()
+        }
     }
 }

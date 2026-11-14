@@ -16,6 +16,7 @@ import { useMotionKit } from '../motion-kit.js';
 import SourcePanel from './SourcePanel.jsx';
 import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
+import DevicesPanel, { IconPhone } from './DevicesPanel.jsx';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   IconArrowLeft,
@@ -44,6 +45,7 @@ const SECTIONS = [
   { key: 'network', label: '网络', Icon: IconShare },
   { key: 'storage', label: '存储', Icon: IconDatabase },
   { key: 'shortcuts', label: '快捷键', Icon: IconCommand },
+  { key: 'devices', label: '我的手机', Icon: IconPhone },
   { key: 'about', label: '关于', Icon: IconSettings },
 ];
 
@@ -1134,6 +1136,8 @@ export default function SettingsPage({ onClose }) {
                 </div>
               </section>
             )}
+
+            {section === 'devices' && <DevicesPanel />}
 
             {section === 'about' && (
               <>

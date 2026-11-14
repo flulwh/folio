@@ -12,8 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "2.5.0"
+        // 3.1.0：设备管理（T07–T11）。设备头里的 X-Folio-App-Version 直接读 VERSION_NAME，
+        // 版本号只有这一处真相，改这里就等于改手机对外报的版本。
+        versionCode = 3
+        versionName = "3.1.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -58,6 +60,9 @@ android {
 
     buildFeatures {
         compose = true
+        // 设备头要报真实版本号（T07 收尾）：BuildConfig.VERSION_NAME 是唯一真相，
+        // 常量写死迟早和 versionName 漂开。AGP 8 起 buildConfig 默认关，得显式打开。
+        buildConfig = true
     }
 
     packaging {
@@ -85,7 +90,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    // 后台周期同步在 3.0 下线：只在「连接成功 / 回前台 / 手动点按」时同步，
+    // 不再引 WorkManager（省一个常驻依赖，也省掉系统调度带来的不可控时机）。
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

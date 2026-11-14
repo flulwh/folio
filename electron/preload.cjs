@@ -44,6 +44,18 @@ contextBridge.exposeInMainWorld('readerAPI', {
     ipcRenderer.on('lan:progress', listener);
     return () => ipcRenderer.removeListener('lan:progress', listener);
   },
+  // 手机上传落盘后主进程通知书架有变化：渲染层据此重新读一遍 books.json
+  onLanBooks: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('lan:books', listener);
+    return () => ipcRenderer.removeListener('lan:books', listener);
+  },
   // 老版本设置里没有访问码时，主进程会兜底生成一个；设置页负责写回 settings.json
   onLanToken: (callback) => {
     const listener = (_event, payload) => {
@@ -55,6 +67,41 @@ contextBridge.exposeInMainWorld('readerAPI', {
     };
     ipcRenderer.on('lan:token', listener);
     return () => ipcRenderer.removeListener('lan:token', listener);
+  },
+  // 设备在线态变化（SSE 连着/断开、90s 窗口过期）
+  onLanDevice: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('lan:device', listener);
+    return () => ipcRenderer.removeListener('lan:device', listener);
+  },
+  // 桌面端入队/手机回执都会让队列变化，渲染层据此刷新「待执行 N 项」
+  onLanCommand: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('lan:command', listener);
+    return () => ipcRenderer.removeListener('lan:command', listener);
+  },
+
+  // 设备管理与指令队列（渲染层不走 LAN HTTP，全部经 IPC）
+  devices: {
+    list: () => ipcRenderer.invoke('devices:list'),
+    rename: (payload) => ipcRenderer.invoke('devices:rename', payload),
+    remove: (payload) => ipcRenderer.invoke('devices:remove', payload),
+    enqueue: (payload) => ipcRenderer.invoke('devices:enqueue', payload),
+    cancel: (payload) => ipcRenderer.invoke('devices:cancel', payload),
+    clear: (payload) => ipcRenderer.invoke('devices:clear', payload),
+    retry: (payload) => ipcRenderer.invoke('devices:retry', payload),
   },
 
   // 字体

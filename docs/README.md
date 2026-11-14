@@ -5,7 +5,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [lan-panel.md](lan-panel.md) | 局域网面板：架构、接口表、双向同步链路、安全边界、故障排查 |
-| [android.md](android.md) | Android 客户端：三种阅读状态、双端进度、省电设计、构建与测试 |
+| [android.md](android.md) | Android 客户端：独立阅读器定位、两类书的同步规则、零缓存自证、漫画、构建与测试 |
 | [sources.md](sources.md) | 书源与净化规则：规则语法全集、脚本 API、兜底策略、云端阅读、漫画 |
 | [architecture.md](architecture.md) | 进程模型、目录职责、关键设计取舍、主题与动效系统 |
 | [performance.md](performance.md) | 实测基线、虚拟滚动、高度缓存、书源引擎优化、回归工具 |
