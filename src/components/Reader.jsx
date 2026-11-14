@@ -491,6 +491,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     // 宁可不存，也不能把错误位置写进 progress（下次打开会跳到前面）。
     if (measuring) return;
     const state = getScrollState();
+    // 位置没动就不写：关书 / 切窗口的兜底保存会把手上的时间戳刷成「现在」，
+    // 只是「打开又关掉」也能压过另一端真正更新的进度。段落和上次一致就跳过。
+    if (state.index === lastIndexRef.current) return;
     const ci = chapterIndexForPara(chapters, state.index);
     lastIndexRef.current = state.index;
     // 云端书按「全书目录」折算百分比：窗口内滚动只用于估算章内位置，

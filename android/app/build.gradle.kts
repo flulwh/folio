@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.8：设置页「本机版本」改读 BuildConfig，不再写死 3.0.0。
-        // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 14
-        versionName = "3.4.8"
+        // 3.4.9：同步回来更新的进度时，正在读的那本书会跟着挪位；
+        // 「重新排版」不再被当成「读到了这里」把桌面端进度冲掉。
+        versionCode = 15
+        versionName = "3.4.9"
         vectorDrawables.useSupportLibrary = true
     }
 

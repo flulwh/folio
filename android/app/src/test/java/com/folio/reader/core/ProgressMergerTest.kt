@@ -85,4 +85,36 @@ class ProgressMergerTest {
         val merged = ProgressMerger.mergeEntry(current, null)
         assertEquals(current, merged)
     }
+
+    @Test
+    fun 同一段落重新测量算同一个位置() {
+        // 桌面端回传的条目带 chapterIndex、percent 也会因字号不同而变，
+        // 但段落号没动 —— 这就是「重新排版」，不是「读到了这里」。
+        val current = ProgressEntry("b1", paraIndex = 120, chapterIndex = 3, percent = 18.4, updatedAt = 1000)
+        val next = ProgressEntry("b1", paraIndex = 120, percent = 18.11, updatedAt = 2000)
+        assertTrue(ProgressMerger.samePlace(current, next))
+    }
+
+    @Test
+    fun 段落变了就是移动了() {
+        val current = ProgressEntry("b1", paraIndex = 120, percent = 18.0, updatedAt = 1000)
+        val next = ProgressEntry("b1", paraIndex = 121, percent = 18.1, updatedAt = 2000)
+        assertTrue(!ProgressMerger.samePlace(current, next))
+    }
+
+    @Test
+    fun 换章窗口也是移动了() {
+        val current = ProgressEntry("b1", paraIndex = 5, windowBase = 400, updatedAt = 1000)
+        val next = ProgressEntry("b1", paraIndex = 5, windowBase = 600, updatedAt = 2000)
+        assertTrue(!ProgressMerger.samePlace(current, next))
+    }
+
+    @Test
+    fun 漫画同话内翻页算移动() {
+        // 漫画的页号只体现在 percent 里，漏掉它会让翻页不落盘
+        val current = ProgressEntry("c1", paraIndex = 7, windowBase = 7, percent = 30.0, updatedAt = 1000)
+        val next = ProgressEntry("c1", paraIndex = 7, windowBase = 7, percent = 31.0, updatedAt = 2000)
+        assertTrue(!ProgressMerger.samePlace(current, next, includePercent = true))
+        assertTrue(ProgressMerger.samePlace(current, next))
+    }
 }

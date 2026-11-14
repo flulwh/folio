@@ -24,6 +24,29 @@ object ProgressMerger {
         )
     }
 
+    /**
+     * 两条进度是不是「同一个位置」的两种写法。
+     *
+     * 只比真正的锚点：段落号 + 云端窗口起点。`chapterIndex` 与 `percent` 是派生值——
+     * 换字号、换机型重新测量后会有细微差异，桌面端回传的条目还会带上本机没有的
+     * `chapterIndex`。拿它们判「有没有移动」，就会把「重新排版」当成「读到了这里」，
+     * 给旧位置盖上新时间戳，反过来把桌面端更新的进度冲掉。
+     *
+     * [includePercent] 给漫画用：漫画的页号只体现在 `percent` 里，
+     * 漏掉它会让同话内翻页不落盘。
+     */
+    fun samePlace(
+        current: ProgressEntry?,
+        next: ProgressEntry,
+        includePercent: Boolean = false,
+    ): Boolean {
+        if (current == null) return false
+        if (current.paraIndex != next.paraIndex) return false
+        if (current.windowBase != next.windowBase) return false
+        if (includePercent && current.percent != next.percent) return false
+        return true
+    }
+
     /** 整份进度合并，返回新表和「有没有真的变化」。 */
     fun merge(
         current: Map<String, ProgressEntry>,
