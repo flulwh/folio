@@ -1213,6 +1213,9 @@ a {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  /* 超长篇会在滚动时「换窗」（整体平移 spacer 并补偿 scrollTop）：
+     关掉浏览器的滚动锚定，避免它自作主张再补偿一次。 */
+  overflow-anchor: none;
   scrollbar-width: none;
   cursor: text;
 }

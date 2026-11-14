@@ -346,9 +346,15 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     scrollRef,
     range,
     total,
+    span,
     itemRef,
     getOffset,
+    getItemOffset,
     getTotal,
+    getLogicalTop,
+    scrollTo: scrollToOffset,
+    animateTo,
+    stopAnimation,
     scrollToIndex,
     getScrollState,
     measureItems,
@@ -394,7 +400,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const saveTimer = useRef(null);
   const resumeTimer = useRef(null);
   const hairTimer = useRef(null);
-  const smoothRef = useRef({ raf: 0 });
   const trackRef = useRef(null);
   const innerRef = useRef(null);
   const rootRef = useRef(null);
@@ -528,7 +533,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       if (resumeTimer.current) clearTimeout(resumeTimer.current);
       if (hairTimer.current) clearTimeout(hairTimer.current);
       if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current);
-      if (smoothRef.current.raf) cancelAnimationFrame(smoothRef.current.raf);
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, []);
@@ -546,42 +550,14 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   /* --------------------------- motion engine ------------------------ */
 
   // Reading feels much calmer when long jumps glide instead of teleporting.
-  // The offset table is exact, so animating `scrollTop` between two known
-  // positions can never desynchronise the virtual list.
-  const stopSmooth = useCallback(() => {
-    if (smoothRef.current.raf) cancelAnimationFrame(smoothRef.current.raf);
-    smoothRef.current.raf = 0;
-  }, []);
+  // 逻辑偏移 → 物理 scrollTop 的换算（含超长篇的换窗）交给虚拟滚动。
+  const stopSmooth = stopAnimation;
 
   const animateScroll = useCallback(
     (to, duration) => {
-      const el = scrollRef.current;
-      if (!el) return;
-      const max = Math.max(0, el.scrollHeight - el.clientHeight);
-      const target = clamp(to, 0, max);
-      const from = el.scrollTop;
-      const distance = target - from;
-      stopSmooth();
-      if (Math.abs(distance) < 2) {
-        el.scrollTop = target;
-        return;
-      }
-      const ms = typeof duration === 'number' ? duration : clamp(Math.abs(distance) * 0.42, 240, 640);
-      const started = performance.now();
-      const step = (now) => {
-        const t = Math.min(1, (now - started) / ms);
-        const eased = 1 - (1 - t) ** 3;
-        el.scrollTop = from + distance * eased;
-        if (t < 1) {
-          smoothRef.current.raf = requestAnimationFrame(step);
-        } else {
-          smoothRef.current.raf = 0;
-          el.scrollTop = target;
-        }
-      };
-      smoothRef.current.raf = requestAnimationFrame(step);
+      animateTo(to, duration);
     },
-    [scrollRef, stopSmooth]
+    [animateTo]
   );
 
   // A one-shot fade-in on the text block; used after a jump so the page feels
@@ -634,10 +610,11 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         }, 900);
 
         // 云端书：快到底时续取下一批章节，追加到窗口末尾。
+        // 用逻辑偏移判断（滚动容器只是书里的一扇窗，scrollHeight 不是全书高度）。
         const el2 = scrollRef.current;
         if (cloud?.hasMore && !cloud.loading && el2) {
-          const max = el2.scrollHeight - el2.clientHeight;
-          if (max - el2.scrollTop < el2.clientHeight * 1.5) cloud.onLoadMore();
+          const remaining = getTotal() - getLogicalTop();
+          if (remaining < el2.clientHeight * 1.5) cloud.onLoadMore();
         }
       });
     };
@@ -647,7 +624,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       el.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [chapters, cloud, getScrollState, measuring, scheduleSave]);
+  }, [chapters, cloud, getLogicalTop, getScrollState, getTotal, measuring, scheduleSave]);
 
   // 云端书追加章节后文档变长，但 scrollTop 没变、不会触发 scroll 事件，
   // 需要主动重算百分比与章节，否则会停在「已读完」。
@@ -671,13 +648,11 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     wasMeasuringRef.current = measuring;
     if (measuring || !wasMeasuring) return undefined;
     const raf = requestAnimationFrame(() => {
-      const el = scrollRef.current;
-      if (!el) return;
-      const target = getOffset(lastIndexRef.current);
-      if (Math.abs(el.scrollTop - target) > 4) el.scrollTop = target;
+      // 高度表换了一套，逻辑偏移也变了；按当前段落重新对位（内部会顺带换窗）。
+      scrollToOffset(getOffset(lastIndexRef.current));
     });
     return () => cancelAnimationFrame(raf);
-  }, [measuring, getOffset, scrollRef]);
+  }, [measuring, getOffset, scrollToOffset]);
 
   useEffect(() => {
     if (!resume || restoredRef.current || measuring) return undefined;
@@ -1182,9 +1157,15 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   /* --------------------------- auto scroll -------------------------- */
 
+  // 自动滚动跑在 rAF 里，回调每次都取最新实现（getTotal 会随排版变化换引用，
+  // 直接写进 deps 会让自动滚动在测量结束时被重启）。
+  const scrollApiRef = useRef(null);
+  scrollApiRef.current = { getTotal, getLogicalTop, scrollToOffset };
+
   useEffect(() => {
     autoScrollRef.current = autoScroll;
     if (!autoScroll) return undefined;
+    const api = scrollApiRef.current;
     const speed = AUTO_SCROLL_SPEEDS[autoSpeed] / 1000; // px per ms
     let raf = 0;
     let last = performance.now();
@@ -1192,7 +1173,8 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     // `el.scrollTop += speed * dt` never moves the page. Keep a float cursor and
     // assign it absolutely instead — the rounding then happens once per frame
     // against an ever-growing value, so motion survives.
-    let cursor = scrollRef.current ? scrollRef.current.scrollTop : 0;
+    // 这里用「逻辑偏移」当游标：滚动容器只是书里的一扇窗，滚到窗底会自动换窗。
+    let cursor = api.getLogicalTop();
     const step = (now) => {
       if (!autoScrollRef.current) return;
       const el = scrollRef.current;
@@ -1202,15 +1184,16 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       }
       const dt = Math.max(0, Math.min(96, now - last));
       last = now;
-      const max = el.scrollHeight - el.clientHeight;
+      const max = api.getTotal() - el.clientHeight;
       if (max <= 0) {
         raf = requestAnimationFrame(step);
         return;
       }
       // the reader scrolled by itself (chapter jump / seek): follow it
-      if (Math.abs(el.scrollTop - cursor) > 3) cursor = el.scrollTop;
+      const logicalTop = api.getLogicalTop();
+      if (Math.abs(logicalTop - cursor) > 3) cursor = logicalTop;
       cursor = Math.min(max, cursor + speed * dt);
-      el.scrollTop = cursor;
+      api.scrollToOffset(cursor);
       if (cursor >= max - 0.5) {
         setAutoScroll(false);
         notify('已经滚动到书末');
@@ -1303,32 +1286,31 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     pageDown: () => {
       setAutoScroll(false);
       const el = scrollRef.current;
-      if (el) animateScroll(el.scrollTop + el.clientHeight * 0.88, 320);
+      if (el) animateScroll(getLogicalTop() + el.clientHeight * 0.88, 320);
     },
     pageUp: () => {
       setAutoScroll(false);
       const el = scrollRef.current;
-      if (el) animateScroll(el.scrollTop - el.clientHeight * 0.88, 320);
+      if (el) animateScroll(getLogicalTop() - el.clientHeight * 0.88, 320);
     },
     lineDown: () => {
       setAutoScroll(false);
       const el = scrollRef.current;
-      if (el) animateScroll(el.scrollTop + el.clientHeight * 0.3, 200);
+      if (el) animateScroll(getLogicalTop() + el.clientHeight * 0.3, 200);
     },
     lineUp: () => {
       setAutoScroll(false);
       const el = scrollRef.current;
-      if (el) animateScroll(el.scrollTop - el.clientHeight * 0.3, 200);
+      if (el) animateScroll(getLogicalTop() - el.clientHeight * 0.3, 200);
     },
     home: () => {
       setAutoScroll(false);
-      const el = scrollRef.current;
-      if (el) animateScroll(0, 320);
+      animateScroll(0, 320);
     },
     end: () => {
       setAutoScroll(false);
       const el = scrollRef.current;
-      if (el) animateScroll(el.scrollHeight - el.clientHeight, 320);
+      if (el) animateScroll(Math.max(0, getTotal() - el.clientHeight), 320);
     },
     bigger: () => {
       const next = clamp(settings.fontSize + 1, 14, 30);
@@ -1512,7 +1494,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   for (let i = range.start; i < range.end && i < paragraphs.length; i += 1) {
     const para = paragraphs[i];
     if (!para) continue;
-    const top = getOffset(i);
+    const top = getItemOffset(i);
     const isFirst = i === 0;
     const isLast = i === paragraphs.length - 1;
     items.push(
@@ -1555,7 +1537,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     const rect = track.getBoundingClientRect();
     const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
     const max = Math.max(0, getTotal() - el.clientHeight);
-    el.scrollTop = ratio * max;
+    scrollToOffset(ratio * max);
     return ratio * 100;
   };
 
@@ -1683,7 +1665,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           className="reader-inner"
           ref={innerRef}
           data-virtual-inner
-          style={measuring ? undefined : { height: total }}
+          style={measuring ? undefined : { height: span }}
         >
           {measuring ? (
             // 子节点由排版测量的 layout effect 直接拼（不走 React），这里只留挂载点
