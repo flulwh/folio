@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.6：修复设置页列表项被 Box 叠在一起的问题（Reveal 改 Column）。
+        // 3.4.7：性能与省电优化（后台解析正文/解码封面、重连退避、同步限频、漫画图集裁剪）。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 12
-        versionName = "3.4.6"
+        versionCode = 13
+        versionName = "3.4.7"
         vectorDrawables.useSupportLibrary = true
     }
 

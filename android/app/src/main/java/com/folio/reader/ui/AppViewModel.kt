@@ -16,6 +16,7 @@ import com.folio.reader.core.JsonIo
 import com.folio.reader.core.PageKey
 import com.folio.reader.core.ProgressEntry
 import com.folio.reader.core.ReaderMark
+import com.folio.reader.core.SampleSize
 import com.folio.reader.core.SearchHit
 import com.folio.reader.core.TextParser
 import com.folio.reader.core.TextSearch
@@ -155,7 +156,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val health = withContext(Dispatchers.IO) { connection.check(force = false) }
         applyHealth(health)
         if (!health.ok) return
-        if (settings.autoSync) syncNow(silent = true)
+        if (settings.autoSync && dueForAutoSync()) syncNow(silent = true)
     }
 
     /* ---------------- 本地数据 ---------------- */
@@ -232,10 +233,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val health = withContext(Dispatchers.IO) { connection.onForeground() }
             applyHealth(health)
-            if (health.ok && settings.autoSync && !_shelf.value.syncing) {
+            if (health.ok && settings.autoSync && !_shelf.value.syncing && dueForAutoSync()) {
                 syncNow(silent = true)
             }
         }
+    }
+
+    /**
+     * 回前台的自动同步限频。
+     *
+     * 桌面端连着时，每次切回 App 都跑一遍全量同步（清单 + 进度 + 痕迹 + 指令）
+     * 是白耗流量和电；刚同步过就先跳过，手动同步不受影响。
+     */
+    private fun dueForAutoSync(): Boolean {
+        val last = syncState.lastSyncAt()
+        return last <= 0L || System.currentTimeMillis() - last >= AUTO_SYNC_MIN_GAP_MS
     }
 
     /* ---------------- T09：前台在线通道 ---------------- */
@@ -405,7 +417,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             )
             return
         }
-        val parsed = TextParser.parseBook(text)
+        // 解析几 MB 正文是纯 CPU 活，放主线程会让打开书卡住几帧
+        val parsed = withContext(Dispatchers.Default) { TextParser.parseBook(text) }
         val savedMarks = withContext(Dispatchers.IO) { marks.read(book.id) }
         val entry = progressMap[book.id]
         val index = (entry?.paraIndex ?: 0).coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
@@ -472,7 +485,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             return
         }
-        val parsed = TextParser.parseBook(text)
+        val parsed = withContext(Dispatchers.Default) { TextParser.parseBook(text) }
         val savedMarks = withContext(Dispatchers.IO) { marks.read(book.id) }
         val resume = if (entry != null && entry.chapter == chapterNo) (entry.paraIndex ?: 0) else 0
         val paraIndex = resume.coerceIn(0, (parsed.paragraphs.size - 1).coerceAtLeast(0))
@@ -1082,6 +1095,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 pageErrors = emptyMap(),
             )
         }
+        // 换话时把上一话的图丢掉，否则 Map 会跨话累积
+        pruneComicPictures(book.id, chapterNo, page)
         requestComicPage(page)
         recordComicProgress(book, toc, safePosition, chapterNo, page, total, immediate = true)
         maybePrefetchNextChapter(book, toc, safePosition, page, total)
@@ -1135,12 +1150,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val book = state.book ?: return
         if (page == state.page || page < 0) return
         _comic.update { it.copy(page = page) }
+        pruneComicPictures(book.id, state.chapterNo, page)
         requestComicPage(page)
         requestComicPage(page + 1)
         requestComicPage(page + 2)
         if (page - 1 >= 0) requestComicPage(page - 1)
         recordComicProgress(book, state.toc, state.chapterIndex, state.chapterNo, page, state.total, false)
         maybePrefetchNextChapter(book, state.toc, state.chapterIndex, page, state.total)
+    }
+
+    /**
+     * 只留当前话、离当前页不远的图。
+     *
+     * [com.folio.reader.core.ImageLoader] 的 LRU 上限是内存的 1/8，但这里如果
+     * 把读过的每一页都留在 Map 里，等于绕开上限：一话几十页、每页几 MB，
+     * 读久了内存只涨不降。保留前后各 [COMIC_KEEP_RADIUS] 页，翻回去仍能命中
+     * ImageLoader 的内存缓存，不会重新下载。
+     */
+    private fun pruneComicPictures(bookId: String, chapterNo: Int, page: Int) {
+        val current = _comicPictures.value
+        if (current.isEmpty()) return
+        val kept = current.filterKeys { key ->
+            key.bookId == bookId &&
+                key.chapter == chapterNo &&
+                kotlin.math.abs(key.page - page) <= COMIC_KEEP_RADIUS
+        }
+        if (kept.size != current.size) _comicPictures.value = kept
     }
 
     fun switchComicChapter(index: Int) {
@@ -1211,13 +1246,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val pages = connection.client().comicPages(book.id, next.index)
-                for (index in 0 until minOf(2, pages.total)) {
-                    val key = PageKey.of(book.id, next.index, index)
-                    val bitmap = images.load(key).await()
-                    if (bitmap != null) {
-                        _comicPictures.update { it + (key to bitmap.asImageBitmap()) }
-                    }
-                }
+                val keys = (0 until minOf(2, pages.total))
+                    .map { PageKey.of(book.id, next.index, it) }
+                // 只预热 ImageLoader 的 LRU，不往 _comicPictures 里塞：
+                // 那里只放「当前话」的图，跨话常驻会绕开缓存上限。
+                images.prefetch(keys)
             }
         }
     }
@@ -1347,13 +1380,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (bytes == null) return@launch
             coverBytes.put(book.id, bytes)
-            val bitmap = android.graphics.BitmapFactory
-                .decodeByteArray(bytes, 0, bytes.size)
-                ?.asImageBitmap()
+            // 解码与采样都放后台：封面原图常有 1000×1500 以上，主线程解码会卡住书架滚动
+            val bitmap = withContext(Dispatchers.Default) { decodeCover(bytes) }?.asImageBitmap()
             if (bitmap != null) {
                 _covers.update { it + (book.id to bitmap) }
             }
         }
+    }
+
+    /**
+     * 按书架显示尺寸采样解码封面。
+     *
+     * 书架上的封面最多占半屏宽，没必要把原图整张解出来；
+     * 采样后单张内存往往从几 MB 降到几百 KB，滚动和 GC 都轻松。
+     */
+    private fun decodeCover(bytes: ByteArray): android.graphics.Bitmap? {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val screen = getApplication<Application>().resources.displayMetrics.widthPixels
+        val sample = SampleSize.calculate(
+            sourceWidth = bounds.outWidth,
+            sourceHeight = bounds.outHeight,
+            targetWidth = (screen / 2).coerceAtLeast(1),
+        )
+        val options = android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inScaled = false
+        }
+        return runCatching {
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()
     }
 
     /* ---------------- 书架动作 ---------------- */
@@ -1723,6 +1780,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val KIND_LOCAL = BookKind.LOCAL
+
+        /** 回前台自动同步的最小间隔：1 分钟。 */
+        private const val AUTO_SYNC_MIN_GAP_MS = 60_000L
+
+        /** 漫画当前话保留的页半径（前后各 4 页）。 */
+        private const val COMIC_KEEP_RADIUS = 4
 
         /** 底色预设 → (背景, 文字)。夜间模式也走同一套 Material 主题，不另开分支。 */
         fun colorsOf(preset: String): Pair<Int, Int> = when (preset) {

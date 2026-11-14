@@ -29,8 +29,8 @@ import kotlinx.coroutines.sync.Mutex
  *     [stop] 一调连接就断，桌面端「离线」自然出现。这是产品红线。
  *  2. **旧桌面端静默降级**。先发一次心跳：没设备接口（`supported=false`）
  *     就整条通道静默关闭，绝不把 [ConnectionManager] 判成连接失败。
- *  3. **重连不烧 CPU**。掉线后等 [retryMs] 再连，没有指数退避的复杂度，
- *     也没有忙等；前台会话结束整个作用域一起取消。
+ *  3. **重连不烧 CPU**。掉线后从 [retryMs] 起逐步退避（最长 [MAX_BACKOFF] 倍），
+ *     桌面端没开时不会每 3 秒把网卡唤醒一次；也没有忙等，前台会话结束整个作用域一起取消。
  *  4. **指令串行**。收到命令事件时若已经有一轮在跑就直接跳过 ——
  *     那一轮拉的是整份队列，不会有漏。
  */
@@ -90,6 +90,8 @@ class DeviceChannel(
 
     private suspend fun runLoop() {
         if (!isConfigured()) return
+        // 连续失败次数：成功连上就清零，用来做退避
+        var failures = 0
         while (currentCoroutineContext().isActive) {
             val client = try {
                 clientProvider()
@@ -106,7 +108,8 @@ class DeviceChannel(
             } catch (err: CancellationException) {
                 throw err
             } catch (err: Exception) {
-                pause()
+                failures += 1
+                pause(failures)
                 continue
             }
             if (!status.supported) return // 旧桌面端：整条通道静默关闭
@@ -116,6 +119,7 @@ class DeviceChannel(
                 val opened = client.openEvents()
                 stream = opened
                 _online.value = true
+                failures = 0
                 readEvents(opened)
             } catch (err: CancellationException) {
                 throw err
@@ -127,7 +131,9 @@ class DeviceChannel(
                 runCatching { closing?.close() }
                 _online.value = false
             }
-            pause()
+            // 连上过又断了：下一次按基础间隔重连；一直连不上则逐次拉长
+            failures += 1
+            pause(failures)
         }
     }
 
@@ -179,13 +185,24 @@ class DeviceChannel(
         }
     }
 
-    private suspend fun pause() {
-        if (retryMs > 0L) delay(retryMs)
+    /**
+     * 断线等待：第 n 次连续失败等 `retryMs × n`（最多 [MAX_BACKOFF] 倍）。
+     *
+     * 桌面端关机时 3 秒一次的重试纯属白耗电，拉到 27 秒既不影响恢复速度
+     * （用户通常还在看当前页面），也能让网卡歇下来。
+     */
+    private suspend fun pause(failures: Int = 1) {
+        if (retryMs <= 0L) return
+        val factor = failures.coerceIn(1, MAX_BACKOFF).toLong()
+        delay(retryMs * factor)
     }
 
     companion object {
-        /** 掉线重连间隔：服务端 `retry: 3000`，两边保持一致。 */
+        /** 掉线重连的基础间隔：服务端 `retry: 3000`，两边保持一致。 */
         const val RETRY_MS = 3_000L
+
+        /** 退避上限倍数：3s × 9 = 27s。 */
+        const val MAX_BACKOFF = 9
 
         /** 收到一条事件后最多连拉几轮（防止对端一直报 pending 卡死这里）。 */
         const val MAX_DRAIN_ROUNDS = 5
