@@ -1,8 +1,11 @@
 package com.folio.reader.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -53,6 +56,7 @@ import com.folio.reader.core.Book
 import com.folio.reader.core.PageKey
 import com.folio.reader.core.TocChapter
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.FolioMotion
 import com.folio.reader.ui.miuix.HyperSheet
 import com.folio.reader.ui.reader.ZoomableImage
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -85,7 +89,7 @@ fun ComicReaderScreen(
     val vertical = comic.direction != SettingsStore.COMIC_HORIZONTAL
     val needConnect = comic.error == CLOUD_NEED_CONNECT
 
-    Box(Modifier.fillMaxSize().background(Color(0xFF121316))) {
+    Box(Modifier.fillMaxSize().background(BrandInk)) {
         when {
             comic.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
@@ -136,8 +140,10 @@ fun ComicReaderScreen(
         // 顶栏
         AnimatedVisibility(
             visible = comic.controls,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(FolioMotion.Instant)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { -it / 12 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { -it / 12 },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             Column(
@@ -212,8 +218,10 @@ fun ComicReaderScreen(
         // 底栏
         AnimatedVisibility(
             visible = comic.controls && comic.total > 0,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(FolioMotion.Instant)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 12 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 12 },
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             Column(
@@ -504,7 +512,7 @@ private fun ComicPageBox(
     LaunchedEffect(book.id, chapterNo, page) { onRequest(page) }
 
     Box(
-        modifier = modifier.background(Color(0xFF17181C)),
+        modifier = modifier.background(Color(0xFF1F1E1C)),
         contentAlignment = Alignment.Center,
     ) {
         when {

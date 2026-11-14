@@ -12,11 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.4：进度改为真正的双向同步（合并后回写，新者赢）；打开书不再写进度，
-        // 避免「现在」的时间戳盖掉桌面端更新的位置。
+        // 3.4.5：Anthropic 品牌色 + 克制动效（页面转场 / 列表入场 / 按压反馈 / HUD 显隐）。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 10
-        versionName = "3.4.4"
+        versionCode = 11
+        versionName = "3.4.5"
         vectorDrawables.useSupportLibrary = true
     }
 

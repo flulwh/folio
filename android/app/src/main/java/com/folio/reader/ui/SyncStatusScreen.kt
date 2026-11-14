@@ -2,6 +2,7 @@ package com.folio.reader.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +39,8 @@ import com.folio.reader.core.SyncState
 import com.folio.reader.ui.miuix.GroupLabel
 import com.folio.reader.ui.miuix.Hairline
 import com.folio.reader.ui.miuix.PageMargin
+import com.folio.reader.ui.miuix.Reveal
+import com.folio.reader.ui.miuix.pressScale
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Icon
@@ -146,11 +150,13 @@ fun SyncStatusScreen(
                 }
             } else {
                 items(count = books.size, key = { books[it].id }) { index ->
-                    SyncBookRow(
-                        book = books[index],
-                        state = state,
-                        onRetry = { vm.retrySync(books[index]) },
-                    )
+                    Reveal(index = index) {
+                        SyncBookRow(
+                            book = books[index],
+                            state = state,
+                            onRetry = { vm.retrySync(books[index]) },
+                        )
+                    }
                 }
             }
 
@@ -186,11 +192,13 @@ private fun SyncHeader(onBack: () -> Unit) {
             Modifier.fillMaxWidth().padding(top = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val source = remember { MutableInteractionSource() }
             Box(
                 Modifier
+                    .pressScale(source)
                     .size(40.dp)
                     .clip(CircleShape)
-                    .clickable(onClick = onBack),
+                    .clickable(interactionSource = source, indication = null, onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(

@@ -2,11 +2,22 @@ package com.folio.reader.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,12 +28,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,16 +60,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Book
 import com.folio.reader.core.Origin
 import com.folio.reader.data.ConnectionState
+import com.folio.reader.ui.miuix.FolioMotion
 import com.folio.reader.ui.miuix.Hairline
 import com.folio.reader.ui.miuix.HyperSheet
 import com.folio.reader.ui.miuix.PageMargin
+import com.folio.reader.ui.miuix.Reveal
+import com.folio.reader.ui.miuix.pressScale
 import java.util.Locale
 import kotlin.math.absoluteValue
 import top.yukonga.miuix.kmp.basic.Button
@@ -139,7 +158,11 @@ fun ShelfScreen(
                 onOpenSyncStatus = onOpenSyncStatus,
             )
 
-            if (state.showBanner) {
+            AnimatedVisibility(
+                visible = state.showBanner,
+                enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+                exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+            ) {
                 OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
             }
 
@@ -169,43 +192,45 @@ fun ShelfScreen(
                                     count = section.books.size,
                                 )
                             }
-                            items(
+                            itemsIndexed(
                                 items = section.books,
-                                key = { book -> "book-${section.key}-${book.id}" },
-                            ) { book ->
+                                key = { _, book -> "book-${section.key}-${book.id}" },
+                            ) { index, book ->
                                 val rowKey = "${section.key}-${book.id}"
                                 LaunchedEffect(section.key, book.id) { vm.loadCover(book) }
-                                BookRow(
-                                    book = book,
-                                    state = state,
-                                    cover = covers[book.id],
-                                    featured = section.key == "continue",
-                                    highlighted = state.highlightId == book.id,
-                                    menuOpen = menuFor == rowKey,
-                                    onToggleMenu = {
-                                        menuFor = if (menuFor == rowKey) null else rowKey
-                                    },
-                                    onOpen = {
-                                        menuFor = null
-                                        onOpenBook(book)
-                                    },
-                                    onDownload = {
-                                        menuFor = null
-                                        vm.downloadOffline(book)
-                                    },
-                                    onDeleteLocal = {
-                                        menuFor = null
-                                        pendingDelete = book
-                                    },
-                                    onRemoveFromShelf = {
-                                        menuFor = null
-                                        pendingRemove = book
-                                    },
-                                    onSyncStatus = {
-                                        menuFor = null
-                                        onOpenSyncStatus()
-                                    },
-                                )
+                                Reveal(index = index) {
+                                    BookRow(
+                                        book = book,
+                                        state = state,
+                                        cover = covers[book.id],
+                                        featured = section.key == "continue",
+                                        highlighted = state.highlightId == book.id,
+                                        menuOpen = menuFor == rowKey,
+                                        onToggleMenu = {
+                                            menuFor = if (menuFor == rowKey) null else rowKey
+                                        },
+                                        onOpen = {
+                                            menuFor = null
+                                            onOpenBook(book)
+                                        },
+                                        onDownload = {
+                                            menuFor = null
+                                            vm.downloadOffline(book)
+                                        },
+                                        onDeleteLocal = {
+                                            menuFor = null
+                                            pendingDelete = book
+                                        },
+                                        onRemoveFromShelf = {
+                                            menuFor = null
+                                            pendingRemove = book
+                                        },
+                                        onSyncStatus = {
+                                            menuFor = null
+                                            onOpenSyncStatus()
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -331,31 +356,37 @@ private fun ShelfHeader(
             )
         }
 
-        if (searchOpen) {
-            Spacer(Modifier.height(4.dp))
-            TextField(
-                value = state.query,
-                onValueChange = onQuery,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
-                label = "搜书名或作者",
-                useLabelAsPlaceholder = true,
-                singleLine = true,
-                cornerRadius = 10.dp,
-                trailingIcon = if (state.query.isNotEmpty()) {
-                    {
-                        MiuixText(
-                            text = "清除",
-                            fontSize = 12.sp,
-                            color = scheme.primary,
-                            modifier = Modifier
-                                .clickable { onQuery("") }
-                                .padding(horizontal = 6.dp, vertical = 4.dp),
-                        )
-                    }
-                } else {
-                    null
-                },
-            )
+        AnimatedVisibility(
+            visible = searchOpen,
+            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+        ) {
+            Column {
+                Spacer(Modifier.height(4.dp))
+                TextField(
+                    value = state.query,
+                    onValueChange = onQuery,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                    label = "搜书名或作者",
+                    useLabelAsPlaceholder = true,
+                    singleLine = true,
+                    cornerRadius = 10.dp,
+                    trailingIcon = if (state.query.isNotEmpty()) {
+                        {
+                            MiuixText(
+                                text = "清除",
+                                fontSize = 12.sp,
+                                color = scheme.primary,
+                                modifier = Modifier
+                                    .clickable { onQuery("") }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
         }
         Spacer(Modifier.height(6.dp))
     }
@@ -369,11 +400,24 @@ private fun RoundIconButton(
     active: Boolean = false,
 ) {
     val scheme = MiuixTheme.colorScheme
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val pressBg by animateColorAsState(
+        targetValue = if (pressed) scheme.secondary else Color.Transparent,
+        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
+        label = "icon-press-bg",
+    )
     Box(
         modifier = Modifier
+            .pressScale(source)
             .size(38.dp)
             .clip(CircleShape)
-            .clickable(onClick = onClick),
+            .background(pressBg)
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -459,37 +503,71 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
 @Composable
 private fun FilterTabs(selected: String, onSelect: (String) -> Unit) {
     val scheme = MiuixTheme.colorScheme
+    val density = LocalDensity.current
+    // 下划线位置由当前选中项自己量出来，切换时从旧位置滑过去
+    var indicatorX by remember { mutableStateOf(0.dp) }
+    var indicatorWidth by remember { mutableStateOf(0.dp) }
+    val x by animateDpAsState(
+        targetValue = indicatorX,
+        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
+        label = "filter-x",
+    )
+    val width by animateDpAsState(
+        targetValue = indicatorWidth,
+        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
+        label = "filter-width",
+    )
     Column(Modifier.fillMaxWidth().background(scheme.background)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = PageMargin),
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            ShelfUiState.FILTERS.forEach { (key, label) ->
-                val active = selected == key
-                Box(
-                    modifier = Modifier
-                        .clickable { onSelect(key) }
-                        .padding(top = 7.dp),
-                ) {
-                    Text(
-                        text = label,
-                        modifier = Modifier.padding(bottom = 7.dp),
-                        fontSize = 13.sp,
-                        fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                        color = if (active) scheme.onSurface else scheme.onSurfaceVariantSummary,
-                        maxLines = 1,
+        Box {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = PageMargin),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+                ShelfUiState.FILTERS.forEach { (key, label) ->
+                    val active = selected == key
+                    val textColor by animateColorAsState(
+                        targetValue = if (active) scheme.onSurface else scheme.onSurfaceVariantSummary,
+                        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
+                        label = "filter-color",
                     )
                     Box(
-                        Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(if (active) scheme.primary else Color.Transparent)
-                    )
+                        modifier = Modifier
+                            .then(
+                                if (active) {
+                                    Modifier.onGloballyPositioned { coords ->
+                                        val newX = with(density) { coords.positionInParent().x.toDp() }
+                                        val newWidth = with(density) { coords.size.width.toDp() }
+                                        if (newX != indicatorX) indicatorX = newX
+                                        if (newWidth != indicatorWidth) indicatorWidth = newWidth
+                                    }
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable { onSelect(key) }
+                            .padding(top = 7.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            modifier = Modifier.padding(bottom = 7.dp),
+                            fontSize = 13.sp,
+                            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                            color = textColor,
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
+            Box(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = x)
+                    .width(width)
+                    .height(2.dp)
+                    .background(scheme.primary)
+            )
         }
         Hairline(inset = PageMargin)
     }
@@ -607,12 +685,25 @@ private fun BookRow(
     val summary = state.progressSummaryOf(book)
     val readable = state.readable(book)
     val dimmed = !readable
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val pressBg by animateColorAsState(
+        targetValue = if (pressed) scheme.onSurface.copy(alpha = 0.045f) else Color.Transparent,
+        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
+        label = "row-press",
+    )
 
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .combinedClickable(onClick = onOpen, onLongClick = onToggleMenu)
+                .background(pressBg)
+                .combinedClickable(
+                    interactionSource = source,
+                    indication = null,
+                    onClick = onOpen,
+                    onLongClick = onToggleMenu,
+                )
                 .padding(horizontal = PageMargin)
                 .padding(top = if (featured) 14.dp else 10.dp, bottom = if (featured) 14.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -737,6 +828,11 @@ private fun BookRow(
 private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
     val scheme = MiuixTheme.colorScheme
     val safe = progress.coerceIn(0f, 1f)
+    val filled by animateFloatAsState(
+        targetValue = safe,
+        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
+        label = "rail-progress",
+    )
     Box(
         modifier
             .fillMaxWidth()
@@ -745,7 +841,7 @@ private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
     ) {
         Box(
             Modifier
-                .fillMaxWidth(safe)
+                .fillMaxWidth(filled)
                 .height(2.dp)
                 .background(scheme.primary)
         )
@@ -764,7 +860,7 @@ private fun badgeColor(badge: BookBadge): Color {
     val scheme = MiuixTheme.colorScheme
     return when (badge) {
         BookBadge.MISMATCH, BookBadge.FAILED -> scheme.primary
-        BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> Color(0xFFB26A00)
+        BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> BrandBlue
         BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.onSurfaceVariantSummary
         BookBadge.NONE -> scheme.onSurfaceVariantSummary
     }
@@ -780,8 +876,8 @@ private fun CoverBox(
     height: androidx.compose.ui.unit.Dp,
 ) {
     val hue = (book.title.hashCode().absoluteValue % 360).toFloat()
-    val paperTone = Color.hsl(hue, 0.16f, 0.90f)
-    val inkTone = Color.hsl(hue, 0.30f, 0.30f)
+    val paperTone = Color.hsl(hue, 0.12f, 0.88f)
+    val inkTone = Color.hsl(hue, 0.24f, 0.28f)
     val shape = RoundedCornerShape(4.dp)
     Box(
         Modifier
@@ -822,16 +918,18 @@ private fun Snack(text: String, onDismiss: () -> Unit) {
             .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        MiuixText(
-            text = text,
-            modifier = Modifier
-                .padding(bottom = 24.dp, start = 24.dp, end = 24.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(scheme.onSurface.copy(alpha = 0.9f))
-                .padding(horizontal = 14.dp, vertical = 9.dp),
-            fontSize = 12.5.sp,
-            color = scheme.surface,
-        )
+        Reveal {
+            MiuixText(
+                text = text,
+                modifier = Modifier
+                    .padding(bottom = 24.dp, start = 24.dp, end = 24.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(scheme.onSurface.copy(alpha = 0.9f))
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                fontSize = 12.5.sp,
+                color = scheme.surface,
+            )
+        }
     }
 }
 
