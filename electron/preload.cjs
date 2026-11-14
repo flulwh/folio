@@ -26,6 +26,8 @@ contextBridge.exposeInMainWorld('readerAPI', {
   setProgress: (progress) => ipcRenderer.invoke('store:set-progress', progress),
   getSettings: () => ipcRenderer.invoke('store:get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('store:set-settings', settings),
+  getMarks: () => ipcRenderer.invoke('store:get-marks'),
+  setMarks: (marks) => ipcRenderer.invoke('store:set-marks', marks),
 
   // 局域网面板：手机/平板在同一个 Wi-Fi 下访问书架与阅读进度
   lanStart: (config) => ipcRenderer.invoke('lan:start', config),
