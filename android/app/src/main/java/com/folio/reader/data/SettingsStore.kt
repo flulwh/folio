@@ -66,6 +66,16 @@ class SettingsStore(context: Context) {
         get() = prefs.getString(KEY_FONT_FAMILY, FONT_SERIF) ?: FONT_SERIF
         set(value) = prefs.edit().putString(KEY_FONT_FAMILY, value).apply()
 
+    /**
+     * 从字体商店装的字体 id（空串 = 用上面的系统字体）。
+     *
+     * 两个字段是叠加关系：这里非空就优先用商店字体，删掉那款字体后自动回落到
+     * [fontFamily] 上次选的宋体 / 黑体，而不是跳回默认值。
+     */
+    var userFontId: String
+        get() = prefs.getString(KEY_USER_FONT_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_USER_FONT_ID, value.trim()).apply()
+
     /** 底色预设：`white` 冷白 / `paper` 纸白 / `cream` 米色 / `graphite` 石墨 / `night` 夜间。 */
     var themePreset: String
         get() = prefs.getString(KEY_THEME_PRESET, THEME_WHITE) ?: THEME_WHITE
@@ -250,6 +260,7 @@ class SettingsStore(context: Context) {
         private const val KEY_TAP_TURN = "tap_to_turn"
         private const val KEY_VOLUME_TURN = "volume_keys_turn"
         private const val KEY_FONT_FAMILY = "font_family"
+        private const val KEY_USER_FONT_ID = "user_font_id"
         private const val KEY_THEME_PRESET = "theme_preset"
         private const val KEY_COMIC_DIRECTION = "comic_direction"
         private const val KEY_PAGE_PADDING = "page_padding"

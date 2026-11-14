@@ -12,9 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.5.1：启动图标换成与桌面端同源的墨纸橙图标。
-        versionCode = 17
-        versionName = "3.5.1"
+        // 3.5.2：新增与桌面端同源的字体商店（versionCode 18）。
+        versionCode = 18
+        versionName = "3.5.2"
         vectorDrawables.useSupportLibrary = true
     }
 

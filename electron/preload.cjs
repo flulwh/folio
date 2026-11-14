@@ -124,6 +124,20 @@ contextBridge.exposeInMainWorld('readerAPI', {
   removeFont: (id) => ipcRenderer.invoke('font:remove', id),
   clearFonts: () => ipcRenderer.invoke('font:clear'),
   showFontInFolder: (id) => ipcRenderer.invoke('font:show-in-folder', id),
+  // 字体商店：目录可强制刷新；安装进度走事件，约 100ms 一次
+  getFontCatalog: (force) => ipcRenderer.invoke('font:store-catalog', Boolean(force)),
+  installStoreFont: (id) => ipcRenderer.invoke('font:store-install', id),
+  onFontStoreProgress: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('font:store-progress', listener);
+    return () => ipcRenderer.removeListener('font:store-progress', listener);
+  },
 
   // 书源
   listSources: () => ipcRenderer.invoke('source:list'),

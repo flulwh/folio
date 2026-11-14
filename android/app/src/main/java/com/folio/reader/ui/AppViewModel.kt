@@ -66,8 +66,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 书签 / 划线：与进度分开一份文件，见 [MarkStore]。 */
     private val marks = container.marks
     private val marksSync = container.marksSync
+    private val fonts = container.fonts
+    private val fontRepository = container.fontRepository
     private var searchJob: Job? = null
     private var marksSyncJob: Job? = null
+    private var fontCatalogJob: Job? = null
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -84,6 +87,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _settings = MutableStateFlow(SettingsUiState())
     val settingsState: StateFlow<SettingsUiState> = _settings.asStateFlow()
+
+    /** 字体商店：目录 + 已安装 + 当前下载进度。 */
+    private val _fontStore = MutableStateFlow(FontStoreUiState())
+    val fontStore: StateFlow<FontStoreUiState> = _fontStore.asStateFlow()
 
     /** T11：桌面端要求删「唯一副本」时，等用户点确认的弹层状态。 */
     private val deleteConfirms = DeleteConfirmQueue()
@@ -1608,6 +1615,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 tapToTurn = settings.tapToTurn,
                 volumeKeysTurn = settings.volumeKeysTurn,
                 fontFamily = settings.fontFamily,
+                userFontId = settings.userFontId,
                 themePreset = settings.themePreset,
                 pagePadding = settings.pagePadding,
                 readingMode = settings.readingMode,
@@ -1704,6 +1712,97 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateFontFamily(value: String) {
         settings.fontFamily = value
         _settings.update { it.copy(fontFamily = value) }
+    }
+
+    /* --- 字体商店 --- */
+
+    /**
+     * 拉目录。
+     *
+     * @param force true = 跳过 7 天缓存强制走网络（「刷新」按钮）
+     */
+    fun loadFontStore(force: Boolean = false) {
+        if (_fontStore.value.loading) return
+        _fontStore.update { it.copy(loading = true, error = "") }
+        fontCatalogJob?.cancel()
+        fontCatalogJob = viewModelScope.launch {
+            val installed = withContext(Dispatchers.IO) { fonts.installed() }
+            try {
+                val result = fontRepository.catalog(force)
+                _fontStore.update {
+                    it.copy(
+                        loading = false,
+                        catalog = result.fonts,
+                        installed = installed,
+                        source = result.source,
+                        fetchedAt = result.fetchedAt,
+                        error = result.error,
+                    )
+                }
+            } catch (err: Exception) {
+                _fontStore.update {
+                    it.copy(
+                        loading = false,
+                        installed = installed,
+                        error = err.message.orEmpty().ifBlank { "字体目录获取失败" },
+                    )
+                }
+            }
+        }
+    }
+
+    /** 下载并安装；下载期间 [FontStoreUiState.installing] 是这个字体的 id。 */
+    fun installFont(id: String) {
+        val font = _fontStore.value.catalog.firstOrNull { it.id == id } ?: return
+        if (_fontStore.value.installing.isNotBlank()) return
+        _fontStore.update {
+            it.copy(
+                installing = id,
+                bytesReceived = 0L,
+                bytesTotal = font.file.size,
+                error = "",
+            )
+        }
+        viewModelScope.launch {
+            try {
+                fontRepository.install(font) { received, total ->
+                    val size = if (total > 0) total else font.file.size
+                    _fontStore.update { it.copy(bytesReceived = received, bytesTotal = size) }
+                }
+                val installed = withContext(Dispatchers.IO) { fonts.installed() }
+                _fontStore.update { it.copy(installing = "", installed = installed) }
+            } catch (err: Exception) {
+                val installed = withContext(Dispatchers.IO) { fonts.installed() }
+                _fontStore.update {
+                    it.copy(
+                        installing = "",
+                        installed = installed,
+                        error = err.message.orEmpty().ifBlank { "安装失败" },
+                    )
+                }
+            }
+        }
+    }
+
+    fun removeFont(id: String) {
+        viewModelScope.launch {
+            val remaining = withContext(Dispatchers.IO) {
+                fonts.remove(id)
+                fonts.installed()
+            }
+            _fontStore.update { it.copy(installed = remaining) }
+            if (settings.userFontId == id) {
+                settings.userFontId = ""
+                _settings.update { it.copy(userFontId = "") }
+            }
+        }
+    }
+
+    /** 选中一款商店字体；传空串 = 回到系统字体。 */
+    fun selectUserFont(id: String) {
+        val value = if (id.isBlank() || fonts.find(id) != null) id.trim() else ""
+        settings.userFontId = value
+        _settings.update { it.copy(userFontId = value) }
     }
 
     fun updateThemePreset(preset: String) {

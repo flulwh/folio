@@ -120,11 +120,13 @@ fun ReaderScreen(
     val fontSize = settings.fontSizeSp.sp
     val lineHeight = (settings.fontSizeSp * settings.lineHeight).sp
     val letterSpacing = settings.letterSpacingEm.em
-    val fontFamily = if (settings.fontFamily == SettingsStore.FONT_SANS) {
+    // 用户选了商店字体就优先它；没选 / 文件丢了才回到系统宋体或黑体
+    val fallbackFamily = if (settings.fontFamily == SettingsStore.FONT_SANS) {
         FontFamily.SansSerif
     } else {
         FontFamily.Serif
     }
+    val fontFamily = FontFamilies.rememberReaderFamily(settings.userFontId, fallbackFamily)
     val paragraphGap = (settings.fontSizeSp * settings.paragraphSpacing).dp
     val blankGap = (settings.fontSizeSp * 0.5f).dp
     val paged = settings.readingMode == SettingsStore.MODE_PAGED

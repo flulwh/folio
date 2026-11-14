@@ -14,10 +14,10 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.9.3.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.3) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.9.3.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.3) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.9.3-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.3) | 免安装压缩包，解压后运行 `Folio.exe` |
-| [`Folio-3.5.1-android.apk`](https://github.com/flulwh/folio/releases/download/android-3.5.1/Folio-3.5.1-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
+| [`Folio-Setup-2.9.4.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.4) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.9.4.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.4) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.9.4-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.4) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-3.5.2-android.apk`](https://github.com/flulwh/folio/releases/download/android-3.5.2/Folio-3.5.2-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
@@ -80,6 +80,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 - **自动滚动**：15 / 25 / 40 / 60 px/s 四档速度，`[` `]` 随时调速，到底自动停，滚轮即可接管
 - **排版可调**：字号、行距、正文宽度、段间距、首行缩进、无衬线 / 衬线 / 等宽
 - **用户字体**：可安装自己的 `.ttf` / `.otf` / `.ttc` / `.woff` / `.woff2`，安装时就告诉你这字体含不含中文
+- **字体商店**：内置六款开源中文字体（霞鹜文楷 / 新晰黑、思源宋体 / 黑体、得意黑、朱雀仿宋），与安卓端同一份目录、同一套 id；流式下载可续传，装好即用
 - 工具栏 **2.5 秒无操作自动隐藏**（zen 模式），进入全屏后只剩文字
 - **缓动滚动**：章节跳转、翻页、回到上次位置都是 240–640ms 的 ease-out 滑行，任何一次滚轮/触摸都立刻打断动画交回手感
 - **排印细节**：`text-wrap: pretty` 避免尾行孤字、`hanging-punctuation` 让句读悬挂、`font-feature-settings: 'palt'` 收紧中文标点
@@ -222,7 +223,7 @@ cd android
 > 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
 > push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
-> 版本号只写在 `package.json`（当前 `2.9.3`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.9.4`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)

@@ -710,6 +710,72 @@ async function comicSuite() {
 }
 
 /* ------------------------------------------------------------------ */
+/*  8. 字体回退下载边界                                                 */
+/* ------------------------------------------------------------------ */
+async function fontSuite() {
+  if (!caps.features.includes('fonts')) {
+    skip('字体接口边界', '夹具未注入 fonts，/api/fonts 会回 501；完整套件请用 npm run check:lan-edge');
+    return;
+  }
+
+  // 8.1 无 token
+  {
+    const res = await req('/api/fonts');
+    check('font·无token → 401', 401, res.status, clip(await body(res)));
+  }
+
+  // 8.2 列表
+  {
+    const res = await req('/api/fonts', { headers: H });
+    const json = await res.json().catch(() => ({}));
+    const font = (json.fonts || [])[0] || {};
+    check('font·列表 → 200 且有字体', '200 & 1', `${res.status} & ${(json.fonts || []).length}`, JSON.stringify(font).slice(0, 120));
+    check('font·列表带 sha256', true, /^[a-f0-9]{64}$/.test(String(font.sha256 || '')), String(font.sha256 || ''));
+  }
+
+  // 8.3 整份下载
+  {
+    const res = await req('/api/font/fixture-font/download', { headers: H });
+    const buf = Buffer.from(await res.arrayBuffer());
+    check('font·整份下载 → 200', 200, res.status);
+    check('font·Content-Type 是字体', true, String(res.headers.get('content-type') || '').startsWith('font/'), res.headers.get('content-type') || '');
+    check('font·Accept-Ranges=bytes', 'bytes', res.headers.get('accept-ranges') || '');
+    check(
+      'font·X-Folio-Sha256 与实字节一致',
+      true,
+      res.headers.get('x-folio-sha256') === crypto.createHash('sha256').update(buf).digest('hex'),
+    );
+  }
+
+  // 8.4 Range 续传
+  {
+    const res = await req('/api/font/fixture-font/download', { headers: { ...H, Range: 'bytes=1-2' } });
+    const buf = Buffer.from(await res.arrayBuffer());
+    check('font·Range 1-2 → 206', 206, res.status);
+    check('font·Range 取到 2 字节', 2, buf.length);
+    check('font·Content-Range 正确', 'bytes 1-2/4', res.headers.get('content-range') || '');
+  }
+
+  // 8.5 起点越界
+  {
+    const res = await req('/api/font/fixture-font/download', { headers: { ...H, Range: 'bytes=4-' } });
+    check('font·起点==大小 → 416', 416, res.status, clip(await body(res)));
+  }
+
+  // 8.6 非法 id（路径穿越只解一次码，落到白名单 → 400）
+  {
+    const res = await req('/api/font/..%2F..%2Fsecret/download', { headers: H });
+    check('font·路径穿越 → 400', 400, res.status, clip(await body(res)));
+  }
+
+  // 8.7 不存在的字体
+  {
+    const res = await req('/api/font/nope/download', { headers: H });
+    check('font·不存在 → 404', 404, res.status, clip(await body(res)));
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  跑                                                                */
 /* ------------------------------------------------------------------ */
 process.stdout.write(`\n=== QA 边界测试 → ${base} ===\n\n`);
@@ -750,6 +816,7 @@ const suites = [
   ['30MiB 上限', sizeBoundarySuite],
   ['清单脏数据', librarySuite],
   ['漫画边界', comicSuite],
+  ['字体接口边界', fontSuite],
 ];
 
 for (const [name, fn] of suites) {

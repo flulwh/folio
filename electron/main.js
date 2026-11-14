@@ -13,6 +13,7 @@ import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js
 import { configureBookFile } from './bookfile.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
+import { createFontStore } from './font-store.js';
 
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net, clipboard } = electron;
 
@@ -134,6 +135,13 @@ const cloudStore = createCloudStore(path.join(dataDir, 'cloud'));
 // 统一日志：写 dataDir/logs/<日期>.log，同时留在内存里给「日志」面板看。
 // 出问题时让用户点「导出日志」，比让他复述操作快得多。
 const log = createLogger({ dir: dataDir, level: process.env.FOLIO_LOG_LEVEL || 'info' });
+// 字体商店：目录缓存 + 流式下载。走 Electron 的 net.fetch，能吃到系统代理。
+const fontStore = createFontStore({
+  dataDir,
+  fontsDir,
+  log,
+  fetchImpl: (url, init) => net.fetch(url, init),
+});
 // 重模块里的 logger 在模块首次加载时注入（见 loadSources / loadEngine 的包装），
 // 这样启动阶段不必为了设置 logger 而提前解析那 300KB。
 
@@ -1235,6 +1243,8 @@ function ensureLanService() {
     writeJson,
     log: lanLog,
     getVersion: () => app.getVersion(),
+    // 手机回退下载字体走这里：只开放桌面端已安装的字体，id 白名单 + 路径复核
+    fonts: fontLibrary,
     // 封面：本地缓存里有就直接发文件，没有就 302 到源站 ——
     // 不在服务端代下封面，免得把桌面端的抓取队列搬到手机请求上。
     resolveCover: (book) => {
@@ -1659,6 +1669,48 @@ function makeFontId(fileName) {
   return `${base || 'font'}-${stamp}`;
 }
 
+/**
+ * 把一个字体文件收进 dataDir/fonts/ 并生成 fonts.json 记录。
+ *
+ * 本地导入与商店安装共用这一段：差别只在「id 由谁决定」——
+ * 本地导入按文件名生成，商店安装直接用目录 id（两端要对得上）。
+ *
+ * @param {string} src 源文件绝对路径
+ * @param {object} [opts]
+ * @param {string} [opts.id] 指定字体 id
+ * @param {string} [opts.fileName] 指定落盘文件名
+ * @param {boolean} [opts.alreadyPlaced] src 已经在 fontsDir 里，不再复制
+ * @param {object} [opts.extra] 额外写进记录（name / catalogId / version / sha256）
+ */
+function installFontFile(src, { id, fileName, alreadyPlaced = false, extra = {} } = {}) {
+  const ext = path.extname(fileName || src).toLowerCase().replace('.', '');
+  if (!FONT_EXTENSIONS.includes(ext)) {
+    throw new Error(`不是受支持的字体格式（${FONT_EXTENSIONS.join(' / ')}）`);
+  }
+  fs.mkdirSync(fontsDir, { recursive: true });
+
+  const fontId = id || makeFontId(src);
+  const finalName = fileName || `${fontId}.${ext}`;
+  const dest = path.join(fontsDir, finalName);
+  if (!alreadyPlaced || !samePath(src, dest)) fs.copyFileSync(src, dest);
+
+  const meta = readFontMetaFile(dest);
+  // 记录字符覆盖情况，界面据此提前提示「这款不含中文」
+  const coverage = readFontCoverageFile(dest);
+  return {
+    id: fontId,
+    file: finalName,
+    family: meta.family || familyFromFilename(src),
+    format: ext,
+    size: fs.statSync(dest).size,
+    addedAt: Date.now(),
+    hasCJK: coverage.hasCJK,
+    cjkRatio: coverage.cjkRatio,
+    hasLatin: coverage.hasLatin,
+    ...extra,
+  };
+}
+
 ipcMain.handle('font:list', () => readFontMeta());
 
 ipcMain.handle('font:install', async () => {
@@ -1683,27 +1735,7 @@ ipcMain.handle('font:install', async () => {
       continue;
     }
     try {
-      fs.mkdirSync(fontsDir, { recursive: true });
-
-      const id = makeFontId(src);
-      const fileName = `${id}.${ext}`;
-      const dest = path.join(fontsDir, fileName);
-      fs.copyFileSync(src, dest);
-
-      const meta = readFontMetaFile(src);
-      // 记录字符覆盖情况，界面据此提前提示「这款不含中文」
-      const coverage = readFontCoverageFile(src);
-      const record = {
-        id,
-        file: fileName,
-        family: meta.family || familyFromFilename(src),
-        format: ext,
-        size: fs.statSync(dest).size,
-        addedAt: Date.now(),
-        hasCJK: coverage.hasCJK,
-        cjkRatio: coverage.cjkRatio,
-        hasLatin: coverage.hasLatin,
-      };
+      const record = installFontFile(src);
       list.push(record);
       installed.push(record);
     } catch (err) {
@@ -1754,6 +1786,113 @@ ipcMain.handle('font:show-in-folder', (_e, id) => {
   shell.showItemInFolder(file);
   return { ok: true };
 });
+
+/* ---------- 字体商店 ---------- */
+
+/** 商店里「已安装」的判定：fonts.json 记录里带着同一个 catalogId。 */
+function installedCatalogIds() {
+  const map = new Map();
+  for (const item of readFontMeta()) {
+    if (item.catalogId) map.set(item.catalogId, item.id);
+  }
+  return map;
+}
+
+ipcMain.handle('font:store-catalog', async (_e, force) => {
+  try {
+    const result = await fontStore.getCatalog(Boolean(force));
+    const installed = installedCatalogIds();
+    return {
+      ok: true,
+      source: result.source,
+      fetchedAt: result.fetchedAt,
+      error: result.error || '',
+      fonts: result.fonts.map((font) => ({
+        ...font,
+        installed: installed.has(font.id),
+        installedId: installed.get(font.id) || '',
+      })),
+    };
+  } catch (err) {
+    return { ok: false, source: 'none', fetchedAt: 0, fonts: [], error: err?.message || '目录获取失败' };
+  }
+});
+
+ipcMain.handle('font:store-install', async (_e, id) => {
+  const catalogId = String(id || '');
+  try {
+    const existing = readFontMeta().find((item) => item.catalogId === catalogId);
+    if (existing) return { ok: true, font: existing, fonts: readFontMeta(), already: true };
+
+    const catalog = await fontStore.getCatalog(false);
+    const entry = catalog.fonts.find((font) => font.id === catalogId);
+    if (!entry) return { ok: false, error: '字体不在目录里' };
+
+    const downloaded = await fontStore.download(catalogId, (progress) => {
+      broadcast('font:store-progress', progress);
+    });
+    const record = installFontFile(downloaded.path, {
+      id: entry.id,
+      fileName: downloaded.file,
+      alreadyPlaced: true,
+      extra: {
+        name: entry.name,
+        catalogId: entry.id,
+        version: entry.version,
+        sha256: downloaded.sha256,
+      },
+    });
+    // 同名 id 的旧记录先剔掉，避免 fonts.json 里出现两条同 id
+    const list = readFontMeta().filter((item) => item.id !== record.id);
+    list.push(record);
+    writeJson(fontMetaPath(), list);
+    log('info', `已安装商店字体：${entry.name}（${entry.id}）`);
+    return { ok: true, font: record, fonts: readFontMeta() };
+  } catch (err) {
+    log('warn', `商店字体安装失败：${catalogId} ${err?.message || err}`);
+    return { ok: false, error: err?.message || '安装失败' };
+  }
+});
+
+/**
+ * 局域网字体库：把桌面端已安装的字体开放给手机端。
+ * 手机在 GitHub 直连失败时回退到这里下载，省一次「翻墙找镜像」。
+ */
+const fontLibrary = {
+  list: () =>
+    readFontMeta().map((item) => ({
+      id: item.id,
+      name: item.name || item.family,
+      family: item.family,
+      license: item.catalogId ? 'OFL-1.1' : '',
+      size: item.size,
+      sha256: item.sha256 || '',
+      format: item.format,
+    })),
+  open: (id) => {
+    if (!/^[a-zA-Z0-9._-]{1,64}$/.test(String(id || ''))) {
+      return { ok: false, status: 400, error: '字体 id 不合法' };
+    }
+    const target = readFontMeta().find((item) => item.id === id);
+    if (!target) return { ok: false, status: 404, error: '字体不存在' };
+    const file = path.join(fontsDir, target.file);
+    // fonts.json 里的 file 理论上只可能是文件名，仍然复核一次越界
+    if (!isInside(fontsDir, file) || !fs.existsSync(file)) {
+      return { ok: false, status: 404, error: '字体文件不存在' };
+    }
+    const stat = fs.statSync(file);
+    if (!stat.size) return { ok: false, status: 404, error: '字体文件为空' };
+    if (stat.size > 48 * 1024 * 1024) return { ok: false, status: 413, error: '字体超过 48MB 上限' };
+    return {
+      ok: true,
+      file,
+      size: stat.size,
+      sha256: target.sha256 || '',
+      format: target.format,
+      name: target.name || target.family,
+    };
+  },
+};
 
 ipcMain.handle('store:get-books', () => readJson(files.books, []));
 ipcMain.handle('store:set-books', (_e, books) => {

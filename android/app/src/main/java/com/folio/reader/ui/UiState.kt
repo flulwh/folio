@@ -10,7 +10,9 @@ import com.folio.reader.core.ReaderMark
 import com.folio.reader.core.SearchHit
 import com.folio.reader.core.SyncState
 import com.folio.reader.core.TocChapter
+import com.folio.reader.data.CatalogFont
 import com.folio.reader.data.ConnectionState
+import com.folio.reader.data.InstalledFont
 import com.folio.reader.data.SyncStateStore
 
 /**
@@ -387,6 +389,26 @@ data class PageTurn(
     val direction: Int = 0,
 )
 
+/**
+ * 字体商店页的状态。
+ *
+ * [catalog] 是「能装什么」，[installed] 是「已经装了什么」；
+ * 两者按 id 对齐，UI 不需要再查文件系统。
+ */
+data class FontStoreUiState(
+    val loading: Boolean = false,
+    val catalog: List<CatalogFont> = emptyList(),
+    val installed: List<InstalledFont> = emptyList(),
+    /** `network` / `cache`。 */
+    val source: String = "",
+    val fetchedAt: Long = 0L,
+    val error: String = "",
+    /** 正在下载的字体 id；空串 = 没有下载任务。 */
+    val installing: String = "",
+    val bytesReceived: Long = 0L,
+    val bytesTotal: Long = 0L,
+)
+
 /** 设置页状态。 */
 data class SettingsUiState(
     val serverUrl: String = "",
@@ -403,6 +425,8 @@ data class SettingsUiState(
     val firstLineIndent: Boolean = true,
     /** `serif` / `sans`。 */
     val fontFamily: String = "serif",
+    /** 字体商店里选中的字体 id；空串 = 用上面的系统字体。 */
+    val userFontId: String = "",
     /** `white` / `paper` / `cream` / `graphite` / `night`。 */
     val themePreset: String = "white",
     /** 自动滚动速度档位（0–3）。 */

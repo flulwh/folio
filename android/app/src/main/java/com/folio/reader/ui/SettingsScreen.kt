@@ -86,6 +86,7 @@ fun SettingsScreen(
     vm: AppViewModel,
     onBack: () -> Unit,
     onOpenSyncStatus: () -> Unit,
+    onOpenFontStore: () -> Unit,
 ) {
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
@@ -383,12 +384,21 @@ fun SettingsScreen(
                 SuperDropdown(
                     items = listOf("宋体", "黑体"),
                     selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
-                    title = "字体",
+                    title = "系统字体",
+                    // 选系统字体等于放弃商店字体：两个入口共用同一份「当前正文字体」
                     onSelectedIndexChange = { index ->
+                        vm.selectUserFont("")
                         vm.updateFontFamily(
                             if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
                         )
                     },
+                )
+                Hairline(inset = 16.dp)
+                SuperArrow(
+                    title = "字体商店",
+                    summary = "开源中文字体，与桌面端同一份目录",
+                    rightText = "打开",
+                    onClick = onOpenFontStore,
                 )
                 Hairline(inset = 16.dp)
                 SuperDropdown(

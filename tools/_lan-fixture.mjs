@@ -286,6 +286,23 @@ if (wantComic) {
 
 const log = (level, message) => process.stderr.write(`[${level}] ${message}\n`);
 
+// 字体回退下载用的夹具：一个 4 字节的假 ttf（magic 合法），sha256 与大小都算真的，
+// 这样 /api/fonts 与 /api/font/:id/download 能被完整断言，而不必塞一个 20MB 的真字体。
+const fixtureFontBytes = Buffer.from([0x00, 0x01, 0x00, 0x00]);
+const fixtureFontsDir = path.join(dir, 'fonts');
+fs.mkdirSync(fixtureFontsDir, { recursive: true });
+const fixtureFontFile = path.join(fixtureFontsDir, 'fixture-font.ttf');
+fs.writeFileSync(fixtureFontFile, fixtureFontBytes);
+const fixtureFont = {
+  id: 'fixture-font',
+  name: '夹具字体',
+  family: 'Fixture Font',
+  license: 'OFL-1.1',
+  size: fixtureFontBytes.length,
+  sha256: crypto.createHash('sha256').update(fixtureFontBytes).digest('hex'),
+  format: 'ttf',
+};
+
 const service = createLanService({
   files,
   booksDir,
@@ -302,6 +319,25 @@ const service = createLanService({
   onDeviceChanged: (id, online) => process.stderr.write(`[lan:device] ${id} ${online}\n`),
   // 没开 --comic 就完全不给漫画能力（此时 /api/comic/* 回 501，和其它未接入的桌面端一致）
   comic: wantComic ? createComicService({ images: comicImages, fetchImage: comicFetchImage, log }) : null,
+  // 字体只读视图：id 白名单 + 路径复核与真实主进程的 fontLibrary 一致，
+  // 这样边界用例测的是「路由 + 白名单」而不是夹具自己的宽容实现。
+  fonts: {
+    list: () => [fixtureFont],
+    open: (id) => {
+      if (!/^[a-zA-Z0-9._-]{1,64}$/.test(String(id || ''))) {
+        return { ok: false, status: 400, error: '字体 id 不合法' };
+      }
+      if (id !== fixtureFont.id) return { ok: false, status: 404, error: '字体不存在' };
+      return {
+        ok: true,
+        file: fixtureFontFile,
+        size: fixtureFont.size,
+        sha256: fixtureFont.sha256,
+        format: fixtureFont.format,
+        name: fixtureFont.name,
+      };
+    },
+  },
 });
 
 const result = await service.start({

@@ -53,6 +53,9 @@ data class Capabilities(
     /** 双端痕迹同步：桌面端能读写 `/api/marks`。 */
     val supportsMarks: Boolean get() = apiVersion >= 2 && features.contains("marks")
 
+    /** 字体回退下载：桌面端能列已安装字体并提供字节流（2.9.4 起）。 */
+    val supportsFonts: Boolean get() = apiVersion >= 2 && features.contains("fonts")
+
     companion object {
         /** 桌面端 2.6.0 起才是 apiVersion 2；小于它的要提示升级。 */
         const val REQUIRED_API_VERSION = 2
@@ -212,6 +215,17 @@ data class DownloadResult(
     val size: Long,
     val bytesWritten: Long,
     val fromOffset: Long,
+)
+
+/** `/api/fonts` 里的一项：桌面端已安装的字体。 */
+data class RemoteFont(
+    val id: String,
+    val name: String,
+    val family: String,
+    val license: String,
+    val size: Long,
+    val sha256: String,
+    val format: String,
 )
 
 /** `/api/comic/:id/pages` 的结果：只有总数，没有源站地址。 */
@@ -625,6 +639,117 @@ class FolioClient(
                 // 校验不过就删掉：留着半截或损坏的文件比重新下一遍更糟
                 runCatching { dest.delete() }
                 throw FolioException("下载的正文校验没过（sha1 不一致），已删除，请重试", 422)
+            }
+            return DownloadResult(
+                hash = hash,
+                size = if (declaredSize > 0) declaredSize else written,
+                bytesWritten = written,
+                fromOffset = startingAt,
+            )
+        } catch (err: FolioException) {
+            throw err
+        } catch (err: Exception) {
+            throw FolioException(describe(err), 0, err)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    /* ---------------- 2.9.4：字体商店回退 ---------------- */
+
+    /**
+     * 桌面端已安装的字体。
+     *
+     * 桌面端没有这条路由（404 / 501）时返回空列表，**不抛异常**：
+     * 字体是附加能力，不该因为它把整次「回退下载」判成连接失败。
+     */
+    fun fontCatalog(timeoutMs: Int = 15000): List<RemoteFont> {
+        val json = markRequest("/api/fonts", "GET", timeoutMs) ?: return emptyList()
+        if (!json.optBoolean("ok", false)) return emptyList()
+        val array = json.optJSONArray("fonts") ?: return emptyList()
+        val out = ArrayList<RemoteFont>(array.length())
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val id = item.optString("id").trim()
+            if (id.isEmpty()) continue
+            out.add(
+                RemoteFont(
+                    id = id,
+                    name = item.optString("name").ifBlank { id },
+                    family = item.optString("family"),
+                    license = item.optString("license"),
+                    size = item.optLong("size", 0L),
+                    sha256 = item.optString("sha256"),
+                    format = item.optString("format", "ttf").ifBlank { "ttf" },
+                ),
+            )
+        }
+        return out
+    }
+
+    /**
+     * 从桌面端下载一款字体（sha256 口径，与字体目录一致）。
+     *
+     * @param dest 目标 `.part` 文件
+     * @param offset 从第几个字节继续（0 = 从头）；服务端支持 `Range`
+     * @param expectedSha256 期望摘要；不一致会删掉目标文件并抛异常
+     * @param onProgress (已写字节, 总字节)
+     */
+    fun downloadFont(
+        id: String,
+        dest: File,
+        offset: Long = 0L,
+        expectedSha256: String? = null,
+        onProgress: ((Long, Long) -> Unit)? = null,
+        timeoutMs: Int = 90000,
+    ): DownloadResult {
+        dest.parentFile?.mkdirs()
+        val conn = open("/api/font/${encode(id)}/download", "GET", timeoutMs)
+        if (offset > 0L) conn.setRequestProperty("Range", "bytes=$offset-")
+        try {
+            val code = conn.responseCode
+            if (code !in 200..299) throw errorOf(conn, code)
+            val serverHash = conn.getHeaderField("X-Folio-Sha256").orEmpty()
+            val declaredSize = conn.getHeaderField("X-Folio-Size")?.toLongOrNull() ?: -1L
+            val startingAt = if (code == 206 && offset > 0L) offset else 0L
+
+            val digest = HashUtils.newSha256Digest()
+            if (startingAt > 0L && dest.isFile) {
+                // 续传：把已有前缀喂进 digest，增量算出来的才是整份 sha256
+                dest.inputStream().use { prefix ->
+                    val buffer = ByteArray(HashUtils.BUFFER_BYTES)
+                    var remaining = startingAt
+                    while (remaining > 0L) {
+                        val take = minOf(buffer.size.toLong(), remaining).toInt()
+                        val count = prefix.read(buffer, 0, take)
+                        if (count <= 0) break
+                        digest.update(buffer, 0, count)
+                        remaining -= count
+                    }
+                }
+            }
+
+            var written = startingAt
+            FileOutputStream(dest, startingAt > 0L).use { output ->
+                conn.inputStream.use { input ->
+                    val buffer = ByteArray(HashUtils.BUFFER_BYTES)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count <= 0) break
+                        output.write(buffer, 0, count)
+                        digest.update(buffer, 0, count)
+                        written += count
+                        onProgress?.invoke(written, if (declaredSize > 0) declaredSize else -1L)
+                    }
+                }
+            }
+
+            val hash = HashUtils.toHex(digest)
+            val expect = expectedSha256?.takeIf { it.isNotBlank() }
+                ?: serverHash.takeIf { it.isNotBlank() }
+            if (expect != null && !hash.equals(expect, ignoreCase = true)) {
+                runCatching { dest.delete() }
+                throw FolioException("字体校验没通过（sha256 不一致），已删除，请重试", 422)
             }
             return DownloadResult(
                 hash = hash,

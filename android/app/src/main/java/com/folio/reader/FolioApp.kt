@@ -10,6 +10,8 @@ import com.folio.reader.data.BookFileStore
 import com.folio.reader.data.BookStore
 import com.folio.reader.data.CloudChapterSource
 import com.folio.reader.data.ConnectionManager
+import com.folio.reader.data.FontRepository
+import com.folio.reader.data.FontStore
 import com.folio.reader.data.MarkStore
 import com.folio.reader.data.MarksSync
 import com.folio.reader.data.Migration
@@ -50,6 +52,11 @@ class AppContainer(app: Application) {
     val chapters = ChapterMemoryCache()
 
     val connection = ConnectionManager(settings)
+
+    /** 字体商店：字体文件在 `filesDir/fonts/`，目录缓存在 `filesDir/library/`。 */
+    val fonts = FontStore(app.filesDir)
+
+    val fontRepository = FontRepository(fonts) { connection.client() }
 
     val cloud = CloudChapterSource(
         clientProvider = { connection.client() },

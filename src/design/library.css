@@ -2652,3 +2652,166 @@ input.switch:checked::after {
   border-color: var(--danger-line);
   color: var(--danger);
 }
+
+/* --- 字体商店 --- */
+
+.font-store {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.font-store-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.font-store-hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.font-store-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+}
+
+.font-store-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+
+.font-store-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.font-store-card:last-child {
+  border-bottom: none;
+}
+
+.font-store-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.font-store-name {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  color: var(--text);
+  font-weight: 500;
+  min-width: 0;
+}
+
+.font-store-sub {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  color: var(--text-ghost);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-store-meta {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.font-store-desc {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  line-height: 1.65;
+  color: var(--text-soft);
+}
+
+/* 预览段落：装好后用字体自己的字形渲染，字号给足才能看出笔形差异 */
+.font-store-preview {
+  margin: 0;
+  padding: var(--sp-3);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  font-size: calc(var(--fs-small) + 2px);
+  line-height: 1.8;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-store-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.font-store-progress {
+  position: relative;
+  flex: 1;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.font-store-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--accent-soft);
+  transition: width 0.18s ease;
+}
+
+.font-store-progress-text {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.font-store-link {
+  font-family: var(--font-sans);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+  text-decoration: none;
+}
+
+.font-store-link:hover {
+  color: var(--accent-ink);
+}
+
+.font-manager.compact .font-store-preview {
+  font-size: var(--fs-small);
+  padding: var(--sp-2);
+}
+
+.font-manager.compact .font-store-desc {
+  display: none;
+}

@@ -175,7 +175,7 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
 
 ## 测试
 
-共 153 项，`./gradlew testDebugUnitTest` 一次跑完。`LanIntegrationTest` 21 项**真的起一个桌面端服务**
+共 167 项，`./gradlew testDebugUnitTest` 一次跑完。`LanIntegrationTest` 21 项**真的起一个桌面端服务**
 （ping / 清单 / 下载 / 分块上传 / 漫画取图 / 进度回写 / 错误访问码 / UDP 发现，
 以及设备流的心跳建档 / 推书下载与 sha1 校验 / 过期清扫 / 唯一副本拒绝 / 快照上报），
 缺 `node` 或 UDP 45678 被占用时跳过、不算失败；其余是纯函数与协议测试：
@@ -183,15 +183,32 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
 `ProgressCodecTest` 8、`TextDecoderTest` 7、`BookImporterTest` 7、`SampleSizeTest` 7、
 `ChapterMemoryCacheTest` 7（含「读四章不产生任何磁盘文件」）、`ProgressMergerTest` 7、
 `ComicProgressTest` 6、`DeviceHeadersTest` 6、`HashUtilsTest` 5、`SyncEngineCloudTest` 5、
+`FontCatalogTest` 7（坏 id / 坏 url / 超限大小 / 摘要残缺 / 字体 magic）、`FontStoreTest` 7（落盘、清单、缓存）、
 `ShelfSectionsTest` 5、`DeviceChannelTest` 5（Lifecycle 翻转 → 连接数 0→1→0）、
 `ComicPageKeyTest` 4、`DeleteConfirmQueueTest` 4。
 
 ## 数据位置
 
 `files/library/` 下四份 json：书架真相 `books.json`、进度 `progress.json`、待补写 `pending.json`、每本书的 `sync-state.json`；
-本机正文在 `files/books/<id>.txt`（导入中为 `.txt.part`），设置在 `shared_prefs/folio_settings.xml`。
+本机正文在 `files/books/<id>.txt`（导入中为 `.txt.part`），字体在 `files/fonts/<id>.<ttf|otf>`（清单 `installed.json`，
+目录缓存在 `files/library/font-catalog.json`），设置在 `shared_prefs/folio_settings.xml`。
 `cacheDir` 下没有 Folio 的文件 —— 这是红线，不是巧合。从 2.5 升上来时 `Migration` 会把老
 `library/books.json` 的 `{"books":[...]}` 迁成顶层数组，并删掉 `offline/` 里那批章节副本。
+
+## 字体商店（3.5.2）
+
+目录来自公开仓库 [flulwh/folio-fonts](https://github.com/flulwh/folio-fonts) 的 `catalog.json`，
+字体本体是该仓库 Release `v1` 的 assets —— 与桌面端 `electron/font-store.js` 共用同一份清单、同一套 id。
+
+- 先直连目录里的 `file.url`，支持 `Range` 续传；失败且配置了桌面端地址时，回退到局域网
+  `GET /api/font/:id/download`（桌面端 2.9.4+，且那台机器要先装过同一款字体）
+- 落盘前依次校验：`.part` 长度等于 `file.size`、sha256 等于 `file.sha256`、文件头是 ttf / otf / ttc 的 magic；
+  任一项不符就删掉 `.part`，不写清单
+- 目录缓存 7 天，断网时用缓存打开商店，安装仍需要网络
+- 选中状态是 `folio_settings.xml` 的 `user_font_id`，为空时用 `font_family`（宋体 / 黑体）；
+  删除当前字体会把 `user_font_id` 清空，自动回落
+- 正文与排版预览都走 `ui/FontFamilies.kt`：按「路径 + 大小 + mtime」缓存最近 4 款 FontFamily，
+  文件被删或解析失败时回落到系统字体
 
 ## UI 架构（3.4.0 / Miuix）
 
@@ -208,6 +225,7 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
 | `ui/ShelfScreen.kt` | 书架：大标题、胶囊筛选、圆角书卡、底部浮动工具条 |
 | `ui/SettingsScreen.kt` | 设置：分组卡片 + 开关 / 滑杆 / 分段 |
 | `ui/SyncStatusScreen.kt` | 同步报告：状态卡、逐本账本、等宽诊断 |
+| `ui/FontStoreScreen.kt` | 字体商店：已安装列表 + 目录卡片、下载进度、真字形预览 |
 | `ui/ComicReaderScreen.kt` | 漫画：深色图片区 + 浮动顶底栏 + 话目录面板 |
 
 阅读方式存在 `folio_settings.xml` 的 `reading_mode`（`scroll` / `paged`），默认滚动。
@@ -219,3 +237,4 @@ cd android && ./gradlew assembleDebug testDebugUnitTest
 - **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。
 - **云端书必须连着桌面端**：想整本离线请用本机导入（云端书不做离线副本）。
 - **超过 30MB 的书不同步**，只在本机读；封面取不到时退回首字色块。
+- **字体下载要能连上 GitHub 或桌面端**：两条都不通时商店能开（缓存目录）但装不了；已装字体不受影响。

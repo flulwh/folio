@@ -126,6 +126,9 @@ const browserFallback = {
   removeFont: async () => ({ ok: false, error: '需要桌面版' }),
   clearFonts: async () => ({ ok: false, error: '需要桌面版' }),
   showFontInFolder: async () => ({ ok: false }),
+  getFontCatalog: async () => ({ ok: false, source: 'none', fetchedAt: 0, fonts: [], error: '需要桌面版' }),
+  installStoreFont: async () => ({ ok: false, error: '需要桌面版' }),
+  onFontStoreProgress: () => () => {},
 };
 
 const NEED_ELECTRON = '书源与云端阅读需要桌面版（Electron）才能访问网络';
@@ -256,6 +259,26 @@ const api = {
       return { ok: false };
     }
   },
+
+  // 字体商店
+  getFontCatalog: async (force = false) => {
+    if (!window.readerAPI?.getFontCatalog) return browserFallback.getFontCatalog();
+    try {
+      return await window.readerAPI.getFontCatalog(force);
+    } catch (err) {
+      return { ok: false, source: 'none', fetchedAt: 0, fonts: [], error: err?.message || '目录获取失败' };
+    }
+  },
+  installStoreFont: async (id) => {
+    if (!window.readerAPI?.installStoreFont) return browserFallback.installStoreFont();
+    try {
+      return await window.readerAPI.installStoreFont(id);
+    } catch (err) {
+      return { ok: false, error: err?.message || '安装失败' };
+    }
+  },
+  onFontStoreProgress: (callback) =>
+    window.readerAPI?.onFontStoreProgress ? window.readerAPI.onFontStoreProgress(callback) : () => {},
 
   listSources: (...args) => (window.readerAPI?.listSources ?? browserFallback.listSources)(...args),
   saveSources: (...args) => (window.readerAPI?.saveSources ?? browserFallback.saveSources)(...args),
@@ -1063,6 +1086,24 @@ export function AppProvider({ children }) {
     setSettings((prev) => ({ ...prev, userFont: id || '' }));
   }, []);
 
+  /* ---------- 字体商店 ---------- */
+
+  const refreshFontCatalog = useCallback((force = false) => api.getFontCatalog(force), []);
+
+  const installStoreFont = useCallback(
+    async (id) => {
+      const res = await api.installStoreFont(id);
+      if (Array.isArray(res?.fonts)) setFonts(res.fonts);
+      if (res?.ok) notify(res.already ? '这款字体已经装过了' : '字体已安装，可在「已安装」里选用', 'info');
+      else if (res?.error) notify(res.error, 'error');
+      return res;
+    },
+    [notify]
+  );
+
+  // 安装进度：订阅主进程的 100ms 节流事件，返回取消函数
+  const onFontStoreProgress = useCallback((callback) => api.onFontStoreProgress(callback), []);
+
   const customThemes = useMemo(() => normalizeCustomThemes(settings.customThemes), [settings.customThemes]);
 
   const themes = useMemo(
@@ -1128,6 +1169,9 @@ export function AppProvider({ children }) {
       removeFont,
       clearFonts,
       selectFont,
+      refreshFontCatalog,
+      installStoreFont,
+      onFontStoreProgress,
       cycleTheme,
       saveCustomTheme,
       removeCustomTheme,
@@ -1213,6 +1257,9 @@ export function AppProvider({ children }) {
       removeFont,
       clearFonts,
       selectFont,
+      refreshFontCatalog,
+      installStoreFont,
+      onFontStoreProgress,
       cycleTheme,
       saveCustomTheme,
       removeCustomTheme,

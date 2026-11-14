@@ -34,7 +34,7 @@ const LIMITS = { transfer: MAX_TRANSFER, chunk: CHUNK, chunkBody: MAX_CHUNK_BODY
 /** 接口版本：手机端拿它判断「桌面端太旧」。2 = 2.6.0 起的能力集。 */
 const API_VERSION = 2;
 /** ping 里的能力位：手机据此开关功能，不认识的忽略即可。 */
-const API_FEATURES = ['library', 'upload', 'download', 'range', 'comic', 'devices', 'marks'];
+const API_FEATURES = ['library', 'upload', 'download', 'range', 'comic', 'devices', 'marks', 'fonts'];
 const SSE_PING = 25000;
 /** 手机快照上限 256KB（PRD §2.1）。 */
 const MAX_SNAPSHOT_BODY = 256 * 1024;
@@ -476,6 +476,8 @@ export function createLanService(opts) {
     devices = null,
     // 设备在线/离线时通知主进程 broadcast('lan:device')。
     onDeviceChanged = () => {},
+    // 已安装字体的只读视图（list / open）；手机直连 GitHub 失败时回退到这里。
+    fonts = null,
   } = opts;
 
   // 清单/下载/上传的磁盘语义都在这一层，lan.js 只做 HTTP。
@@ -764,6 +766,74 @@ export function createLanService(opts) {
       }
     });
     // 手机中途走了就立刻停止读盘，不为一条已经断掉的连接读完 30MB
+    res.on('close', () => {
+      try {
+        stream.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+    stream.pipe(res);
+  }
+
+  /**
+   * 字体下载。只开放 fonts.json 里已安装的字体，id 白名单与路径越界检查
+   * 都在注入的 fonts.open 里做，这里只负责按 Range 流式发送。
+   */
+  function handleFontDownload(req, res, id) {
+    const opened = fonts.open(id);
+    if (!opened.ok) {
+      sendJson(res, opened.status || 400, { ok: false, error: opened.error });
+      return;
+    }
+    const range = parseRangeHeader(req.headers.range);
+    if (range && range.ok === false) {
+      sendJson(res, 416, { ok: false, error: '只支持单区间的 Range，形如 bytes=1024-' });
+      return;
+    }
+    const start = range && range.ok ? range.from : 0;
+    if (start >= opened.size) {
+      const body = JSON.stringify({ ok: false, error: '起点超出字体大小' });
+      res.writeHead(416, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(body),
+        'Content-Range': `bytes */${opened.size}`,
+        'Cache-Control': 'no-store',
+      });
+      res.end(body);
+      return;
+    }
+
+    const end = range && range.ok && range.to !== null ? Math.min(range.to, opened.size - 1) : opened.size - 1;
+    const length = Math.max(0, end - start + 1);
+    const partial = Boolean(range && range.ok);
+    const format = String(opened.format || 'ttf').toLowerCase() === 'otf' ? 'otf' : 'ttf';
+    const headers = {
+      'Content-Type': format === 'otf' ? 'font/otf' : 'font/ttf',
+      'Content-Length': length,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Folio-Sha256': opened.sha256 || '',
+      'X-Folio-Size': String(opened.size),
+      'Content-Disposition': `attachment; filename="${id}.${format}"`,
+    };
+    if (partial) headers['Content-Range'] = `bytes ${start}-${end}/${opened.size}`;
+    res.writeHead(partial ? 206 : 200, headers);
+    if (!length) {
+      res.end();
+      return;
+    }
+
+    const stream = fs.createReadStream(opened.file, { start, end });
+    stream.on('error', (err) => {
+      log('warn', `字体下载中断：${err?.message || err}`);
+      try {
+        res.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
     res.on('close', () => {
       try {
         stream.destroy();
@@ -1192,6 +1262,32 @@ export function createLanService(opts) {
           now: Date.now(),
         },
       });
+      return;
+    }
+
+    /* ---------- 字体商店：手机回退下载 ---------- */
+
+    // 只列桌面端已经装好的字体；手机拿 id 判断「这台机器上有没有」。
+    if (pathname === '/api/fonts' && method === 'GET') {
+      if (!fonts) {
+        sendJson(res, 501, { ok: false, error: 'not_supported' });
+        return;
+      }
+      try {
+        sendJson(res, 200, { ok: true, fonts: fonts.list() });
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: `字体列表读取失败：${err?.message || err}` });
+      }
+      return;
+    }
+
+    if (pathname.startsWith('/api/font/') && pathname.endsWith('/download') && method === 'GET') {
+      if (!fonts) {
+        sendJson(res, 501, { ok: false, error: 'not_supported' });
+        return;
+      }
+      const fontId = safeDecode(pathname.slice('/api/font/'.length, -'/download'.length));
+      handleFontDownload(req, res, fontId);
       return;
     }
 

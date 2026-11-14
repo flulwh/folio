@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.FontFamilies
 import com.folio.reader.ui.READING_PALETTES
 import com.folio.reader.ui.ReadingPalette
 import com.folio.reader.ui.SettingsUiState
@@ -72,11 +73,10 @@ fun ReaderStyleSheet(
 ) {
     val palette = MiuixTheme.colorScheme
     val specimenStyle = TextStyle(
-        fontFamily = if (state.fontFamily == SettingsStore.FONT_SANS) {
-            FontFamily.SansSerif
-        } else {
-            FontFamily.Serif
-        },
+        fontFamily = FontFamilies.rememberReaderFamily(
+            state.userFontId,
+            if (state.fontFamily == SettingsStore.FONT_SANS) FontFamily.SansSerif else FontFamily.Serif,
+        ),
         fontSize = state.fontSizeSp.sp,
         lineHeight = (state.fontSizeSp * state.lineHeight).sp,
         letterSpacing = state.letterSpacingEm.em,

@@ -30,6 +30,7 @@ import com.folio.reader.ui.DeviceConfirmDialog
 import com.folio.reader.ui.FolioTheme
 import com.folio.reader.ui.ReaderScreen
 import com.folio.reader.ui.SettingsScreen
+import com.folio.reader.ui.FontStoreScreen
 import com.folio.reader.ui.ShelfScreen
 import com.folio.reader.ui.SyncStatusScreen
 import com.folio.reader.ui.miuix.FolioMotion
@@ -41,6 +42,7 @@ private const val ROUTE_NOVEL = "reader"
 private const val ROUTE_COMIC = "comic"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_SYNC = "sync"
+private const val ROUTE_FONT_STORE = "fonts"
 
 class MainActivity : ComponentActivity() {
 
@@ -151,6 +153,13 @@ class MainActivity : ComponentActivity() {
                                 vm = vm,
                                 onBack = { navController.popBackStack() },
                                 onOpenSyncStatus = { navController.navigate(ROUTE_SYNC) },
+                                onOpenFontStore = { navController.navigate(ROUTE_FONT_STORE) },
+                            )
+                        }
+                        composable(ROUTE_FONT_STORE) {
+                            FontStoreScreen(
+                                vm = vm,
+                                onBack = { navController.popBackStack() },
                             )
                         }
                         composable(ROUTE_SYNC) {

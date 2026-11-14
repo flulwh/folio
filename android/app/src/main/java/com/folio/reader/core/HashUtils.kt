@@ -31,7 +31,15 @@ object HashUtils {
     /** 新建一个可增量喂数据的 digest，供「边写边算」的场景用。 */
     fun newDigest(): MessageDigest = MessageDigest.getInstance("SHA-1")
 
-    /** 把 digest 收成 40 位小写 hex。 */
+    /**
+     * SHA-256 digest。
+     *
+     * 字体商店的清单用 sha256（与桌面端 font-store 一致）；书正文协议仍然是 sha1，
+     * 两套口径各自独立，别混用。
+     */
+    fun newSha256Digest(): MessageDigest = MessageDigest.getInstance("SHA-256")
+
+    /** 把 digest 收成小写 hex（sha1 40 位 / sha256 64 位）。 */
     fun toHex(digest: MessageDigest): String = toHex(digest.digest())
 
     private fun toHex(bytes: ByteArray): String {

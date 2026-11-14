@@ -137,6 +137,8 @@ dataDir/
 | POST | `/api/progress` | `{id, data}`，按 `updatedAt` 合并；只接受书架里存在的书 |
 | GET | `/api/marks` | 整份 `marks.json`（书 id → 痕迹列表），供 Android 拉取 |
 | POST | `/api/marks` | `{id, marks, remove}`，按 `kind\|chapterNo\|paraIndex` 归一后合并写盘 |
+| GET | `/api/fonts` | 桌面端已安装的字体（`id / name / family / license / size / sha256 / format`），供安卓端回退下载前对账 |
+| GET | `/api/font/:id/download` | 字体字节流；支持 `Range`，带 `Content-Length`、`Accept-Ranges`、`X-Folio-Sha256` |
 | GET | `/api/events` | SSE：`hello` / `progress` / `books` / `marks` / `config` |
 
 ### 进度合并
@@ -166,7 +168,10 @@ mergeProgress(current, patch)         // 整份合并，只在真有变化时返
 - 只监听 `0.0.0.0`（局域网），不做 UPnP、不穿透 NAT。关掉应用即断。
 - 不返回本地路径：`books.json` 里的 `filePath` 在 `/api/state` 里被剥掉，
   正文只按书 id 提供，且路径必须落在 `books/` 目录内。
-- 请求体上限 512KB、单本正文上限 12MB、封面 4MB，防止误点或恶意请求把内存撑爆。
+- 请求体上限 512KB、单本正文上限 12MB、封面 4MB、字体 48MB，防止误点或恶意请求把内存撑爆。
+- 字体接口只开放 `fonts.json` 里已安装的字体：id 必须匹配 `^[a-zA-Z0-9._-]{1,64}$`，
+  再按记录里的文件名拼路径并做一次「是否落在 `fonts/` 内」的复核；不接受任意路径，
+  也不返回书架目录。
 
 > HTTP，不加密。这是明确的取舍：数据不出内网，换取「输入一个地址就能用」。
 > 公共 Wi-Fi 下建议关掉面板。
