@@ -3,7 +3,7 @@
 一个用 **Electron + React** 打造的极简电子书阅读器。主页就是书架，一切交互都为「读进去」服务：
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
 
-![version](https://img.shields.io/badge/version-2.9.1-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4)
+![version](https://img.shields.io/badge/version-2.9.2-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4)
 
 ---
 
@@ -13,9 +13,9 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.9.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.1) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.9.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.1) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.9.1-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.1) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-Setup-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.9.2-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 免安装压缩包，解压后运行 `Folio.exe` |
 | Android APK | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹；APK 见 [Releases](https://github.com/flulwh/folio/releases) 中的 `android-*` 版本 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
@@ -201,7 +201,7 @@ npm run check     # 发版门禁：版本一致性 / 语法 / 打包配置
 npm run build     # 打出全部 Windows 产物
 ```
 
-> 版本号只写在 `package.json`（当前 `2.9.1`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.9.2`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)
