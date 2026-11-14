@@ -7,6 +7,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.DisposableEffect
@@ -24,6 +29,7 @@ import com.folio.reader.ui.ReaderScreen
 import com.folio.reader.ui.SettingsScreen
 import com.folio.reader.ui.ShelfScreen
 import com.folio.reader.ui.SyncStatusScreen
+import com.folio.reader.ui.miuix.FolioMotion
 
 /** 路由名常量：改成字面量拼接容易打错，集中放一处。 */
 private const val ROUTE_SHELF = "shelf"
@@ -55,7 +61,31 @@ class MainActivity : ComponentActivity() {
                     onDispose { navController.removeOnDestinationChangedListener(listener) }
                 }
                 Box(Modifier.fillMaxSize()) {
-                    NavHost(navController = navController, startDestination = ROUTE_SHELF) {
+                    // 页面转场：淡入 + 约 3% 屏宽的水平位移，进出都 200ms，不弹跳。
+                    val enter = fadeIn(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) +
+                        slideInHorizontally(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) {
+                            (it * 0.03f).toInt()
+                        }
+                    val exit = fadeOut(tween(FolioMotion.Instant)) +
+                        slideOutHorizontally(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) {
+                            -(it * 0.015f).toInt()
+                        }
+                    val popEnter = fadeIn(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) +
+                        slideInHorizontally(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) {
+                            -(it * 0.03f).toInt()
+                        }
+                    val popExit = fadeOut(tween(FolioMotion.Instant)) +
+                        slideOutHorizontally(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) {
+                            (it * 0.015f).toInt()
+                        }
+                    NavHost(
+                        navController = navController,
+                        startDestination = ROUTE_SHELF,
+                        enterTransition = { enter },
+                        exitTransition = { exit },
+                        popEnterTransition = { popEnter },
+                        popExitTransition = { popExit },
+                    ) {
                         composable(ROUTE_SHELF) {
                             ShelfScreen(
                                 vm = vm,

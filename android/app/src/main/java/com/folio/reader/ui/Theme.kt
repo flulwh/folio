@@ -18,14 +18,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /* ==========================================================================
-   Folio · HyperOS 皮肤
+   Folio · Anthropic 皮肤
    --------------------------------------------------------------------------
-   组件结构、圆角、动效全部交给 Miuix（HyperOS 观感）；品牌色仍然是纸、墨、朱：
-   - 底色 = 当前阅读底色预设（白 / 纸 / 米 / 石墨 / 夜间）
-   - 卡片 = 纸底提亮一点，圆角 16–28dp，层级靠底色差而不是重阴影
-   - 强调色 = 朱砂（#C4251C），只出现在进度、开关、当前项
+   组件结构、圆角、动效全部交给 Miuix（HyperOS 观感）；品牌色换成 Anthropic：
+   - 墨 #141413 / 纸 #FAF9F5 / 中灰 #B0AEA5 / 浅灰 #E8E6DC
+   - 强调色只有暖橙 #D97757，蓝 #6A9BCC 与绿 #788C5D 只做状态点缀
+   - 底色 = 当前阅读底色预设（白 / 纸 / 米 / 石墨 / 夜间），全部落在品牌灰阶上
    正文的排版（字号 / 行距 / 字距 / 段距）与皮肤无关，仍由阅读设置驱动。
    ========================================================================== */
+
+/* ------------------------------ 品牌色板 ------------------------------ */
+
+/** 主墨色：正文与深色底。 */
+val BrandInk = Color(0xFF141413)
+/** 主纸色：浅色底与深色底上的文字。 */
+val BrandLight = Color(0xFFFAF9F5)
+/** 中灰：次级元素。 */
+val BrandMidGray = Color(0xFFB0AEA5)
+/** 浅灰：分区底、分隔。 */
+val BrandLightGray = Color(0xFFE8E6DC)
+/** 主强调色：只给进度、开关、当前项。 */
+val BrandOrange = Color(0xFFD97757)
+/** 次强调色：在线 / 提示。 */
+val BrandBlue = Color(0xFF6A9BCC)
+/** 三级强调色：健康状态。 */
+val BrandGreen = Color(0xFF788C5D)
 
 /** 阅读底色预设（同时决定阅读器与整个 App 的明暗）。 */
 @Immutable
@@ -39,53 +56,54 @@ data class ReadingPalette(
 ) {
     val line: Color get() = ink.copy(alpha = if (isDark) 0.16f else 0.14f)
     val lineStrong: Color get() = ink.copy(alpha = if (isDark) 0.32f else 0.30f)
-    val accent: Color get() = if (isDark) Color(0xFFFF4438) else Color(0xFFC4251C)
-    val accentInk: Color get() = if (isDark) Color(0xFF140404) else Color(0xFFFFFFFF)
-    val accentSoft: Color get() = accent.copy(alpha = if (isDark) 0.18f else 0.08f)
+    val accent: Color get() = BrandOrange
+    /** 橙是中调，上面压深墨才看得清。 */
+    val accentInk: Color get() = Color(0xFF1F1A16)
+    val accentSoft: Color get() = accent.copy(alpha = if (isDark) 0.20f else 0.12f)
 }
 
 private val WHITE_PALETTE = ReadingPalette(
     id = "white",
     label = "冷白",
-    bg = Color(0xFFF4F4F1),
-    ink = Color(0xFF111111),
-    soft = Color(0xFF5B5B55),
+    bg = Color(0xFFF2F1EB),
+    ink = BrandInk,
+    soft = Color(0xFF6E6B62),
     isDark = false,
 )
 
 private val PAPER_PALETTE = ReadingPalette(
     id = "paper",
     label = "纸白",
-    bg = Color(0xFFFBF8F1),
-    ink = Color(0xFF23201C),
-    soft = Color(0xFF6A645B),
+    bg = BrandLight,
+    ink = BrandInk,
+    soft = Color(0xFF6B6860),
     isDark = false,
 )
 
 private val CREAM_PALETTE = ReadingPalette(
     id = "cream",
     label = "米色",
-    bg = Color(0xFFF1E7D3),
-    ink = Color(0xFF1F1A12),
-    soft = Color(0xFF6B5C45),
+    bg = BrandLightGray,
+    ink = BrandInk,
+    soft = Color(0xFF5F5C4E),
     isDark = false,
 )
 
 private val GRAPHITE_PALETTE = ReadingPalette(
     id = "graphite",
     label = "石墨",
-    bg = Color(0xFF1C1C1E),
-    ink = Color(0xFFE6E6E1),
-    soft = Color(0xFF9A9A94),
+    bg = Color(0xFF24231F),
+    ink = Color(0xFFF0EEE7),
+    soft = BrandMidGray,
     isDark = true,
 )
 
 private val NIGHT_PALETTE = ReadingPalette(
     id = "night",
     label = "夜间",
-    bg = Color(0xFF0C0C0E),
-    ink = Color(0xFFC9C9C4),
-    soft = Color(0xFF85857F),
+    bg = BrandInk,
+    ink = Color(0xFFC9C7BE),
+    soft = Color(0xFF8A877E),
     isDark = true,
 )
 
@@ -244,17 +262,17 @@ private fun schemeFor(palette: ReadingPalette) = with(palette) {
             onSurfaceVariant = soft,
             outline = lineStrong,
             outlineVariant = line,
-            error = Color(0xFFFF6B5E),
-            onError = Color(0xFF1A0503),
-            errorContainer = Color(0xFF3A1210),
-            onErrorContainer = Color(0xFFFFB4AC),
+            error = Color(0xFFE8836A),
+            onError = Color(0xFF2A110A),
+            errorContainer = Color(0xFF40231B),
+            onErrorContainer = Color(0xFFF6C4B4),
         )
     } else {
         lightColorScheme(
             primary = accent,
             onPrimary = accentInk,
             primaryContainer = accentSoft,
-            onPrimaryContainer = Color(0xFF6D140D),
+            onPrimaryContainer = Color(0xFF5C2A1B),
             secondary = ink,
             onSecondary = bg,
             secondaryContainer = ink.copy(alpha = 0.06f),
@@ -267,10 +285,10 @@ private fun schemeFor(palette: ReadingPalette) = with(palette) {
             onSurfaceVariant = soft,
             outline = lineStrong,
             outlineVariant = line,
-            error = Color(0xFFB3261E),
-            onError = Color(0xFFFFFFFF),
-            errorContainer = Color(0xFFF9DEDC),
-            onErrorContainer = Color(0xFF410E0B),
+            error = Color(0xFFB5462F),
+            onError = BrandLight,
+            errorContainer = Color(0xFFF6E3DA),
+            onErrorContainer = Color(0xFF48170C),
         )
     }
     base
@@ -299,18 +317,18 @@ private fun tint(from: Color, toward: Color, amount: Float): Color =
  * 把纸色预设映射到 Miuix 的 HyperOS 色板。
  *
  * 只覆盖「有品牌含义」的几组，其余用 Miuix 默认值：
- * primary = 朱砂（开关 / 滑杆 / 选中）；
+ * primary = 暖橙（开关 / 滑杆 / 选中）；
  * background = 阅读底色；surface = 提亮后的卡片色；
  * secondaryContainer = 输入框 / 分段控件的浅底。
  */
 fun miuixSchemeFor(palette: ReadingPalette) = with(palette) {
-    val card = if (isDark) mix(bg, ink, 0.10f) else mix(bg, Color.White, 0.72f)
+    val card = if (isDark) mix(bg, ink, 0.10f) else mix(bg, BrandLight, 0.72f)
     val elevated = if (isDark) mix(bg, ink, 0.16f) else mix(bg, ink, 0.06f)
     val quiet = if (isDark) mix(bg, ink, 0.22f) else mix(bg, ink, 0.10f)
     if (isDark) {
         top.yukonga.miuix.kmp.theme.darkColorScheme(
             primary = accent,
-            onPrimary = Color(0xFF1A0503),
+            onPrimary = accentInk,
             primaryVariant = accent,
             primaryContainer = accent.copy(alpha = 0.22f),
             onPrimaryContainer = ink,
@@ -345,13 +363,13 @@ fun miuixSchemeFor(palette: ReadingPalette) = with(palette) {
     } else {
         top.yukonga.miuix.kmp.theme.lightColorScheme(
             primary = accent,
-            onPrimary = Color.White,
+            onPrimary = accentInk,
             primaryVariant = accent,
             primaryContainer = accent.copy(alpha = 0.14f),
             onPrimaryContainer = ink,
             secondary = elevated,
             onSecondary = ink,
-            secondaryVariant = Color.White,
+            secondaryVariant = BrandLight,
             onSecondaryVariant = ink,
             secondaryContainer = elevated,
             onSecondaryContainer = soft,

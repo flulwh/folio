@@ -1,8 +1,11 @@
 package com.folio.reader.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -66,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.FolioMotion
 import com.folio.reader.ui.miuix.HyperActionCell
 import com.folio.reader.ui.miuix.HyperMeta
 import com.folio.reader.ui.miuix.HyperRoundIcon
@@ -331,8 +335,10 @@ fun ReaderScreen(
         // ---------------- 顶栏（渐变遮罩，不占正文高度） ----------------
         AnimatedVisibility(
             visible = reader.controls,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(FolioMotion.Instant)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { -it / 12 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { -it / 12 },
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             Column(
@@ -384,10 +390,16 @@ fun ReaderScreen(
         }
 
         // 翻章失败：正文留着，底部一条提示
-        if (reader.error != null && reader.paragraphs.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = reader.error != null && reader.paragraphs.isNotEmpty(),
+            enter = fadeIn(tween(FolioMotion.Normal)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 2 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 2 },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
             Row(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(bottom = if (reader.controls) 156.dp else 16.dp)
                     .fillMaxWidth()
@@ -422,8 +434,10 @@ fun ReaderScreen(
         // ---------------- 底栏 ----------------
         AnimatedVisibility(
             visible = reader.controls && reader.paragraphs.isNotEmpty(),
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(FolioMotion.Instant)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 12 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 12 },
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             Column(
@@ -526,13 +540,19 @@ fun ReaderScreen(
         }
 
         // 自动滚动时的角落标签
-        if (reader.autoScroll && !reader.controls) {
+        AnimatedVisibility(
+            visible = reader.autoScroll && !reader.controls,
+            enter = fadeIn(tween(FolioMotion.Normal)) +
+                slideInVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 2 },
+            exit = fadeOut(tween(FolioMotion.Instant)) +
+                slideOutVertically(tween(FolioMotion.Normal, easing = FolioMotion.Easing)) { it / 2 },
+            modifier = Modifier.align(Alignment.BottomEnd),
+        ) {
             val speed = SettingsStore.AUTO_SCROLL_SPEEDS[
                 settings.autoScrollSpeed.coerceIn(0, SettingsStore.AUTO_SCROLL_SPEEDS.lastIndex)
             ]
             Row(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
                     .navigationBarsPadding()
                     .padding(end = 16.dp, bottom = 20.dp)
                     .clip(RoundedCornerShape(20.dp))

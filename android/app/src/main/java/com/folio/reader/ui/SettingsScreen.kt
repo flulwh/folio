@@ -1,8 +1,12 @@
 package com.folio.reader.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,8 +47,11 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.ui.miuix.FolioMotion
 import com.folio.reader.ui.miuix.GroupLabel
 import com.folio.reader.ui.miuix.Hairline
+import com.folio.reader.ui.miuix.Reveal
+import com.folio.reader.ui.miuix.pressScale
 import java.util.Locale
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.BasicComponent
@@ -107,6 +114,7 @@ fun SettingsScreen(
         ) {
             /* ---------------- 连接 ---------------- */
             item("connect") {
+                Reveal(index = 0) {
                 GroupLabel(text = "连接", topGap = 12.dp)
                 Hairline(inset = 16.dp)
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -181,13 +189,16 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    val dotColor by animateColorAsState(
+                        targetValue = if (state.connection.healthy) BrandGreen else scheme.primary,
+                        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
+                        label = "connection-dot",
+                    )
                     Box(
                         Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(
-                                if (state.connection.healthy) Color(0xFF2E7D32) else scheme.primary
-                            )
+                            .background(dotColor)
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -246,10 +257,12 @@ fun SettingsScreen(
                     onClick = onOpenSyncStatus,
                 )
                 Hairline(inset = 16.dp)
+                }
             }
 
             /* ---------------- 同步 ---------------- */
             item("sync") {
+                Reveal(index = 1) {
                 GroupLabel(text = "同步")
                 Hairline(inset = 16.dp)
                 SuperSwitch(
@@ -296,10 +309,12 @@ fun SettingsScreen(
                     )
                 }
                 Hairline(inset = 16.dp)
+                }
             }
 
             /* ---------------- 阅读 ---------------- */
             item("read") {
+                Reveal(index = 2) {
                 GroupLabel(text = "阅读")
                 Hairline(inset = 16.dp)
                 ReadingPreview(state)
@@ -413,10 +428,12 @@ fun SettingsScreen(
                     },
                 )
                 Hairline(inset = 16.dp)
+                }
             }
 
             /* ---------------- 本机 ---------------- */
             item("local") {
+                Reveal(index = 3) {
                 GroupLabel(text = "本机")
                 Hairline(inset = 16.dp)
                 ValueRow(title = "本机正文", value = formatSize(state.localBytes))
@@ -484,6 +501,7 @@ fun SettingsScreen(
                         color = scheme.primary,
                     )
                 }
+                }
             }
         }
     }
@@ -505,8 +523,13 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val source = remember { MutableInteractionSource() }
             Box(
-                Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onBack),
+                Modifier
+                    .pressScale(source)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .clickable(interactionSource = source, indication = null, onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
