@@ -124,9 +124,19 @@ fun ShelfScreen(
         vm.dismissMessage()
     }
 
+    // 分区要过滤 + 去重 + 排序（O(n log n)）。搜索框开关、长按菜单这些局部状态
+    // 变化不该带动整份书架重算，按真正影响结果的输入做记忆。
+    val sections = remember(
+        state.books,
+        state.progress,
+        state.filter,
+        state.query,
+        state.hideRemoteWhenOffline,
+        state.online,
+    ) { state.sections }
+
     LaunchedEffect(state.highlightId) {
         val id = state.highlightId ?: return@LaunchedEffect
-        val sections = state.sections
         var index = 0
         var target = -1
         for (section in sections) {
@@ -142,7 +152,6 @@ fun ShelfScreen(
         vm.clearHighlight()
     }
 
-    val sections = state.sections
     val importAction = { importLauncher.launch(IMPORT_MIME_TYPES) }
 
     Box(Modifier.fillMaxSize().background(scheme.background)) {
