@@ -39,6 +39,7 @@ import com.folio.reader.core.SyncState
 import com.folio.reader.ui.miuix.HyperGroup
 import com.folio.reader.ui.miuix.HyperRow
 import com.folio.reader.ui.miuix.HyperSectionTitle
+import com.folio.reader.ui.miuix.PageMargin
 import java.util.Locale
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Icon
@@ -204,7 +205,7 @@ private fun SyncHeader(onBack: () -> Unit) {
             .fillMaxWidth()
             .background(scheme.background)
             .statusBarsPadding()
-            .padding(horizontal = 18.dp),
+            .padding(horizontal = PageMargin),
     ) {
         Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -227,7 +228,7 @@ private fun SyncHeader(onBack: () -> Unit) {
         Text(
             text = "同步",
             modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-            fontSize = 30.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
             maxLines = 1,

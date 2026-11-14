@@ -206,6 +206,8 @@ fun ReaderPager(
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        // 预留给顶栏：翻页模式下正文不钻到 HUD 底下，页面顶部保持一条纸边
+        Spacer(Modifier.height(36.dp))
         BoxWithConstraints(
             modifier = Modifier
                 .weight(1f)

@@ -60,7 +60,21 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
    --------------------------------------------------------------------------
    Miuix 0.4.x 没有 bottom sheet，这里按它的语言自己拼一个：
    28dp 顶角、纸色面板、弹簧上滑、下拉关闭。其余是列表行 / 分段控件 / 滑杆。
+
+   间距只有四档，所有页面共用，避免「东一块 16、西一块 20」：
+   页面边距 20dp / 组间 20dp / 组内 10dp / 卡片圆角 18dp。
    ========================================================================== */
+
+/** 页面左右边距：所有页面、所有分组统一用它。 */
+val PageMargin: Dp = 20.dp
+/** 分组之间的垂直距离。 */
+val SectionGap: Dp = 20.dp
+/** 分组标题与内容之间。 */
+val LabelGap: Dp = 8.dp
+/** 列表行内的水平内边距。 */
+val RowInset: Dp = 16.dp
+/** 分组卡片圆角。 */
+val GroupRadius: Dp = 18.dp
 
 /** 面板最大高度：屏幕的 86%，再多就该整页了。 */
 @Composable
@@ -195,13 +209,24 @@ fun HyperSheet(
     }
 }
 
-/** 面板里的分组标题（Miuix SmallTitle 的语义）。 */
+/** 面板里的分组标题：12sp 半粗、拉开字距，上方 20dp、下方 8dp。 */
 @Composable
-fun HyperSectionTitle(text: String, modifier: Modifier = Modifier) {
-    SmallTitle(text = text, modifier = modifier)
+fun HyperSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        modifier = modifier.padding(start = PageMargin, end = PageMargin, top = SectionGap, bottom = LabelGap),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.6.sp,
+        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+    )
 }
 
-/** 一张 HyperOS 卡片：白色/深色纸面 + 18dp 圆角，行与行之间用发丝线分隔。 */
+/** 兼容旧调用名。 */
+@Composable
+fun HyperSectionTitle(text: String, modifier: Modifier = Modifier) = HyperSectionLabel(text, modifier)
+
+/** 一张 HyperOS 卡片：纸色面板 + 18dp 圆角，组内行之间用发丝线分隔。 */
 @Composable
 fun HyperGroup(
     modifier: Modifier = Modifier,
@@ -210,11 +235,43 @@ fun HyperGroup(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        cornerRadius = 18.dp,
+            .padding(horizontal = PageMargin),
+        cornerRadius = GroupRadius,
         color = MiuixTheme.colorScheme.surface,
     ) {
         content()
+    }
+}
+
+/** 紧凑筛选胶囊：30dp 高，选中朱砂底。 */
+@Composable
+fun HyperChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = MiuixTheme.colorScheme
+    Box(
+        modifier = modifier
+            .height(30.dp)
+            .clip(RoundedCornerShape(15.dp))
+            .background(if (selected) palette.primary else palette.secondary)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(horizontal = 13.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            fontSize = 12.5.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = if (selected) palette.onPrimary else palette.onSurfaceVariantSummary,
+            maxLines = 1,
+        )
     }
 }
 
@@ -244,13 +301,13 @@ fun HyperRow(
                     Modifier
                 }
             )
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .padding(horizontal = RowInset, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 color = if (enabled) palette.onSurface else palette.disabledOnSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -308,12 +365,12 @@ fun HyperSliderRow(
     maxValue: Float = 1f,
     decimalPlaces: Int = 2,
 ) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
+    Column(modifier.fillMaxWidth().padding(horizontal = RowInset, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = title,
                 modifier = Modifier.weight(1f),
-                fontSize = 15.sp,
+                fontSize = 14.5.sp,
                 color = MiuixTheme.colorScheme.onSurface,
             )
             Text(
@@ -399,7 +456,7 @@ fun HyperActionCell(
                 indication = null,
                 onClick = onClick,
             )
-            .padding(vertical = 7.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -419,8 +476,8 @@ fun HyperActionCell(
                 )
             }
         }
-        Spacer(Modifier.height(3.dp))
-        Text(text = label, fontSize = 10.5.sp, color = tint, maxLines = 1)
+        Spacer(Modifier.height(2.dp))
+        Text(text = label, fontSize = 9.5.sp, color = tint, maxLines = 1)
     }
 }
 

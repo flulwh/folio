@@ -93,7 +93,7 @@ fun ReaderStyleSheet(
             // 阅读方式
             HyperSectionTitle("阅读方式")
             HyperGroup {
-                Column(Modifier.padding(10.dp)) {
+                Column(Modifier.padding(12.dp)) {
                     HyperSegmented(
                         options = listOf("上下滚动", "左右翻页"),
                         selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
