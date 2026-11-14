@@ -363,7 +363,7 @@ sequenceDiagram
 - **文案（逐字复用，别各写一套）**：`访问码不对` · `连不上桌面端，确认同一 Wi-Fi` · `地址格式不对，应形如 http://192.168.1.5:7788` · `桌面端太旧，请升级到 2.6.0` · `云端书需要连接桌面端才能阅读` · `连接已断开 · 重试` · `《书名》已在书架里` · `这本 40MB，超过 30MB 上限，只能在本机读` · `需要腾出 320MB 空间` · `两端内容不一致，请选择保留哪一版`。
 - **HTTP**：所有 `/api/*` 带 `X-Folio-Token`；章节与图片响应必须 `Cache-Control: no-store`；错误体恒为 `{ok:false,error}`。
 - **零缓存红线**：Android 侧任何缓存都必须是内存对象；禁止写 `cacheDir`/`filesDir`；`cacheDir` 占用由设置页直读上报，必须恒为 0。
-- **进度**：字段名与 `progress.json` 完全一致（`paraIndex/chapter/chapterIndex/chapterTitle/windowBase/percent/updatedAt`），合并只用现有 `mergeProgressEntry`（新者赢 + 浅合并），不新造规则。
+- **进度**：字段名与 `progress.json` 完全一致（`paraIndex/chapter/chapterIndex/chapterTitle/windowBase/percent/updatedAt`），合并只用现有 `mergeProgressEntry`（新者赢 + 浅合并），不新造规则。**双向收敛**：合并后凡本机更新的条目立即回写桌面端，两端一轮后位置一致；打开书不写进度、位置没动也不刷新 `updatedAt`，避免把桌面端更新的位置盖掉。
 - **切段规则冻结**：`TextParser` 与 `src/utils/chapters.js` 本期一行不改，否则 `paraIndex` 会漂。
 
 ---

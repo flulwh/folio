@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -130,6 +131,9 @@ fun ReaderPager(
         range,
         layoutKey,
     ) {
+        // 换章 / 换排版先把旧页表作废：否则下面的定位会拿上一章的页表算页码，
+        // 落到旧章的某一页并把章节状态拉回去
+        value = emptyList()
         val key = layoutKey
         if (key == null || key.widthPx <= 0 || key.heightPx <= 0 || range.second <= range.first) {
             value = emptyList()
@@ -158,7 +162,8 @@ fun ReaderPager(
 
     // 当前段落变化（打开书、跳章、搜索命中）时，落到对应的那一页
     LaunchedEffect(pages, startPara) {
-        if (pages.isEmpty()) return@LaunchedEffect
+        // 页表还没按新章算好，或 startPara 不属于当前章：等下一次 pages 更新
+        if (pages.isEmpty() || startPara !in range.first until range.second) return@LaunchedEffect
         val target = pageIndexOf(pages, startPara)
         if (pagerState.currentPage != target) pagerState.scrollToPage(target)
     }
@@ -202,6 +207,8 @@ fun ReaderPager(
     LaunchedEffect(jumpPara, pages) {
         if (jumpPara < 0 || pages.isEmpty()) return@LaunchedEffect
         pagerState.scrollToPage(pageIndexOf(pages, jumpPara))
+        // 等这一帧的 settledPage 上报落定再解锁，跳转期间的旧位置不会覆盖章节
+        withFrameNanos { }
         onJumpHandled()
     }
 

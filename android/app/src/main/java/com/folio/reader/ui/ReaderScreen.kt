@@ -163,6 +163,8 @@ fun ReaderScreen(
     LaunchedEffect(scrollTarget, paged) {
         if (scrollTarget >= 0 && !paged) {
             listState.scrollToItem(scrollTarget.coerceAtLeast(0))
+            // 落地后再解锁，让跳转期间产生的旧位置上报全部作废
+            withFrameNanos { }
             vm.clearScrollTarget()
         }
     }
@@ -554,10 +556,7 @@ fun ReaderScreen(
         TocSheet(
             labels = labels,
             currentIndex = reader.chapterIndex,
-            onSelect = { index ->
-                vm.switchChapter(index)
-                vm.toggleToc()
-            },
+            onSelect = { index -> vm.switchChapter(index) },
             onDismiss = { vm.toggleToc() },
         )
     }
