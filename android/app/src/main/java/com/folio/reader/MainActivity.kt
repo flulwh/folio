@@ -2,6 +2,9 @@ package com.folio.reader
 
 import android.os.Bundle
 import android.view.KeyEvent
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -30,6 +33,7 @@ import com.folio.reader.ui.SettingsScreen
 import com.folio.reader.ui.ShelfScreen
 import com.folio.reader.ui.SyncStatusScreen
 import com.folio.reader.ui.miuix.FolioMotion
+import com.folio.reader.ui.readingPalette
 
 /** 路由名常量：改成字面量拼接容易打错，集中放一处。 */
 private const val ROUTE_SHELF = "shelf"
@@ -51,6 +55,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by vm.settingsState.collectAsState()
             val deleteConfirm by vm.deleteConfirm.collectAsState()
+            // 状态栏 / 导航栏图标跟着纸色走：夜间底上用浅色图标，纸白底上用深色图标。
+            // 只靠 enableEdgeToEdge() 会跟随系统深色模式，和 App 内的底色不是一回事。
+            val view = LocalView.current
+            val dark = readingPalette(settings.themePreset).isDark
+            SideEffect {
+                val window = (view.context as android.app.Activity).window
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !dark
+                    isAppearanceLightNavigationBars = !dark
+                }
+            }
             FolioTheme(preset = settings.themePreset) {
                 val navController = rememberNavController()
                 DisposableEffect(navController) {

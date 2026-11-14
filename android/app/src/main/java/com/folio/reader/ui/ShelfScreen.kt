@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -14,8 +13,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -24,21 +25,27 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
@@ -56,16 +63,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Book
@@ -91,9 +99,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 /**
  * 书架。
  *
- * 没有卡片：顶栏只留一行标题和三个图标，筛选是带下划线的文字标签，
- * 书按「封面 + 一行文字 + 一条细进度」开架排下来，靠发丝线分区。
- * 阅读中的书在第一段放大封面，直接给「继续」。
+ * 结构只有三层：
+ * 1. 顶栏：字号最大的书名级标题 + 一条工具胶囊（搜索 / 导入 / 同步 / 设置）；
+ * 2. 筛选：横向胶囊，选中给朱砂底，不做下划线那套「表格感」；
+ * 3. 内容：最近在读的一本放大成一张「继续阅读」卡片，其余书按封面墙三列排开。
+ *
+ * 封面是书架的主角：占满整格、带投影与纸色占位；书名两行、进度一条细轨。
+ * 长按封面（或点右上角 ⋯）出菜单，行为与旧列表版完全一致。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -105,7 +117,7 @@ fun ShelfScreen(
 ) {
     val state by vm.shelf.collectAsState()
     val covers by vm.covers.collectAsState()
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val scheme = MiuixTheme.colorScheme
 
     var searchOpen by remember { mutableStateOf(false) }
@@ -135,12 +147,14 @@ fun ShelfScreen(
         state.online,
     ) { state.sections }
 
-    LaunchedEffect(state.highlightId) {
+    // 封面墙里翻到新导入的书：先按「分区标题 + 每本一格」换算成网格下标。
+    LaunchedEffect(state.highlightId, sections) {
         val id = state.highlightId ?: return@LaunchedEffect
-        var index = 0
+        var index = if (sections.any { it.key == "continue" }) 1 else 0
         var target = -1
         for (section in sections) {
-            index += 1
+            if (section.key == "continue") continue
+            index += 1 // 分区标题占一格
             val offset = section.books.indexOfFirst { it.id == id }
             if (offset >= 0) {
                 target = index + offset
@@ -148,7 +162,7 @@ fun ShelfScreen(
             }
             index += section.books.size
         }
-        if (target >= 0) listState.animateScrollToItem(target)
+        if (target >= 0) gridState.animateScrollToItem(target)
         vm.clearHighlight()
     }
 
@@ -175,7 +189,7 @@ fun ShelfScreen(
                 OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
             }
 
-            FilterTabs(selected = state.filter, onSelect = vm::setFilter)
+            FilterChips(selected = state.filter, onSelect = vm::setFilter)
 
             if (state.importing) {
                 ImportStrip(label = state.importLabel.ifBlank { "正在导入…" })
@@ -189,56 +203,82 @@ fun ShelfScreen(
                         onConnect = onOpenSettings,
                     )
                 } else {
-                    LazyColumn(
-                        state = listState,
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(88.dp),
+                        state = gridState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 28.dp),
+                        contentPadding = PaddingValues(
+                            start = PageMargin,
+                            end = PageMargin,
+                            top = 6.dp,
+                            bottom = 40.dp,
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         sections.forEach { section ->
-                            stickyHeader(key = "header-${section.key}") {
-                                SectionLabel(
-                                    title = section.title.substringBefore("（"),
-                                    count = section.books.size,
-                                )
-                            }
-                            itemsIndexed(
-                                items = section.books,
-                                key = { _, book -> "book-${section.key}-${book.id}" },
-                            ) { index, book ->
-                                val rowKey = "${section.key}-${book.id}"
-                                LaunchedEffect(section.key, book.id) { vm.loadCover(book) }
-                                Reveal(index = index) {
-                                    BookRow(
-                                        book = book,
+                            if (section.key == "continue") {
+                                item(
+                                    key = "continue-hero",
+                                    span = { GridItemSpan(maxLineSpan) },
+                                ) {
+                                    val featured = section.books.first()
+                                    LaunchedEffect(featured.id) { vm.loadCover(featured) }
+                                    ContinueCard(
+                                        book = featured,
                                         state = state,
-                                        cover = covers[book.id],
-                                        featured = section.key == "continue",
-                                        highlighted = state.highlightId == book.id,
-                                        menuOpen = menuFor == rowKey,
-                                        onToggleMenu = {
-                                            menuFor = if (menuFor == rowKey) null else rowKey
-                                        },
-                                        onOpen = {
-                                            menuFor = null
-                                            onOpenBook(book)
-                                        },
-                                        onDownload = {
-                                            menuFor = null
-                                            vm.downloadOffline(book)
-                                        },
-                                        onDeleteLocal = {
-                                            menuFor = null
-                                            pendingDelete = book
-                                        },
-                                        onRemoveFromShelf = {
-                                            menuFor = null
-                                            pendingRemove = book
-                                        },
-                                        onSyncStatus = {
-                                            menuFor = null
-                                            onOpenSyncStatus()
-                                        },
+                                        cover = covers[featured.id],
+                                        onOpen = { onOpenBook(featured) },
                                     )
+                                }
+                            } else {
+                                item(
+                                    key = "header-${section.key}",
+                                    span = { GridItemSpan(maxLineSpan) },
+                                ) {
+                                    SectionLabel(
+                                        title = section.title.substringBefore("（"),
+                                        count = section.books.size,
+                                    )
+                                }
+                                itemsIndexed(
+                                    items = section.books,
+                                    key = { _, book -> "book-${section.key}-${book.id}" },
+                                ) { index, book ->
+                                    val rowKey = "${section.key}-${book.id}"
+                                    LaunchedEffect(section.key, book.id) { vm.loadCover(book) }
+                                    Reveal(index = index) {
+                                        BookCell(
+                                            book = book,
+                                            state = state,
+                                            cover = covers[book.id],
+                                            highlighted = state.highlightId == book.id,
+                                            menuOpen = menuFor == rowKey,
+                                            onToggleMenu = {
+                                                menuFor = if (menuFor == rowKey) null else rowKey
+                                            },
+                                            onOpen = {
+                                                menuFor = null
+                                                onOpenBook(book)
+                                            },
+                                            onDownload = {
+                                                menuFor = null
+                                                vm.downloadOffline(book)
+                                            },
+                                            onDeleteLocal = {
+                                                menuFor = null
+                                                pendingDelete = book
+                                            },
+                                            onRemoveFromShelf = {
+                                                menuFor = null
+                                                pendingRemove = book
+                                            },
+                                            onSyncStatus = {
+                                                menuFor = null
+                                                onOpenSyncStatus()
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -297,71 +337,56 @@ private fun ShelfHeader(
         Modifier
             .fillMaxWidth()
             .background(scheme.background)
-            .statusBarsPadding()
-            .padding(horizontal = PageMargin - 10.dp)
-            .padding(top = 4.dp),
+            .statusBarsPadding(),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "书架",
-                modifier = Modifier.weight(1f).padding(start = 10.dp),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = scheme.onSurface,
-                maxLines = 1,
-            )
-            RoundIconButton(
-                icon = Icons.Default.Search,
-                description = "搜索",
-                active = state.query.isNotEmpty() || searchOpen,
-                onClick = onToggleSearch,
-            )
-            RoundIconButton(
-                icon = Icons.Default.Add,
-                description = "导入 TXT",
-                onClick = onImport,
-            )
-            if (state.syncing) {
-                Box(Modifier.size(38.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(size = 16.dp, strokeWidth = 2.dp)
-                }
-            } else {
-                RoundIconButton(icon = Icons.Default.Refresh, description = "同步", onClick = onSync)
-            }
-            RoundIconButton(
-                icon = Icons.Default.Settings,
-                description = "设置",
-                onClick = onOpenSettings,
-            )
-        }
-
         Row(
-            Modifier
+            modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 10.dp, end = 4.dp)
-                .clickable(onClick = onOpenSyncStatus)
-                .padding(vertical = 4.dp),
+                .padding(start = PageMargin, end = PageMargin, top = 16.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            MiuixText(
-                text = buildString {
-                    append("${state.books.size} 本")
-                    append(" · ")
-                    append(mbOf(state.localBytes))
-                    append(" MB")
-                    append(" · ")
-                    append(connectionTextOf(state))
-                },
-                fontSize = 11.sp,
-                color = scheme.onSurfaceVariantSummary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            MiuixText(
-                text = "  ›",
-                fontSize = 11.sp,
-                color = scheme.onSurfaceVariantSummary,
-                maxLines = 1,
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "书架",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.6).sp,
+                    color = scheme.onSurface,
+                    maxLines = 1,
+                )
+                Spacer(Modifier.height(5.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenSyncStatus)
+                        .padding(vertical = 2.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(if (state.online) BrandGreen else scheme.primary)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
+                            connectionTextOf(state),
+                        fontSize = 11.sp,
+                        letterSpacing = 0.3.sp,
+                        color = scheme.onSurfaceVariantSummary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            ToolbarPill(
+                syncing = state.syncing,
+                searchActive = searchOpen || state.query.isNotEmpty(),
+                onSearch = onToggleSearch,
+                onImport = onImport,
+                onSync = onSync,
+                onSettings = onOpenSettings,
             )
         }
 
@@ -370,16 +395,15 @@ private fun ShelfHeader(
             enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
             exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
         ) {
-            Column {
-                Spacer(Modifier.height(4.dp))
+            Column(Modifier.padding(horizontal = PageMargin, vertical = 4.dp)) {
                 TextField(
                     value = state.query,
                     onValueChange = onQuery,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     label = "搜书名或作者",
                     useLabelAsPlaceholder = true,
                     singleLine = true,
-                    cornerRadius = 10.dp,
+                    cornerRadius = 12.dp,
                     trailingIcon = if (state.query.isNotEmpty()) {
                         {
                             MiuixText(
@@ -401,8 +425,39 @@ private fun ShelfHeader(
     }
 }
 
+/** 顶栏右侧的四格工具胶囊：搜索 / 导入 / 同步 / 设置。 */
 @Composable
-private fun RoundIconButton(
+private fun ToolbarPill(
+    syncing: Boolean,
+    searchActive: Boolean,
+    onSearch: () -> Unit,
+    onImport: () -> Unit,
+    onSync: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    val scheme = MiuixTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(scheme.secondary)
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PillIcon(Icons.Default.Search, "搜索", onSearch, active = searchActive)
+        PillIcon(Icons.Default.Add, "导入 TXT", onImport)
+        if (syncing) {
+            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(size = 15.dp, strokeWidth = 2.dp)
+            }
+        } else {
+            PillIcon(Icons.Default.Refresh, "同步", onSync)
+        }
+        PillIcon(Icons.Default.Settings, "设置", onSettings)
+    }
+}
+
+@Composable
+private fun PillIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
@@ -410,18 +465,11 @@ private fun RoundIconButton(
 ) {
     val scheme = MiuixTheme.colorScheme
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val pressBg by animateColorAsState(
-        targetValue = if (pressed) scheme.secondary else Color.Transparent,
-        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
-        label = "icon-press-bg",
-    )
     Box(
         modifier = Modifier
-            .pressScale(source)
-            .size(38.dp)
+            .pressScale(source, pressedScale = 0.92f)
+            .size(36.dp)
             .clip(CircleShape)
-            .background(pressBg)
             .clickable(
                 interactionSource = source,
                 indication = null,
@@ -432,7 +480,7 @@ private fun RoundIconButton(
         Icon(
             imageVector = icon,
             contentDescription = description,
-            modifier = Modifier.size(19.dp),
+            modifier = Modifier.size(18.dp),
             tint = if (active) scheme.primary else scheme.onSurface,
         )
     }
@@ -457,52 +505,51 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(scheme.primaryContainer),
+            .padding(horizontal = PageMargin, vertical = 6.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.primaryContainer)
+            .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(2.dp).height(38.dp).background(scheme.primary))
-        Row(
-            Modifier.weight(1f).padding(start = 18.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = "未连接桌面端",
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.primary,
-                    maxLines = 1,
-                )
-                Text(
-                    text = "同步与下载暂停；本机书照常可读。",
-                    fontSize = 11.sp,
-                    color = scheme.onSurfaceVariantSummary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            MiuixText(
-                text = "去连接",
-                fontSize = 12.sp,
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "未连接桌面端",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Medium,
                 color = scheme.primary,
-                modifier = Modifier
-                    .clickable(onClick = onConnect)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                maxLines = 1,
             )
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Default.Close,
-                    "不再提示",
-                    Modifier.size(13.dp),
-                    tint = scheme.onSurfaceVariantSummary,
-                )
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "同步与下载暂停；本机书照常可读。",
+                fontSize = 11.sp,
+                color = scheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        MiuixText(
+            text = "去连接",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = scheme.primary,
+            modifier = Modifier
+                .clickable(onClick = onConnect)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        )
+        Box(
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Default.Close,
+                "不再提示",
+                Modifier.size(13.dp),
+                tint = scheme.onSurfaceVariantSummary,
+            )
         }
     }
 }
@@ -510,91 +557,61 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
 /* ---------------- 筛选 ---------------- */
 
 @Composable
-private fun FilterTabs(selected: String, onSelect: (String) -> Unit) {
+private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
     val scheme = MiuixTheme.colorScheme
-    val density = LocalDensity.current
-    // 下划线位置由当前选中项自己量出来，切换时从旧位置滑过去
-    var indicatorX by remember { mutableStateOf(0.dp) }
-    var indicatorWidth by remember { mutableStateOf(0.dp) }
-    val x by animateDpAsState(
-        targetValue = indicatorX,
-        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
-        label = "filter-x",
-    )
-    val width by animateDpAsState(
-        targetValue = indicatorWidth,
-        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
-        label = "filter-width",
-    )
-    Column(Modifier.fillMaxWidth().background(scheme.background)) {
-        Box {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = PageMargin),
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-            ) {
-                ShelfUiState.FILTERS.forEach { (key, label) ->
-                    val active = selected == key
-                    val textColor by animateColorAsState(
-                        targetValue = if (active) scheme.onSurface else scheme.onSurfaceVariantSummary,
-                        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
-                        label = "filter-color",
-                    )
-                    Box(
-                        modifier = Modifier
-                            .then(
-                                if (active) {
-                                    Modifier.onGloballyPositioned { coords ->
-                                        val newX = with(density) { coords.positionInParent().x.toDp() }
-                                        val newWidth = with(density) { coords.size.width.toDp() }
-                                        if (newX != indicatorX) indicatorX = newX
-                                        if (newWidth != indicatorWidth) indicatorWidth = newWidth
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                            )
-                            .clickable { onSelect(key) }
-                            .padding(top = 7.dp),
-                    ) {
-                        Text(
-                            text = label,
-                            modifier = Modifier.padding(bottom = 7.dp),
-                            fontSize = 13.sp,
-                            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                            color = textColor,
-                            maxLines = 1,
-                        )
-                    }
-                }
-            }
-            Box(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .offset(x = x)
-                    .width(width)
-                    .height(2.dp)
-                    .background(scheme.primary)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = PageMargin, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ShelfUiState.FILTERS.forEach { (key, label) ->
+            val active = selected == key
+            val bg by animateColorAsState(
+                targetValue = if (active) scheme.primary else scheme.secondary,
+                animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
+                label = "chip-bg",
             )
+            val fg by animateColorAsState(
+                targetValue = if (active) scheme.onPrimary else scheme.onSurfaceVariantSummary,
+                animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
+                label = "chip-fg",
+            )
+            Box(
+                modifier = Modifier
+                    .height(32.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(bg)
+                    .clickable { onSelect(key) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 12.5.sp,
+                    fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                    color = fg,
+                    maxLines = 1,
+                )
+            }
         }
-        Hairline(inset = PageMargin)
     }
 }
 
 @Composable
 private fun ImportStrip(label: String) {
     val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 4.dp)) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = PageMargin),
             fontSize = 11.sp,
             color = scheme.primary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(5.dp))
+        Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
             progress = null,
             modifier = Modifier.fillMaxWidth().height(2.dp),
@@ -607,28 +624,27 @@ private fun ImportStrip(label: String) {
 @Composable
 private fun SectionLabel(title: String, count: Int) {
     val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().background(scheme.background)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = PageMargin)
-                .padding(top = 20.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MiuixText(
+    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
                 text = title,
                 modifier = Modifier.weight(1f),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = scheme.onSurfaceVariantSummary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.3.sp,
+                color = scheme.onSurface,
+                maxLines = 1,
             )
-            MiuixText(
-                text = count.toString(),
-                fontSize = 10.sp,
+            Text(
+                text = "$count 本",
+                fontSize = 10.5.sp,
+                letterSpacing = 0.6.sp,
                 color = scheme.onSurfaceVariantSummary,
+                maxLines = 1,
             )
         }
-        Hairline(inset = PageMargin)
+        Spacer(Modifier.height(10.dp))
+        Hairline()
     }
 }
 
@@ -640,18 +656,33 @@ private fun EmptyShelf(hasBooks: Boolean, onImport: () -> Unit, onConnect: () ->
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 32.dp)
             .padding(bottom = 60.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(CircleShape)
+                .background(scheme.secondary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.MenuBook,
+                null,
+                Modifier.size(38.dp),
+                tint = scheme.onSurfaceVariantSummary,
+            )
+        }
+        Spacer(Modifier.height(22.dp))
         Text(
             text = if (hasBooks) "没有符合条件的书" else "书架是空的",
-            fontSize = 19.sp,
-            fontWeight = FontWeight.Medium,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
             color = scheme.onSurface,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = if (hasBooks) {
                 "换个筛选条件，或清掉搜索词再看看。"
@@ -661,24 +692,143 @@ private fun EmptyShelf(hasBooks: Boolean, onImport: () -> Unit, onConnect: () ->
             fontSize = 12.5.sp,
             color = scheme.onSurfaceVariantSummary,
         )
-        Spacer(Modifier.height(22.dp))
-        Button(onClick = onImport, modifier = Modifier.fillMaxWidth(), cornerRadius = 10.dp) {
+        Spacer(Modifier.height(26.dp))
+        Button(
+            onClick = onImport,
+            modifier = Modifier.width(200.dp),
+            cornerRadius = 22.dp,
+            minHeight = 44.dp,
+        ) {
             MiuixText(text = "从文件导入 TXT", fontSize = 14.sp, color = scheme.onPrimary)
         }
-        Spacer(Modifier.height(4.dp))
-        TextButton(text = "连接桌面端", onClick = onConnect, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        TextButton(text = "连接桌面端", onClick = onConnect, modifier = Modifier.width(200.dp))
     }
 }
 
-/* ---------------- 单本书 ---------------- */
+/* ---------------- 继续阅读 ---------------- */
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookRow(
+private fun ContinueCard(
     book: Book,
     state: ShelfUiState,
     cover: ImageBitmap?,
-    featured: Boolean,
+    onOpen: () -> Unit,
+) {
+    val scheme = MiuixTheme.colorScheme
+    val summary = state.progressSummaryOf(book)
+    val percent = state.progressPercentOf(book)
+    val source = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .pressScale(source, pressedScale = 0.985f)
+            .clip(RoundedCornerShape(20.dp))
+            .background(scheme.surface)
+            .border(0.5.dp, scheme.dividerLine, RoundedCornerShape(20.dp))
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                onClick = onOpen,
+            )
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CoverArt(
+            book = book,
+            cover = cover,
+            dimmed = false,
+            modifier = Modifier.width(62.dp).aspectRatio(0.68f),
+            radius = 8.dp,
+            initialSize = 24.sp,
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(scheme.primary)
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = "继续阅读",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.4.sp,
+                    color = scheme.primary,
+                    maxLines = 1,
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = book.title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 22.sp,
+                color = scheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = buildString {
+                    val chapter = summary.chapterText
+                    if (chapter.isNotBlank()) {
+                        append(chapter)
+                    } else {
+                        append(state.sourceLabelOf(book))
+                        book.author?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
+                    }
+                },
+                fontSize = 11.sp,
+                color = scheme.onSurfaceVariantSummary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ProgressRail(
+                    progress = (percent / 100.0).toFloat(),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(10.dp))
+                MiuixText(
+                    text = summary.percentText.ifBlank { "已开始" },
+                    fontSize = 10.5.sp,
+                    color = scheme.primary,
+                    maxLines = 1,
+                )
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(scheme.primary),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                "继续阅读",
+                Modifier.size(17.dp),
+                tint = scheme.onPrimary,
+            )
+        }
+    }
+}
+
+/* ---------------- 单本书（封面墙一格） ---------------- */
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BookCell(
+    book: Book,
+    state: ShelfUiState,
+    cover: ImageBitmap?,
     highlighted: Boolean,
     menuOpen: Boolean,
     onToggleMenu: () -> Unit,
@@ -694,151 +844,134 @@ private fun BookRow(
     val summary = state.progressSummaryOf(book)
     val readable = state.readable(book)
     val dimmed = !readable
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val pressBg by animateColorAsState(
-        targetValue = if (pressed) scheme.onSurface.copy(alpha = 0.045f) else Color.Transparent,
-        animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
-        label = "row-press",
-    )
 
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(pressBg)
-                .combinedClickable(
-                    interactionSource = source,
-                    indication = null,
-                    onClick = onOpen,
-                    onLongClick = onToggleMenu,
-                )
-                .padding(horizontal = PageMargin)
-                .padding(top = if (featured) 14.dp else 10.dp, bottom = if (featured) 14.dp else 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CoverBox(
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onOpen,
+                onLongClick = onToggleMenu,
+            ),
+    ) {
+        Box {
+            CoverArt(
                 book = book,
                 cover = cover,
                 dimmed = dimmed,
-                width = if (featured) 72.dp else 40.dp,
-                height = if (featured) 96.dp else 54.dp,
+                modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
             )
-            Spacer(Modifier.width(if (featured) 14.dp else 12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            if (badge != BookBadge.NONE) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(scheme.surface.copy(alpha = 0.92f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(badgeColor(badge))
+                    )
+                    Spacer(Modifier.width(4.dp))
                     Text(
-                        text = book.title,
-                        modifier = Modifier.weight(1f, fill = false),
-                        fontSize = if (featured) 16.sp else 14.5.sp,
-                        fontWeight = if (featured) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = if (featured) 2 else 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = when {
-                            highlighted -> scheme.primary
-                            dimmed -> scheme.disabledOnSurface
-                            else -> scheme.onSurface
-                        },
-                    )
-                    if (badge != BookBadge.NONE) {
-                        Spacer(Modifier.width(8.dp))
-                        MiuixText(
-                            text = badgeLabel(badge, state.transferPercent(book)),
-                            fontSize = 10.sp,
-                            color = badgeColor(badge),
-                            maxLines = 1,
-                        )
-                    }
-                }
-                Spacer(Modifier.height(if (featured) 4.dp else 3.dp))
-                Text(
-                    text = buildString {
-                        append(state.sourceLabelOf(book))
-                        book.author?.takeIf { it.isNotBlank() }?.let { append(" · ").append(it) }
-                        val chapter = summary.chapterText
-                        if (chapter.isNotBlank()) append(" · ").append(chapter)
-                    },
-                    fontSize = 11.sp,
-                    color = scheme.onSurfaceVariantSummary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(if (featured) 10.dp else 7.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    ProgressRail(
-                        progress = (percent / 100.0).toFloat(),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    MiuixText(
-                        text = when {
-                            summary.read -> summary.percentText
-                            !readable -> "未下载"
-                            else -> "未读"
-                        },
-                        fontSize = 10.sp,
-                        color = if (featured && summary.read) {
-                            scheme.primary
-                        } else {
-                            scheme.onSurfaceVariantSummary
-                        },
+                        text = badgeLabel(badge, state.transferPercent(book)),
+                        fontSize = 9.sp,
+                        color = badgeColor(badge),
                         maxLines = 1,
                     )
                 }
             }
-            if (featured) {
-                Spacer(Modifier.width(10.dp))
-                MiuixText(
-                    text = "继续",
+            if (summary.read) {
+                Text(
+                    text = summary.percentText,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpen)
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.primary,
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.46f))
+                        .padding(horizontal = 5.dp, vertical = 2.dp),
+                    fontSize = 9.sp,
+                    color = Color.White,
                     maxLines = 1,
                 )
-            } else {
-                Box {
-                    Box(
-                        Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .clickable(onClick = onToggleMenu),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        MiuixText(
-                            text = "⋮",
-                            fontSize = 16.sp,
-                            color = scheme.onSurfaceVariantSummary,
-                        )
+            }
+            // ⋯：封面右上角常驻，点一下就是旧版列表里的那套菜单。
+            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(scheme.surface.copy(alpha = 0.82f))
+                        .clickable(onClick = onToggleMenu),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MiuixText(
+                        text = "⋯",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onSurfaceVariantSummary,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = onToggleMenu) {
+                    if (!book.isCloud && !book.hasLocalFile) {
+                        DropdownMenuItem(text = { Text("下载到手机") }, onClick = onDownload)
                     }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = onToggleMenu) {
-                        if (!book.isCloud && !book.hasLocalFile) {
-                            DropdownMenuItem(text = { Text("下载到手机") }, onClick = onDownload)
-                        }
-                        if (book.hasLocalFile) {
-                            DropdownMenuItem(text = { Text("删除本机副本") }, onClick = onDeleteLocal)
-                        }
-                        if (book.origin == Origin.DESKTOP) {
-                            DropdownMenuItem(text = { Text("从手机书架移除") }, onClick = onRemoveFromShelf)
-                        }
-                        DropdownMenuItem(text = { Text("查看同步状态") }, onClick = onSyncStatus)
+                    if (book.hasLocalFile) {
+                        DropdownMenuItem(text = { Text("删除本机副本") }, onClick = onDeleteLocal)
                     }
+                    if (book.origin == Origin.DESKTOP) {
+                        DropdownMenuItem(text = { Text("从手机书架移除") }, onClick = onRemoveFromShelf)
+                    }
+                    DropdownMenuItem(text = { Text("查看同步状态") }, onClick = onSyncStatus)
                 }
             }
         }
-        Hairline(inset = PageMargin)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = book.title,
+            fontSize = 13.sp,
+            lineHeight = 17.sp,
+            fontWeight = FontWeight.Medium,
+            color = when {
+                highlighted -> scheme.primary
+                dimmed -> scheme.disabledOnSurface
+                else -> scheme.onSurface
+            },
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(5.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ProgressRail(
+                progress = (percent / 100.0).toFloat(),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            MiuixText(
+                text = when {
+                    summary.read -> summary.percentText
+                    !readable -> "未下载"
+                    else -> "未读"
+                },
+                fontSize = 9.5.sp,
+                color = scheme.onSurfaceVariantSummary,
+                maxLines = 1,
+            )
+        }
     }
 }
 
 @Composable
 private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
     val scheme = MiuixTheme.colorScheme
-    val safe = progress.coerceIn(0f, 1f)
     val filled by animateFloatAsState(
-        targetValue = safe,
+        targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
         label = "rail-progress",
     )
@@ -846,12 +979,14 @@ private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .height(2.dp)
+            .clip(CircleShape)
             .background(scheme.dividerLine),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(filled)
-                .height(2.dp)
+                .fillMaxHeight()
+                .clip(CircleShape)
                 .background(scheme.primary)
         )
     }
@@ -875,25 +1010,33 @@ private fun badgeColor(badge: BookBadge): Color {
     }
 }
 
-/** 封面：有图用图；没图用纸色底 + 书名首字。圆角压到 4dp，像书而不是像卡片。 */
+/**
+ * 封面。
+ *
+ * 有图就铺满；没图用书名哈希出一组低饱和纸色做竖向渐变，左侧一道书脊，
+ * 中间放书名首字——空封面也像一本真书，而不是一块灰方块。
+ */
 @Composable
-private fun CoverBox(
+private fun CoverArt(
     book: Book,
     cover: ImageBitmap?,
     dimmed: Boolean,
-    width: androidx.compose.ui.unit.Dp,
-    height: androidx.compose.ui.unit.Dp,
+    modifier: Modifier = Modifier,
+    radius: Dp = 10.dp,
+    initialSize: TextUnit = 22.sp,
 ) {
     val hue = (book.title.hashCode().absoluteValue % 360).toFloat()
-    val paperTone = Color.hsl(hue, 0.12f, 0.88f)
-    val inkTone = Color.hsl(hue, 0.24f, 0.28f)
-    val shape = RoundedCornerShape(4.dp)
+    val paperTop = Color.hsl(hue, 0.18f, 0.87f)
+    val paperBottom = Color.hsl(hue, 0.24f, 0.74f)
+    val inkTone = Color.hsl(hue, 0.34f, 0.24f)
+    val shape = RoundedCornerShape(radius)
     Box(
-        Modifier
-            .size(width, height)
-            .background(paperTone, shape)
-            .clip(shape),
-        contentAlignment = Alignment.Center,
+        modifier
+            .shadow(elevation = if (dimmed) 0.dp else 7.dp, shape = shape, clip = false)
+            .clip(shape)
+            .background(Brush.verticalGradient(listOf(paperTop, paperBottom)))
+            .border(0.5.dp, Color.Black.copy(alpha = 0.06f), shape)
+            .alpha(if (dimmed) 0.55f else 1f),
     ) {
         if (cover != null) {
             Image(
@@ -903,10 +1046,18 @@ private fun CoverBox(
                 contentScale = ContentScale.Crop,
             )
         } else {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .width(4.dp)
+                    .background(inkTone.copy(alpha = 0.12f))
+            )
             Text(
                 text = book.title.take(1).ifBlank { "书" },
-                fontSize = if (height > 70.dp) 26.sp else 17.sp,
-                color = inkTone.copy(alpha = if (dimmed) 0.4f else 1f),
+                modifier = Modifier.align(Alignment.Center),
+                fontSize = initialSize,
+                fontWeight = FontWeight.SemiBold,
+                color = inkTone.copy(alpha = 0.78f),
             )
         }
     }
@@ -931,10 +1082,11 @@ private fun Snack(text: String, onDismiss: () -> Unit) {
             MiuixText(
                 text = text,
                 modifier = Modifier
-                    .padding(bottom = 24.dp, start = 24.dp, end = 24.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(scheme.onSurface.copy(alpha = 0.9f))
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                    .padding(bottom = 26.dp, start = 24.dp, end = 24.dp)
+                    .shadow(10.dp, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(scheme.onSurface.copy(alpha = 0.94f))
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
                 fontSize = 12.5.sp,
                 color = scheme.surface,
             )
