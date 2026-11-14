@@ -102,7 +102,7 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 
 ```
 X-Folio-Device: <installId>          X-Folio-Device-Name: <URL 编码的型号>
-X-Folio-Platform: android            X-Folio-App-Version: 3.1.0
+X-Folio-Platform: android            X-Folio-App-Version: 3.2.0
 X-Folio-Api-Version: 2
 ```
 

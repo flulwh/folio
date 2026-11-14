@@ -32,53 +32,78 @@ class SettingsStore(context: Context) {
         set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).apply()
 
     /**
-     * 小说正文字号（sp）。14–28，步进 1（PRD §5「排版弹层」）。
+     * 小说正文字号（sp）。12–32，步进 1。
      *
      * 3.0 直接用绝对值而不是「倍数」：用户说「字太小」时，28sp 比 160% 更有意义，
      * 也不受系统字体缩放影响，两端观感一致。
      */
     var fontSizeSp: Float
         get() = prefs.getFloat(KEY_FONT_SIZE, 17f)
-        set(value) = prefs.edit().putFloat(KEY_FONT_SIZE, value.coerceIn(14f, 28f)).apply()
+        set(value) = prefs.edit().putFloat(KEY_FONT_SIZE, value.coerceIn(12f, 32f)).apply()
 
-    /** 行距倍数：三档 1.5 / 1.8 / 2.1。 */
+    /** 行距倍数：1.3–2.4 连续可调。 */
     var lineHeight: Float
         get() = prefs.getFloat(KEY_LINE_HEIGHT, 1.8f)
-        set(value) = prefs.edit().putFloat(KEY_LINE_HEIGHT, value.coerceIn(1.5f, 2.1f)).apply()
+        set(value) = prefs.edit().putFloat(KEY_LINE_HEIGHT, value.coerceIn(1.3f, 2.4f)).apply()
+
+    /** 字距（em）：0–0.12，中文衬线体给一点点更耐读。 */
+    var letterSpacingEm: Float
+        get() = prefs.getFloat(KEY_LETTER_SPACING, 0.01f)
+        set(value) = prefs.edit().putFloat(KEY_LETTER_SPACING, value.coerceIn(0f, 0.12f)).apply()
+
+    /** 段距（相对字号倍数）：0–2，控制段与段之间的呼吸。 */
+    var paragraphSpacing: Float
+        get() = prefs.getFloat(KEY_PARAGRAPH_SPACING, 0.6f)
+        set(value) = prefs.edit().putFloat(KEY_PARAGRAPH_SPACING, value.coerceIn(0f, 2f)).apply()
+
+    /** 首行缩进两个字符。中文小说默认开，英文书用户可关。 */
+    var firstLineIndent: Boolean
+        get() = prefs.getBoolean(KEY_FIRST_LINE_INDENT, true)
+        set(value) = prefs.edit().putBoolean(KEY_FIRST_LINE_INDENT, value).apply()
 
     /** 正文字体：`serif`（系统宋体）/ `sans`（系统无衬线）。 */
     var fontFamily: String
         get() = prefs.getString(KEY_FONT_FAMILY, FONT_SERIF) ?: FONT_SERIF
         set(value) = prefs.edit().putString(KEY_FONT_FAMILY, value).apply()
 
-    /** 底色预设：`paper` 纸白 / `cream` 米色 / `night` 夜间。 */
+    /** 底色预设：`white` 冷白 / `paper` 纸白 / `cream` 米色 / `graphite` 石墨 / `night` 夜间。 */
     var themePreset: String
-        get() = prefs.getString(KEY_THEME_PRESET, THEME_PAPER) ?: THEME_PAPER
+        get() = prefs.getString(KEY_THEME_PRESET, THEME_WHITE) ?: THEME_WHITE
         set(value) = prefs.edit().putString(KEY_THEME_PRESET, value).apply()
+
+    /** 自动滚动速度档位（0 慢 – 3 快），对应 UI 上的档位表。 */
+    var autoScrollSpeed: Int
+        get() = prefs.getInt(KEY_AUTO_SCROLL_SPEED, 1)
+        set(value) = prefs.edit().putInt(KEY_AUTO_SCROLL_SPEED, value.coerceIn(0, 3)).apply()
+
+    /** 阅读时保持屏幕常亮。默认开——读到一半熄屏是最扫兴的打断。 */
+    var keepScreenOn: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true)
+        set(value) = prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, value).apply()
 
     /** 漫画默认阅读方向：`vertical` 竖向连续 / `horizontal` 横向逐页。 */
     var comicDirection: String
         get() = prefs.getString(KEY_COMIC_DIRECTION, COMIC_VERTICAL) ?: COMIC_VERTICAL
         set(value) = prefs.edit().putString(KEY_COMIC_DIRECTION, value).apply()
 
-    /** 页边距（dp）：三档 16 / 24 / 36。 */
+    /** 页边距（dp）：12–48 连续可调。 */
     var pagePadding: Int
         get() = prefs.getInt(KEY_PAGE_PADDING, 24)
-        set(value) = prefs.edit().putInt(KEY_PAGE_PADDING, value.coerceIn(16, 36)).apply()
+        set(value) = prefs.edit().putInt(KEY_PAGE_PADDING, value.coerceIn(12, 48)).apply()
 
     /** 主题色（ARGB）。 */
     var accent: Int
-        get() = prefs.getInt(KEY_ACCENT, 0xFF1F6FEB.toInt())
+        get() = prefs.getInt(KEY_ACCENT, 0xFFC4251C.toInt())
         set(value) = prefs.edit().putInt(KEY_ACCENT, value).apply()
 
     /** 背景色（ARGB）。 */
     var paper: Int
-        get() = prefs.getInt(KEY_PAPER, 0xFFFBF8F1.toInt())
+        get() = prefs.getInt(KEY_PAPER, 0xFFF4F4F1.toInt())
         set(value) = prefs.edit().putInt(KEY_PAPER, value).apply()
 
     /** 文字色（ARGB）。 */
     var ink: Int
-        get() = prefs.getInt(KEY_INK, 0xFF23201C.toInt())
+        get() = prefs.getInt(KEY_INK, 0xFF111111.toInt())
         set(value) = prefs.edit().putInt(KEY_INK, value).apply()
 
     /** 是否允许自动同步（连接成功 / 回前台 / 手动点按）。默认开。 */
@@ -168,17 +193,27 @@ class SettingsStore(context: Context) {
         const val FONT_SERIF = "serif"
         const val FONT_SANS = "sans"
 
+        const val THEME_WHITE = "white"
         const val THEME_PAPER = "paper"
         const val THEME_CREAM = "cream"
+        const val THEME_GRAPHITE = "graphite"
         const val THEME_NIGHT = "night"
 
         const val COMIC_VERTICAL = "vertical"
         const val COMIC_HORIZONTAL = "horizontal"
 
+        /** 自动滚动速度档位（px/秒），与 UI 上的四档一一对应。 */
+        val AUTO_SCROLL_SPEEDS = intArrayOf(18, 32, 52, 80)
+
         private const val KEY_SERVER = "server_url"
         private const val KEY_TOKEN = "token"
         private const val KEY_FONT_SIZE = "font_size_sp"
         private const val KEY_LINE_HEIGHT = "line_height"
+        private const val KEY_LETTER_SPACING = "letter_spacing_em"
+        private const val KEY_PARAGRAPH_SPACING = "paragraph_spacing"
+        private const val KEY_FIRST_LINE_INDENT = "first_line_indent"
+        private const val KEY_AUTO_SCROLL_SPEED = "auto_scroll_speed"
+        private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
         private const val KEY_FONT_FAMILY = "font_family"
         private const val KEY_THEME_PRESET = "theme_preset"
         private const val KEY_COMIC_DIRECTION = "comic_direction"

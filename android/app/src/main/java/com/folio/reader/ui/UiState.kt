@@ -5,6 +5,8 @@ import com.folio.reader.core.Chapter
 import com.folio.reader.core.Origin
 import com.folio.reader.core.Paragraph
 import com.folio.reader.core.ProgressEntry
+import com.folio.reader.core.ReaderMark
+import com.folio.reader.core.SearchHit
 import com.folio.reader.core.SyncState
 import com.folio.reader.core.TocChapter
 import com.folio.reader.data.ConnectionState
@@ -286,6 +288,19 @@ data class ReaderUiState(
     val showStyle: Boolean = false,
     val controls: Boolean = true,
     val dirty: Boolean = false,
+    /** 本书的书签与划线（按段落升序）。 */
+    val marks: List<ReaderMark> = emptyList(),
+    /** 书签 / 划线抽屉是否展开。 */
+    val showMarks: Boolean = false,
+    /** 全书搜索状态。 */
+    val search: SearchUiState = SearchUiState(),
+    /** 自动滚动是否在跑（不持久化，退出阅读器即停）。 */
+    val autoScroll: Boolean = false,
+    /**
+     * 每段之前的累计字数，长度 = 段落数 + 1。
+     * 预先算好，滚动时算「剩余阅读时间」就是一次减法，不用每次遍历正文。
+     */
+    val charPrefix: IntArray = IntArray(0),
 ) {
     val isCloud: Boolean get() = book?.isCloud == true
     val totalParagraphs: Int get() = paragraphs.size
@@ -296,6 +311,41 @@ data class ReaderUiState(
     /** 能不能上一章 / 下一章。 */
     val hasPrevChapter: Boolean get() = chapterIndex > 0
     val hasNextChapter: Boolean get() = chapterIndex < chapterCount - 1
+
+    fun charsBefore(paraIndex: Int): Int =
+        if (charPrefix.isEmpty()) 0 else charPrefix[paraIndex.coerceIn(0, charPrefix.lastIndex)]
+
+    val totalChars: Int get() = if (charPrefix.isEmpty()) 0 else charPrefix.last()
+
+    /** 全书剩余阅读时间（分钟）。按中文 420 字/分钟估。 */
+    fun minutesLeft(paraIndex: Int, charsPerMinute: Int = 420): Int {
+        val left = (totalChars - charsBefore(paraIndex)).coerceAtLeast(0)
+        return ((left + charsPerMinute - 1) / charsPerMinute).coerceAtLeast(if (left == 0) 0 else 1)
+    }
+
+    /** 本章剩余阅读时间（分钟）。云端书只有当前章在内存，按当前章算。 */
+    fun chapterMinutesLeft(paraIndex: Int, charsPerMinute: Int = 420): Int {
+        val end = if (isCloud) paragraphs.size else chapters.getOrNull(chapterIndex + 1)?.paraIndex
+        val endIndex = end ?: paragraphs.size
+        val left = (charsBefore(endIndex) - charsBefore(paraIndex)).coerceAtLeast(0)
+        return ((left + charsPerMinute - 1) / charsPerMinute).coerceAtLeast(if (left == 0) 0 else 1)
+    }
+
+    val bookmarkedParagraphs: Set<Int>
+        get() = marks.filter { it.isBookmark }.map { it.paraIndex }.toSet()
+}
+
+/** 全书搜索的 UI 状态。 */
+data class SearchUiState(
+    val open: Boolean = false,
+    val query: String = "",
+    val running: Boolean = false,
+    val hits: List<SearchHit> = emptyList(),
+    /** 当前聚焦的命中下标；-1 表示还没有跳转过。 */
+    val cursor: Int = -1,
+) {
+    val total: Int get() = hits.size
+    val current: SearchHit? get() = hits.getOrNull(cursor)
 }
 
 /** 漫画阅读页状态。 */
@@ -334,21 +384,31 @@ data class ComicUiState(
 data class SettingsUiState(
     val serverUrl: String = "",
     val token: String = "",
-    /** 小说正文字号（sp，14–28）。 */
+    /** 小说正文字号（sp，12–32）。 */
     val fontSizeSp: Float = 17f,
-    /** 行距倍数（1.5 / 1.8 / 2.1）。 */
+    /** 行距倍数（1.3–2.4）。 */
     val lineHeight: Float = 1.8f,
+    /** 字距（em，0–0.12）。 */
+    val letterSpacingEm: Float = 0.01f,
+    /** 段距（字号倍数，0–2）。 */
+    val paragraphSpacing: Float = 0.6f,
+    /** 首行缩进。 */
+    val firstLineIndent: Boolean = true,
     /** `serif` / `sans`。 */
     val fontFamily: String = "serif",
-    /** `paper` / `cream` / `night`。 */
-    val themePreset: String = "paper",
-    /** 页边距（dp，16 / 24 / 36）。 */
+    /** `white` / `paper` / `cream` / `graphite` / `night`。 */
+    val themePreset: String = "white",
+    /** 自动滚动速度档位（0–3）。 */
+    val autoScrollSpeed: Int = 1,
+    /** 阅读时保持常亮。 */
+    val keepScreenOn: Boolean = true,
+    /** 页边距（dp，12–48）。 */
     val pagePadding: Int = 24,
     /** 漫画阅读方向：`vertical` / `horizontal`。 */
     val comicDirection: String = "vertical",
-    val accent: Long = 0xFF1F6FEB,
-    val paper: Long = 0xFFFBF8F1,
-    val ink: Long = 0xFF23201C,
+    val accent: Long = 0xFFC4251C,
+    val paper: Long = 0xFFF4F4F1,
+    val ink: Long = 0xFF111111,
     val autoSync: Boolean = true,
     /** 小于 20MB 的书连上就自动搬。 */
     val autoTransferUnder20MB: Boolean = true,
