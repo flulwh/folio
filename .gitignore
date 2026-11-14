@@ -29,6 +29,7 @@ Thumbs.db
 .workbuddy/
 .workbuddy-ai/
 .memory/
+.trae/
 
 # 文档截图统一放 flulwh/folio-assets，见 docs/README.md。
 # 仓库里只留文本与矢量图标，避免 clone 时多拉几十 MB 位图。

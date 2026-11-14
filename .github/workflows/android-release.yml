@@ -1,0 +1,75 @@
+name: Android Release
+
+on:
+  push:
+    tags: ['android-*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: 构建 APK 并发布
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 校验 tag 与 versionName 一致
+        id: meta
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#android-}"
+          NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -n1)"
+          if [ "$VERSION" != "$NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME 与 build.gradle.kts 的 versionName $NAME 不一致"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag $GITHUB_REF_NAME == versionName $NAME"
+
+      - name: 单元测试
+        run: ./gradlew testDebugUnitTest --console=plain
+
+      - name: 构建 Release APK
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: 整理 APK 文件名
+        working-directory: .
+        run: cp android/app/build/outputs/apk/release/app-release.apk "Folio-${{ steps.meta.outputs.version }}-android.apk"
+
+      - name: 检查该 tag 是否已有 Release
+        id: rel
+        working-directory: .
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME 已存在，跳过（避免覆盖手动发布的说明）"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 创建 GitHub Release
+        if: steps.rel.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Android ${{ steps.meta.outputs.version }}
+          files: Folio-${{ steps.meta.outputs.version }}-android.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: true

@@ -2,8 +2,9 @@
 
 一个用 **Electron + React** 打造的极简电子书阅读器。主页就是书架，一切交互都为「读进去」服务：
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
+Android 端是原生 **Kotlin + Compose** 客户端，与桌面端走局域网同步进度和阅读痕迹。
 
-![version](https://img.shields.io/badge/version-2.9.2-2b2e33) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4)
+![version](https://img.shields.io/badge/desktop-2.9.2-2b2e33) ![android](https://img.shields.io/badge/Android-3.4.7-3ddc84) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) [![Android CI](https://github.com/flulwh/folio/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/flulwh/folio/actions/workflows/android.yml)
 
 ---
 
@@ -16,7 +17,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 | [`Folio-Setup-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
 | [`Folio-Portable-2.9.2.exe`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 单文件便携版，双击即用，不写注册表 |
 | [`Folio-2.9.2-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.9.2) | 免安装压缩包，解压后运行 `Folio.exe` |
-| Android APK | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹；APK 见 [Releases](https://github.com/flulwh/folio/releases) 中的 `android-*` 版本 |
+| [`Folio-3.4.7-android.apk`](https://github.com/flulwh/folio/releases/tag/android-3.4.7) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
@@ -200,6 +201,18 @@ npm run dev:vite  # 只跑浏览器里的 UI（无 Electron 时导入功能自�
 npm run check     # 发版门禁：版本一致性 / 语法 / 打包配置
 npm run build     # 打出全部 Windows 产物
 ```
+
+Android 端：
+
+```bash
+cd android
+./gradlew testDebugUnitTest   # 单元测试
+./gradlew assembleDebug       # Debug APK（applicationId 带 .debug 后缀，可与正式版共存）
+```
+
+> Android 的版本号只写在 `android/app/build.gradle.kts`（`versionCode` / `versionName`）。
+> 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
+> push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
 > 版本号只写在 `package.json`（当前 `2.9.2`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
