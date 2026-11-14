@@ -12,10 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.4.7：性能与省电优化（后台解析正文/解码封面、重连退避、同步限频、漫画图集裁剪）。
+        // 3.4.8：设置页「本机版本」改读 BuildConfig，不再写死 3.0.0。
         // X-Folio-App-Version 直接读 VERSION_NAME，版本号只有这一处真相。
-        versionCode = 13
-        versionName = "3.4.7"
+        versionCode = 14
+        versionName = "3.4.8"
         vectorDrawables.useSupportLibrary = true
     }
 
