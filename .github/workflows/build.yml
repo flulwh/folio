@@ -4,8 +4,19 @@ on:
   push:
     branches: [main, master]
     tags: ['v*']
+    # 纯 Android / 文档改动不跑桌面端门禁，省 CI 时间（tag 推送不受 paths 过滤影响）
+    paths-ignore:
+      - 'android/**'
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/android*.yml'
   pull_request:
     branches: [main, master]
+    paths-ignore:
+      - 'android/**'
+      - 'docs/**'
+      - '*.md'
+      - '.github/workflows/android*.yml'
   workflow_dispatch:
 
 permissions:
@@ -21,9 +32,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -53,7 +64,7 @@ jobs:
         run: npm run check -- --require-dist
 
       - name: 上传前端产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -67,9 +78,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: npm
@@ -78,7 +89,7 @@ jobs:
         run: npm ci
 
       - name: 下载前端产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist
@@ -91,7 +102,7 @@ jobs:
           ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
       - name: 上传安装包产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Folio-win-x64-${{ github.ref_name }}
           path: |
@@ -118,7 +129,7 @@ jobs:
 
       - name: 创建 GitHub Release 草稿
         if: startsWith(github.ref, 'refs/tags/v') && steps.rel.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           generate_release_notes: true
