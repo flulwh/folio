@@ -22,11 +22,22 @@ import crypto from 'crypto';
 import dgram from 'node:dgram';
 import { fileURLToPath } from 'url';
 import { isInside } from './paths.js';
+import { createBooksService } from './lan-books.js';
+import { MAX_TRANSFER, MAX_CHUNK_BODY, CHUNK } from './bookfile.js';
+import { MAX_IMAGE } from './lan-comic.js';
 
 const MAX_BODY = 512 * 1024; // 请求体上限：进度条目再多也到不了这个量级
 const MAX_TEXT = 12 * 1024 * 1024; // 单本正文上限：超过就不往手机上推了
 const MAX_COVER = 4 * 1024 * 1024;
+// 2.6.0 新增能力的三档上限（架构文档 §8 冻结值，常量在各自模块里，这里只做统一出口）
+const LIMITS = { transfer: MAX_TRANSFER, chunk: CHUNK, chunkBody: MAX_CHUNK_BODY, image: MAX_IMAGE };
+/** 接口版本：手机端拿它判断「桌面端太旧」。2 = 2.6.0 起的能力集。 */
+const API_VERSION = 2;
+/** ping 里的能力位：手机据此开关功能，不认识的忽略即可。 */
+const API_FEATURES = ['library', 'upload', 'download', 'range', 'comic', 'devices'];
 const SSE_PING = 25000;
+/** 手机快照上限 256KB（PRD §2.1）。 */
+const MAX_SNAPSHOT_BODY = 256 * 1024;
 const COOKIE_NAME = 'folio_lan';
 // 手机端的「搜索桌面端」走一次 UDP 广播，平时不广播、不占线程。
 const DISCOVERY_PORT = 45678;
@@ -163,6 +174,45 @@ function safeDecode(value) {
   }
 }
 
+/**
+ * 取非负整数查询参数。缺参数、非数字、负数一律返回 null（调用方回 400）。
+ * 注意 Number(null) === 0，所以必须先分辨「没给」和「给了 0」。
+ */
+function intParam(url, name) {
+  const raw = url.searchParams.get(name);
+  if (raw === null || String(raw).trim() === '') return null;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) return null;
+  return value;
+}
+
+/**
+ * 解析上传块的 `X-Folio-Offset`。缺失 / 空串 / 非整数 / 负数 / 超界一律判非法。
+ *
+ * 不能写成 `Number(req.headers['x-folio-offset'] || 0)`：缺头时 `Number('')`
+ * 正好是 0，服务端会把「客户端漏发头」当成「从第 0 字节开始」静默接受，
+ * 客户端以为在续传，实际从头收了一遍。
+ *
+ * @param {string|string[]|undefined} raw Node 给的原始头（重复头可能是数组）
+ * @param {number} total 客户端声明的文件总大小；非法时跳过上界检查
+ * @returns {{ok:true, value:number}|{ok:false, message:string}}
+ */
+function parseOffsetHeader(raw, total) {
+  if (Array.isArray(raw)) return { ok: false, message: 'X-Folio-Offset 只能有一个值' };
+  if (raw === undefined || raw === null) return { ok: false, message: '缺少 X-Folio-Offset 头' };
+  const text = String(raw).trim();
+  if (!text) return { ok: false, message: 'X-Folio-Offset 不能为空' };
+  // 必须整串能读成整数：Number('12abc') / Number('1.5') 都不是整数，
+  // 而 parseInt('12abc') 会悄悄得到 12。
+  const value = Number(text);
+  if (!Number.isInteger(value)) return { ok: false, message: 'X-Folio-Offset 必须是整数' };
+  if (value < 0) return { ok: false, message: 'X-Folio-Offset 不能是负数' };
+  if (Number.isInteger(total) && total >= 0 && value > total) {
+    return { ok: false, message: 'X-Folio-Offset 超出了文件总大小' };
+  }
+  return { ok: true, value };
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 }
@@ -185,6 +235,98 @@ function readBody(req, limit = MAX_BODY) {
   });
 }
 
+/**
+ * 读二进制请求体。**不要**复用上面的 readBody —— 它结尾做 `toString('utf8')`，
+ * 分块上传是任意字节流，过一遍字符串会把非法 UTF-8 序列替换成 U+FFFD，
+ * 算出来的 sha1 永远对不上，且不会报错，只在 commit 时莫名其妙 422。
+ *
+ * 超限时先 pause 再 reject：让调用方还能把 413 写出去，然后自己销毁连接。
+ * 若请求带了 Content-Length 且一开始就超限，直接不读 body。
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {number} [limit] 上限字节数
+ * @returns {Promise<Buffer>} 完整请求体
+ */
+function readBodyBuffer(req, limit = MAX_CHUNK_BODY) {
+  return new Promise((resolve, reject) => {
+    const tooLarge = () => {
+      const err = new Error('payload too large');
+      err.code = 'TOO_LARGE';
+      return err;
+    };
+    const declared = Number(req.headers['content-length']);
+    if (Number.isFinite(declared) && declared > limit) {
+      reject(tooLarge());
+      return;
+    }
+    const chunks = [];
+    let size = 0;
+    let over = false;
+    const onData = (chunk) => {
+      if (over) return;
+      size += chunk.length;
+      if (size > limit) {
+        // 不再缓存后面任何一个字节，也不再往下读，交给调用方回 413 并断连接
+        over = true;
+        chunks.length = 0;
+        req.pause();
+        reject(tooLarge());
+        return;
+      }
+      chunks.push(chunk);
+    };
+    req.on('data', onData);
+    req.on('end', () => {
+      if (over) return;
+      resolve(Buffer.concat(chunks));
+    });
+    req.on('error', (err) => {
+      if (over) return;
+      over = true;
+      reject(err);
+    });
+  });
+}
+
+/**
+ * 读快照这种「有明确上限、超限也要好好回 400」的 body。
+ *
+ * 和 `readBodyBuffer` 的区别：一超过 limit 就立刻返回 `over:true`，不把整段
+ * 超大 body 收进内存；调用方回 400 后 `req.resume()` 把剩余字节排空即可。
+ * 这样客户端收到的是 400，而不是 socket reset。
+ *
+ * @returns {Promise<{over:boolean, buffer:Buffer}>}
+ */
+function readBodyCapped(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      req.off('data', onData);
+      resolve(result);
+    };
+    const onData = (chunk) => {
+      if (settled) return;
+      size += chunk.length;
+      if (size > limit) {
+        finish({ over: true, buffer: Buffer.alloc(0) });
+        return;
+      }
+      chunks.push(chunk);
+    };
+    req.on('data', onData);
+    req.once('end', () => finish({ over: false, buffer: Buffer.concat(chunks) }));
+    req.once('error', (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
+  });
+}
+
 function parseCookies(header) {
   const out = {};
   for (const part of String(header || '').split(';')) {
@@ -201,6 +343,56 @@ function coverMime(file) {
   return MIME[path.extname(String(file || '')).toLowerCase()] || 'application/octet-stream';
 }
 
+/**
+ * 取一个标量请求头。重复头在 Node 里可能是数组（或逗号拼接），设备身份必须是单一值，
+ * 这种情况按「没带」处理，避免把 "id1, id2" 建成一台幽灵设备。
+ */
+function headerText(req, name) {
+  const value = req.headers[name];
+  if (value === undefined || value === null) return '';
+  if (Array.isArray(value)) return '';
+  return String(value).trim();
+}
+
+/** `X-Folio-Device`：只收安全字符，UUID 之外的脏值直接当没带。 */
+function deviceIdOf(req) {
+  const id = headerText(req, 'x-folio-device');
+  if (!id || id.length > 128) return '';
+  return /^[A-Za-z0-9._:-]+$/.test(id) ? id : '';
+}
+
+/** `X-Folio-Device-Name`：可能被客户端 percent-encode，解开失败就原样用。 */
+function deviceNameOf(req) {
+  const raw = headerText(req, 'x-folio-device-name');
+  return raw ? safeDecode(raw).slice(0, 80) : '';
+}
+
+/**
+ * 解析单区间 Range 头。只支持 `bytes=N-` 与 `bytes=N-M`（手机端只需要 N-）。
+ *
+ * @param {string|undefined} header
+ * @returns {{ok:true, from:number, to:number|null}|{ok:false}|null}
+ *          null = 没有 Range 头；{ok:false} = 有但格式不认识
+ */
+function parseRangeHeader(header) {
+  const raw = String(header || '').trim();
+  if (!raw) return null;
+  const match = /^bytes=(\d+)-(\d*)$/.exec(raw);
+  if (!match) return { ok: false };
+  const from = Number(match[1]);
+  const to = match[2] === '' ? null : Number(match[2]);
+  if (!Number.isFinite(from) || from < 0) return { ok: false };
+  if (to !== null && (!Number.isFinite(to) || to < from)) return { ok: false };
+  return { ok: true, from, to };
+}
+
+/** Content-Disposition：ASCII 兜底 + RFC 5987 的 UTF-8 原名，中文书名不会被截成问号。 */
+function contentDisposition(name) {
+  const safe = String(name || 'book').replace(/[\\"\r\n]/g, '_').slice(0, 80) || 'book';
+  const ascii = safe.replace(/[^\x20-\x7e]/g, '_');
+  return `attachment; filename="${ascii}.txt"; filename*=UTF-8''${encodeURIComponent(`${safe}.txt`)}`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  服务本体                                                            */
 /* ------------------------------------------------------------------ */
@@ -215,6 +407,10 @@ function coverMime(file) {
  * @param {(merged:object, bookId:string)=>void} [opts.onRemoteProgress]
  * @param {(book:object)=>({file?:string,url?:string}|null)} [opts.resolveCover]
  * @param {()=>string} [opts.getVersion]
+ * @param {object|null} [opts.comic] 漫画取图代理（createComicService 的返回值）
+ * @param {(id:string)=>void} [opts.onBooksChanged] 上传成功后的书架回推（渲染层刷新）
+ * @param {object|null} [opts.devices] 设备存储（createDeviceStore 的返回值）
+ * @param {(id:string, online:boolean)=>void} [opts.onDeviceChanged] 设备在线态变化回推（渲染层广播）
  */
 export function createLanService(opts) {
   const {
@@ -229,7 +425,27 @@ export function createLanService(opts) {
     // 云端书的目录/正文由主进程提供（那里才有书源引擎与磁盘缓存）。
     // 面板不接触书源，也不需要手机能访问书源站。
     cloud = null,
+    // 漫画取图同样是主进程的能力（复用 cloud:chapter-images + fetchCoverResponse）。
+    // 没注入就 501，不影响其它接口。
+    comic = null,
+    // 上传落盘后要让桌面端书架立刻看到新书；由主进程注入 broadcast('lan:books')。
+    onBooksChanged = () => {},
+    // 设备记录与指令队列；没注入时设备路由回 501，旧桌面行为不变。
+    devices = null,
+    // 设备在线/离线时通知主进程 broadcast('lan:device')。
+    onDeviceChanged = () => {},
   } = opts;
+
+  // 清单/下载/上传的磁盘语义都在这一层，lan.js 只做 HTTP。
+  const bookService = createBooksService({
+    files,
+    booksDir,
+    readJson,
+    writeJson,
+    log,
+    publish: (event, payload) => publish(event, payload),
+    onBooksChanged,
+  });
 
   const assetsDir = path.dirname(fileURLToPath(import.meta.url));
   const assetCache = new Map();
@@ -241,7 +457,8 @@ export function createLanService(opts) {
   let allowWrite = true;
   let startedAt = 0;
   let discovery = null;
-  const clients = new Set();
+  // res → deviceId（浏览器面板没有设备头，记 null）。用 Map 才能知道断开的是哪台手机。
+  const clients = new Map();
   const sockets = new Set();
 
   /**
@@ -369,10 +586,22 @@ export function createLanService(opts) {
 
   /* ---------------- SSE ---------------- */
 
+  /** 设备在线态变化：面板走 SSE，桌面渲染层走主进程广播。 */
+  function emitDevice(id, online) {
+    if (!id) return;
+    const payload = { id, online, at: Date.now() };
+    publish('device', payload);
+    try {
+      onDeviceChanged(id, online);
+    } catch (err) {
+      log('warn', `设备在线态回推失败：${err?.message || err}`);
+    }
+  }
+
   function publish(event, payload) {
     if (!running || !clients.size) return;
     const chunk = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const res of clients) {
+    for (const res of clients.keys()) {
       try {
         res.write(chunk);
       } catch {
@@ -381,7 +610,7 @@ export function createLanService(opts) {
     }
   }
 
-  function handleEvents(req, res) {
+  function handleEvents(req, res, deviceId) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -390,7 +619,16 @@ export function createLanService(opts) {
     });
     res.write(`retry: 3000\n\n`);
     res.write(`event: hello\ndata: ${JSON.stringify({ ok: true, allowWrite, at: Date.now() })}\n\n`);
-    clients.add(res);
+
+    const owner = deviceId || null;
+    clients.set(res, owner);
+    // 0→1：手机前台连上，立刻告诉面板/渲染层「在线」。
+    if (owner && devices) {
+      const before = devices.deviceSseCount(owner);
+      devices.noteSseOpen(owner);
+      if (before === 0) emitDevice(owner, true);
+    }
+
     const ping = setInterval(() => {
       try {
         res.write(`: ping ${Date.now()}\n\n`);
@@ -398,12 +636,393 @@ export function createLanService(opts) {
         /* 下次写失败会被清理 */
       }
     }, SSE_PING);
+
+    let closed = false;
     const cleanup = () => {
+      if (closed) return;
+      closed = true;
       clearInterval(ping);
       clients.delete(res);
+      // 1→0：最后一根连接断了，立刻发离线事件（90s 弱在线窗口仍由 onlineOf 负责）。
+      if (owner && devices) {
+        const after = devices.noteSseClose(owner);
+        if (after === 0) emitDevice(owner, false);
+      }
     };
     req.on('close', cleanup);
     req.on('error', cleanup);
+  }
+
+  /* ---------------- 2.6.0：下载 / 上传 / 漫画 ---------------- */
+
+  /**
+   * 整文件下载。用 createReadStream(file, {start}) 流式发，绝不把 30MB 读进内存。
+   * 200 / 206 由 `Range: bytes=N-` 决定；越界 416，超限 413，非本地书 409。
+   */
+  function handleDownload(req, res, id) {
+    const range = parseRangeHeader(req.headers.range);
+    if (range && range.ok === false) {
+      sendJson(res, 416, { ok: false, error: '只支持单区间的 Range，形如 bytes=1024-' });
+      return;
+    }
+    const start = range && range.ok ? range.from : 0;
+    let opened;
+    try {
+      opened = bookService.openDownload(id, start);
+    } catch (err) {
+      sendJson(res, 500, { ok: false, error: `打开正文失败：${err?.message || err}` });
+      return;
+    }
+    if (!opened.ok) {
+      const body = JSON.stringify({ ok: false, error: opened.error });
+      if (opened.status === 416 && Number.isFinite(opened.size)) {
+        // 416 必须带 Content-Range，客户端才知道真实长度
+        res.writeHead(416, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Length': Buffer.byteLength(body),
+          'Content-Range': `bytes */${opened.size}`,
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+        return;
+      }
+      sendJson(res, opened.status || 400, { ok: false, error: opened.error });
+      return;
+    }
+
+    // 客户端给了上界就尊重它，但绝不越过文件尾
+    const end = range && range.ok && range.to !== null ? Math.min(range.to, opened.size - 1) : opened.size - 1;
+    const length = Math.max(0, end - start + 1);
+    // 只要带了合法 Range 就必须回 206：哪怕起点是 0，body 也只是一段而不是整本
+    const partial = Boolean(range && range.ok);
+    const headers = {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Content-Length': length,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Folio-Hash': opened.hash || '',
+      'X-Folio-Size': String(opened.size),
+      'Content-Disposition': contentDisposition(opened.title),
+    };
+    if (partial) headers['Content-Range'] = `bytes ${start}-${end}/${opened.size}`;
+    res.writeHead(partial ? 206 : 200, headers);
+    if (!length) {
+      res.end();
+      return;
+    }
+
+    const stream = fs.createReadStream(opened.file, { start, end });
+    stream.on('error', (err) => {
+      log('warn', `下载正文中断：${err?.message || err}`);
+      try {
+        res.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+    // 手机中途走了就立刻停止读盘，不为一条已经断掉的连接读完 30MB
+    res.on('close', () => {
+      try {
+        stream.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+    stream.pipe(res);
+  }
+
+  /**
+   * 分块上传。body 是 application/octet-stream，只按 offset 追加进 `.part`；
+   * 收齐后由 lan-books 校验 sha1、原子落盘、写 books.json。
+   */
+  async function handleUploadChunk(req, res) {
+    if (!allowWrite) {
+      sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入」' });
+      return;
+    }
+    const header = (name) => {
+      const value = req.headers[name];
+      return String(Array.isArray(value) ? value[0] : value || '').trim();
+    };
+    const hash = header('x-folio-hash').toLowerCase();
+    const total = Number(header('x-folio-total'));
+    const parsedOffset = parseOffsetHeader(req.headers['x-folio-offset'], total);
+    if (!parsedOffset.ok) {
+      // 先把 body 排空，才能安全复用连接；坏头的块本身没有解析价值。
+      try {
+        req.resume();
+      } catch {
+        /* 已经读完就算了 */
+      }
+      sendJson(res, 400, { error: 'bad_offset', message: parsedOffset.message });
+      return;
+    }
+    const offset = parsedOffset.value;
+    const title = safeDecode(header('x-folio-name')) || '手机导入的书';
+
+    let body;
+    try {
+      body = await readBodyBuffer(req, MAX_CHUNK_BODY);
+    } catch (err) {
+      if (err?.code === 'TOO_LARGE') {
+        try {
+          res.setHeader('Connection', 'close');
+        } catch {
+          /* 已经发过头了也照样试一次 */
+        }
+        // 413 先发完，再把连接断掉：剩下的字节没有意义，让它把带宽占完更糟。
+        // 断在 finish 之后才不会把 413 本身截掉。
+        res.once('finish', () => {
+          try {
+            req.destroy();
+          } catch {
+            /* ignore */
+          }
+        });
+        sendJson(res, 413, { ok: false, error: '这一块太大了，单块上限 6MB' });
+        return;
+      }
+      sendJson(res, 400, { ok: false, error: '读不到这一块的数据' });
+      return;
+    }
+
+    const result = bookService.appendChunk({ hash, offset, total, title, chunk: body });
+    if (result.ok) {
+      sendJson(res, 200, result);
+      return;
+    }
+    const payload = { ok: false, error: result.error };
+    if (result.received !== undefined) payload.received = result.received;
+    payload.done = false;
+    sendJson(res, result.status || 400, payload);
+  }
+
+  /**
+   * 漫画取图。清单只回 total（源站 URL 不出机器），取图回 `image/*` 字节。
+   */
+  async function handleComic(res, url, pathname) {
+    const rest = pathname.slice('/api/comic/'.length);
+    const isPage = rest.endsWith('/page');
+    const isPages = rest.endsWith('/pages');
+    if (!isPage && !isPages) {
+      sendJson(res, 404, { ok: false, error: 'not found' });
+      return;
+    }
+    const id = safeDecode(rest.slice(0, rest.length - (isPage ? '/page'.length : '/pages'.length)));
+    if (!comic || typeof comic.pages !== 'function' || typeof comic.image !== 'function') {
+      sendJson(res, 501, { ok: false, error: '当前版本没有接入漫画取图' });
+      return;
+    }
+    const book = listBooks().find((item) => item?.id === id);
+    if (!book) {
+      sendJson(res, 404, { ok: false, error: '书架上没有这本书' });
+      return;
+    }
+    const index = intParam(url, 'i');
+    if (index === null) {
+      sendJson(res, 400, { ok: false, error: '话号不对' });
+      return;
+    }
+
+    try {
+      if (isPages) {
+        const result = await comic.pages(book, index);
+        if (!result.ok) {
+          sendJson(res, result.status || 502, { ok: false, error: result.error });
+          return;
+        }
+        sendJson(res, 200, { ok: true, i: index, total: result.total, fromCache: result.fromCache === true });
+        return;
+      }
+
+      const page = intParam(url, 'p');
+      if (page === null) {
+        sendJson(res, 400, { ok: false, error: '页号不对' });
+        return;
+      }
+      const result = await comic.image(book, index, page);
+      if (!result.ok) {
+        const payload = { ok: false, error: result.error };
+        if (result.total !== undefined) payload.total = result.total;
+        sendJson(res, result.status || 502, payload);
+        return;
+      }
+      const body = result.buffer;
+      if (!body || !body.length) {
+        sendJson(res, 502, { ok: false, error: '源站没有返回这张图', total: result.total });
+        return;
+      }
+      if (body.length > MAX_IMAGE) {
+        sendJson(res, 413, { ok: false, error: '这一页太大（超过 6MB），手机端无法显示' });
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': result.type || 'image/jpeg',
+        'Content-Length': body.length,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        // 1 基的「第几页/共几页」，方便手机端显示页码条
+        'X-Folio-Page': `${result.page + 1}/${result.total}`,
+      });
+      res.end(body);
+    } catch (err) {
+      log('warn', `漫画取图出错：${err?.message || err}`);
+      if (!res.headersSent) sendJson(res, 502, { ok: false, error: '漫画取图失败，请稍后重试' });
+      else res.end();
+    }
+  }
+
+  /* ---------------- 2.7.0：设备管理（手机端 HTTP） ---------------- */
+
+  /** 设备服务没注入时统一回 501：旧桌面不会误报支持。 */
+  function noDevices(res) {
+    sendJson(res, 501, { ok: false, error: '当前版本没有接入设备管理' });
+  }
+
+  /** devicestore 的 code → HTTP 状态码。 */
+  function sendDeviceError(res, err) {
+    const code = err?.code || '';
+    if (['bad_state', 'bad_payload', 'bad_hash', 'bad_type', 'bad_device', 'bad_name'].includes(code)) {
+      sendJson(res, 400, { ok: false, error: code, message: err.message });
+      return;
+    }
+    if (code === 'not_found') {
+      sendJson(res, 404, { ok: false, error: 'not_found', message: err.message });
+      return;
+    }
+    log('warn', `设备管理出错：${err?.message || err}`);
+    sendJson(res, 500, { ok: false, error: err?.message || '设备操作失败' });
+  }
+
+  /** POST /api/device/heartbeat —— presence + 待执行条数。 */
+  function handleDeviceHeartbeat(req, res, deviceId) {
+    if (!devices) return noDevices(res);
+    if (!deviceId) {
+      req.resume();
+      sendJson(res, 400, { ok: false, error: 'missing_device', message: '缺少 X-Folio-Device 头' });
+      return;
+    }
+    req.resume();
+    try {
+      const device = devices.get(deviceId);
+      if (!device) {
+        sendJson(res, 404, { ok: false, error: 'not_found' });
+        return;
+      }
+      sendJson(res, 200, {
+        ok: true,
+        device: { id: device.id, name: device.name, online: device.online },
+        pending: devices.pendingCount(deviceId),
+        serverTime: Date.now(),
+      });
+    } catch (err) {
+      sendDeviceError(res, err);
+    }
+  }
+
+  /** POST /api/device/snapshot —— 手机书架摘要，30s 节流在 devicestore 里做。 */
+  async function handleDeviceSnapshot(req, res, deviceId) {
+    if (!devices) {
+      req.resume();
+      return noDevices(res);
+    }
+    if (!deviceId) {
+      req.resume();
+      sendJson(res, 400, { ok: false, error: 'missing_device', message: '缺少 X-Folio-Device 头' });
+      return;
+    }
+    let buffer;
+    try {
+      const result = await readBodyCapped(req, MAX_SNAPSHOT_BODY);
+      if (result.over) {
+        // 已经判定超限：把剩余字节排空再回 400，避免 keep-alive 连接里留下半截 body。
+        req.resume();
+        sendJson(res, 400, { ok: false, error: 'snapshot_too_large', message: '快照最多 256KB' });
+        return;
+      }
+      buffer = result.buffer;
+    } catch (err) {
+      sendJson(res, 400, { ok: false, error: 'bad_snapshot', message: '读不到快照数据' });
+      return;
+    }
+
+    let snapshot;
+    try {
+      snapshot = JSON.parse(buffer.toString('utf8'));
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'bad_snapshot', message: '快照不是合法 JSON' });
+      return;
+    }
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || !Array.isArray(snapshot.books)) {
+      sendJson(res, 400, { ok: false, error: 'bad_snapshot', message: '快照格式不对，books 必须是数组' });
+      return;
+    }
+
+    try {
+      const result = devices.setSnapshot(deviceId, snapshot);
+      sendJson(res, 200, {
+        ok: true,
+        snapshotAt: result.snapshotAt,
+        accepted: true,
+        ...(result.throttled ? { throttled: true } : {}),
+      });
+    } catch (err) {
+      sendDeviceError(res, err);
+    }
+  }
+
+  /** GET /api/device/commands —— 读时先清扫，只回 pending，按 createdAt 升序。 */
+  function handleDeviceCommands(res, deviceId) {
+    if (!devices) return noDevices(res);
+    // 旧手机/浏览器面板没有设备头：能过鉴权，但绝不建档、绝不发指令。
+    if (!deviceId) {
+      sendJson(res, 200, { ok: true, commands: [] });
+      return;
+    }
+    try {
+      sendJson(res, 200, { ok: true, commands: devices.claim(deviceId) });
+    } catch (err) {
+      // 记录刚好被上限淘汰：当作「没有指令」，手机下次心跳会重新建档。
+      if (err?.code === 'not_found') {
+        sendJson(res, 200, { ok: true, commands: [] });
+        return;
+      }
+      sendDeviceError(res, err);
+    }
+  }
+
+  /** POST /api/device/commands/:id/receipt —— done/failed 回执，完结进 history。 */
+  async function handleDeviceReceipt(req, res, deviceId, commandId) {
+    if (!devices) {
+      req.resume();
+      return noDevices(res);
+    }
+    if (!deviceId) {
+      req.resume();
+      sendJson(res, 404, { ok: false, error: 'not_found' });
+      return;
+    }
+    let body;
+    try {
+      body = await readBody(req, 8192);
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'bad_receipt', message: '读不到回执数据' });
+      return;
+    }
+    let input;
+    try {
+      input = JSON.parse(body || '{}');
+    } catch {
+      sendJson(res, 400, { ok: false, error: 'bad_receipt', message: '回执不是合法 JSON' });
+      return;
+    }
+    try {
+      const result = devices.receipt(deviceId, commandId, input || {});
+      sendJson(res, 200, { ok: true, state: result.state });
+    } catch (err) {
+      sendDeviceError(res, err);
+    }
   }
 
   /* ---------------- 路由 ---------------- */
@@ -418,6 +1037,8 @@ export function createLanService(opts) {
     }
     const pathname = decodeURIComponent(url.pathname);
     const method = req.method || 'GET';
+    // 本次请求携带的设备身份；SSE / 设备路由都从这里拿，浏览器面板为空串。
+    let requestDeviceId = '';
 
     // 首页：带 ?t= 进来的话种一次 cookie 再跳到干净的地址，
     // 免得访问码留在地址栏和浏览历史里。
@@ -482,10 +1103,35 @@ export function createLanService(opts) {
         sendJson(res, 401, { ok: false, error: 'unauthorized' });
         return;
       }
+      // 带设备头的任何认证请求都刷新 lastSeenAt；没带头的旧手机/浏览器完全不受影响。
+      const incomingDeviceId = deviceIdOf(req);
+      if (incomingDeviceId && devices) {
+        requestDeviceId = incomingDeviceId;
+        try {
+          devices.upsertSeen({
+            id: incomingDeviceId,
+            name: deviceNameOf(req),
+            platform: headerText(req, 'x-folio-platform') || 'android',
+            appVersion: headerText(req, 'x-folio-app-version'),
+            apiVersion: headerText(req, 'x-folio-api-version'),
+            ip: req.socket?.remoteAddress || '',
+          });
+        } catch (err) {
+          log('warn', `设备建档失败：${err?.message || err}`);
+        }
+      }
     }
 
     if (pathname === '/api/ping') {
-      sendJson(res, 200, { ok: true, port: actualPort, version: getVersion() });
+      // 只加字段不改旧字段：老客户端读 ok/port/version 照样能跑。
+      sendJson(res, 200, {
+        ok: true,
+        port: actualPort,
+        version: getVersion(),
+        apiVersion: API_VERSION,
+        features: API_FEATURES.slice(),
+        limits: { ...LIMITS },
+      });
       return;
     }
 
@@ -504,6 +1150,89 @@ export function createLanService(opts) {
           now: Date.now(),
         },
       });
+      return;
+    }
+
+    /* ---------- 2.7.0：设备管理（手机端） ---------- */
+
+    if (pathname === '/api/device/heartbeat' && method === 'POST') {
+      handleDeviceHeartbeat(req, res, requestDeviceId);
+      return;
+    }
+
+    if (pathname === '/api/device/snapshot' && method === 'POST') {
+      await handleDeviceSnapshot(req, res, requestDeviceId);
+      return;
+    }
+
+    if (pathname === '/api/device/commands' && method === 'GET') {
+      handleDeviceCommands(res, requestDeviceId);
+      return;
+    }
+
+    if (pathname.startsWith('/api/device/commands/') && pathname.endsWith('/receipt') && method === 'POST') {
+      const commandId = safeDecode(pathname.slice('/api/device/commands/'.length, -'/receipt'.length));
+      if (!commandId) {
+        req.resume();
+        sendJson(res, 404, { ok: false, error: 'not_found' });
+        return;
+      }
+      await handleDeviceReceipt(req, res, requestDeviceId, commandId);
+      return;
+    }
+
+    /* ---------- 2.6.0：清单 / 整文件下载 / 分块上传 / 漫画取图 ---------- */
+
+    // 清单：手机拿它跟本地 books.json 做 hash 差集，桌面端不存任何「已同步」状态
+    if (pathname === '/api/library' && method === 'GET') {
+      try {
+        sendJson(res, 200, bookService.library());
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: `清单读取失败：${err?.message || err}` });
+      }
+      return;
+    }
+
+    // 整文件下载。必须排在 /api/book/:id 前面：那条是前缀匹配，会把
+    // `/api/book/<id>/download` 当成 id 为 `<id>/download` 的正文请求。
+    if (pathname.startsWith('/api/book/') && pathname.endsWith('/download') && method === 'GET') {
+      const id = safeDecode(pathname.slice('/api/book/'.length, -'/download'.length));
+      handleDownload(req, res, id);
+      return;
+    }
+
+    if (pathname === '/api/upload/status' && method === 'GET') {
+      if (!allowWrite) {
+        sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入」' });
+        return;
+      }
+      const result = bookService.uploadStatus({
+        hash: url.searchParams.get('hash'),
+        size: url.searchParams.get('size'),
+      });
+      if (result.ok) sendJson(res, 200, result);
+      else sendJson(res, result.status || 400, { ok: false, error: result.error });
+      return;
+    }
+
+    if (pathname === '/api/upload/chunk' && method === 'POST') {
+      await handleUploadChunk(req, res);
+      return;
+    }
+
+    if (pathname.startsWith('/api/upload/') && method === 'DELETE') {
+      if (!allowWrite) {
+        sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入」' });
+        return;
+      }
+      const result = bookService.discardUpload(safeDecode(pathname.slice('/api/upload/'.length)));
+      if (result.ok) sendJson(res, 200, { ok: true });
+      else sendJson(res, result.status || 500, { ok: false, error: result.error });
+      return;
+    }
+
+    if (pathname.startsWith('/api/comic/') && method === 'GET') {
+      await handleComic(res, url, pathname);
       return;
     }
 
@@ -720,7 +1449,7 @@ export function createLanService(opts) {
     }
 
     if (pathname === '/api/events' && method === 'GET') {
-      handleEvents(req, res);
+      handleEvents(req, res, requestDeviceId);
       return;
     }
 
@@ -863,12 +1592,20 @@ export function createLanService(opts) {
 
   async function stop() {
     stopDiscovery();
-    for (const res of clients) {
+    // 漫画的内存缓存跟着服务一起释放，别让一个已停止的服务还占着几十 MB
+    try {
+      comic?.clear?.();
+    } catch {
+      /* ignore */
+    }
+    for (const [res, owner] of clients) {
       try {
         res.end();
       } catch {
         /* ignore */
       }
+      // 服务停了，SSE 计数必须一起归零；否则下次启动 devices.json 的在线态会一直是真的。
+      if (owner && devices) devices.noteSseClose(owner);
     }
     clients.clear();
     const srv = server;

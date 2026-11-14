@@ -1,7 +1,222 @@
 # Changelog
 
 本文件记录 Folio 的正式版本变更，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
-版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。版本号唯一来源是 `package.json`。
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。桌面端版本号唯一来源是 `package.json`；
+Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
+
+## [Android 3.1.0] — 待定
+
+桌面端「管理我的手机」的手机侧配套：桌面端能看见这台手机、把书推过来、把手机上的书拉回去，
+**但没有推送、没有后台、没有任何轮询** —— 指令只在 App 打开且连上桌面端时执行。
+
+### 新增 · 设备身份
+
+- 首次发起设备请求时懒生成 `installId`（UUID）并持久化，卸载重装即换新；
+  设备名取 `Build.MODEL`
+- 所有请求统一带 `X-Folio-Device` / `-Device-Name` / `-Platform` / `-App-Version` /
+  `-Api-Version` 五个设备头；不带的请求与旧桌面端完全兼容，旧桌面端也不会因此报错
+
+### 新增 · 前台在线通道
+
+- `DeviceChannel` 在前台挂一根 `/api/events` SSE 长连接：桌面端一入队就收到
+  `command` 事件，立刻拉队列执行 —— 不用再等用户手动点同步
+- **退后台即断开**（`ON_STOP`），桌面端看到的「离线」是真的离线；
+  没有 WorkManager、没有前台服务、没有轮询
+- 掉线 3s 后重连；旧桌面端没有设备接口（心跳 404）时整条通道静默关闭，
+  不会把连接状态判成失败
+
+### 新增 · 指令队列执行
+
+- 三类指令：`push-book`（复用 Range 下载 + sha1 校验）、`remove-book`、`pull-book`
+  （复用 4MiB 分块上传）；逐条串行，每条独立回执
+- 幂等：手机已有同 hash、已删掉该书、桌面端已有同 hash 都回执 `done`
+- 失败原因逐字上送：`insufficient_space` / `too_large` / `hash_mismatch` /
+  `network_interrupted` / `user_rejected` / `source_gone` / `unsupported`
+- 过期指令领取时被桌面端清扫，迟到的回执按 404 拒绝，不会把过期指令「救活」
+
+### 新增 · 删除唯一副本要问用户
+
+- 桌面端删手机上的**唯一副本**时，手机弹出确认：「把《书名》从手机上删掉？」
+  + 红字「手机上是唯一副本，手机端会再问你一次。」
+- 点确认才删文件、书架条目与进度并回执 `done`；点取消（或弹层被新的请求顶掉）
+  回执 `user_rejected`，正文一个字节都不动
+
+### 新增 · 快照上报
+
+- 连接后 / 对齐结束 / 退出阅读器时上报书架摘要与存储占用（60s 节流），
+  不含正文、不含手机路径
+
+### 测试
+
+- Android 单测扩到 153 项（设备指令执行 16、快照节流 10、设备头 6、在线通道 5、
+  删除确认 4、设备流端到端 4），0 失败；端到端用 `tools/_lan-fixture.mjs` 模拟桌面端，
+  真的走一遍 心跳 → 入队 → 领取 → 下载 → sha1 → 回执 → history
+- `versionName 3.1.0` / `versionCode 3`
+
+## [2.7.0] — 待定
+
+桌面端新增**「我的手机」**：在不引入推送与后台的前提下，能看见手机在不在线、
+书架有什么，并把书推过去 / 拉回来。
+
+### 新增 · 设备管理
+
+- 设置 →「我的手机」：在线态、最后在线时间、手机书架快照与差异标记
+  （`桌面端没有这本书` / `两端内容不一致`）、存储占用、指令队列
+- 在线 = 手机前台持有 SSE 长连接（强信号）+ 90s 活跃窗口（兜底）；
+  最后一根连接断开立即置离线，不靠轮询猜
+- `devices.json` 独立落盘：设备档案、未完结指令、最近 50 条 history；
+  `online` / SSE 计数只在内存，不落盘
+- 指令三类（`push-book` / `remove-book` / `pull-book`），入队 7 天有效、
+  同 `type + hash` 去重；可单条取消 / 重试 / 清空；「补齐差集」一次入队 N 条
+  `push-book`（单批 ≤50 本 / ≤2GB）
+- 书架右键本地书「发送到手机」；推书复用 2.6.0 的分块上传与 Range 下载，
+  不新增任何传输代码
+- 失败原因文案统一：空间不足 / 超过 30MiB / 校验失败 / 传输中断 /
+  手机端拒绝 / 对端已无副本 / 手机端版本太旧
+
+### 接口
+
+- 新增 `/api/device/heartbeat`、`/api/device/snapshot`、`/api/device/commands`、
+  `/api/device/commands/:id/receipt`；`apiVersion` 仍为 2，能力通过
+  `features` 追加 `devices` 表达
+- `/api/events` 增加 `device`（在线翻转）与 `command`（入队）事件；
+  不带设备头的旧客户端行为一行未改
+
+### 测试
+
+- `tools/_device-check.mjs` 模拟手机跑完整个状态机（心跳 / 快照 / 领取 / 回执 /
+  过期 / 重试 / 重装新 id / 旧记录 `lost`）
+- 设备页 39 项文案自查 + 局域网 117 项回归照旧全绿
+
+## [Android 3.0.0] — 待定
+
+Android 客户端的**形态重做**：从「桌面端的遥控器」改成一台**独立的阅读器**。
+书可以只存在于手机上，断网、关掉电脑照样读；桌面端降级成可选的搬运工与云端代理。
+
+版本号与桌面端分开走（这条是 `android/app/build.gradle.kts` 的 `versionName 3.0.0` /
+`versionCode 2`，`package.json` 仍然只管桌面端）。
+
+### 变更 · 定位
+
+- **书架真相搬进手机**（`files/library/books.json`），桌面端清单只是其中一种书源。
+  上一版「列出桌面端书架、点一本读一本」的遥控器口径整体下线
+- 没连桌面端不再是错误状态：书架照常打开，本机书照常翻页，只有云端书标 `需连接`
+- 阅读界面从「一个列表 + 一个设置页」拆成书架 / 小说阅读器 / 漫画阅读器 / 设置 /
+  同步状态五个独立页面
+
+### 新增 · 独立阅读器
+
+- **书架**：连接状态点（同步中 / 已连接 / 未连接 + 短文案）、`继续阅读` / `本机书` /
+  `桌面端书` 三个吸顶分区、四种状态角标（`待同步` / `需连接` / `内容不一致` / `仅本机`）+
+  `传输中` / `同步失败`、封面（无封面用首字 + 书名哈希出的色相）、来源小标、筛选项
+  （全部 / 本机 / 桌面端 / 云端 / 在读）、未连接横幅（可关闭，本次启动不再弹）、
+  长按删除本机副本或从书架移除（二次确认）
+- **小说阅读器**：正文按段落虚拟滚动，点正文中部显隐顶/底栏；可拖进度条（松手跳段）+
+  百分比 + 上一章/下一章；目录抽屉（带搜索、当前章高亮、自动滚到当前章）；
+  排版弹层（字号 14–28sp、行距三档、字体两档、页边距三档、底色纸白/米色/夜间），
+  即时生效并持久化
+- **漫画阅读器**：竖向整页流（先按屏宽等比占位，加载时不跳高）、双指 1–3x 缩放、
+  双击 2x、放大态拖动平移、逐页加载（并发 3，当前页预取 ±2 页）、读到本话 80% 预取下一话、
+  单页失败只影响那一页并给「重试」、话选择抽屉、上一话/下一话
+- **设置**：桌面端连接、同步、排版、外观（强调色六选一）、存储（含磁盘缓存真实读数）、
+  关于（含网络诊断）
+- **同步状态页**：逐本列出同步状态与失败原因、单条重试、顶部「立即同步全部」、
+  传输中显示百分比进度
+
+### 新增 · 本机导入
+
+- 系统文件选择器（`OpenMultipleDocuments`）一次导入多本 txt，编码自动识别
+  UTF-8 / UTF-16 / GB18030
+- 正文先写 `.txt.part` 再原子改名，中断不留半本书；单本上限 30MB
+- `contentHash = sha1(UTF-8 正文)` 判重，重复导入提示「已在书架里」并滚到那一本
+- 书 id 与桌面端下发的 id 归并，同一本书不会在书架上出现两条
+
+### 新增 · 本地书整文件双向同步
+
+- 判定「同一本书」用 `contentHash`（sha1），不看文件名
+- 上传 4MiB 分块 + 会话续传，单块 ≤6MiB，`offset` 不连续时服务端回 409 带权威 `received`；
+  收齐后服务端重算 sha1 再原子落盘
+- 下载走 `Range: bytes=N-` 断点续传
+- 两端哈希不同不猜不覆盖，标 `内容不一致` 挂起，由用户在同步状态页决定保留哪一版
+- 超过 30MB 不同步（标 `仅本机`）；小于 20MB 的书连上就顺手搬，可关；
+  可设「仅 Wi-Fi」
+
+### 变更 · 云端书零缓存
+
+- 云端书正文只在内存里待最近 3 章（`ChapterMemoryCache`），漫画图与封面只在
+  内存 LRU（≤96MiB）里，**磁盘上不留任何副本**
+- 自证而不是保证：设置页的「磁盘缓存」直接读 `cacheDir` 的真实大小，必须恒为 0 并挂
+  「零缓存」角标；单测断言读四章前后 `cacheDir` 文件数不变
+- 未连接时打开云端书直接给「云端书需要连接桌面端才能阅读」，不再假装能离线读
+
+### 移除
+
+- **离线章节缓存**（`files/offline/cloud/*.txt`）整体下线，升级时由 `Migration` 清理
+- **断网退章**（`ChapterFallback`：断网时自动退到最近的已缓存章节）下线 ——
+  零缓存之后没有「已缓存章节」可退，改为保留已读内容 + 底部提示「连接已断开 · 重试」
+- **WorkManager 后台同步**下线：3.0 没有后台任务，同步只发生在打开书、翻章、
+  点同步、回到前台这四种时机
+- 旧的 `LibraryStore` / `OfflineStore` / `SyncManager` / `SyncWorker` 四个类被
+  `BookStore` / `BookFileStore` / `SyncEngine` / `ProgressSync` 替代
+
+### 变更 · 进度
+
+- 与桌面端 `progress.json` 继续同构，`updatedAt` 新的赢、字段浅合并
+- **漫画按「话」对齐**：`chapter` / `chapterIndex` / `windowBase` / `paraIndex` 都写话序号，
+  `percent = (话下标 + 页下标 / 本话页数) / 话总数 × 100`（`core/ComicProgress.kt`）；
+  话内页号只存本机 `comicPage`，不进同步
+
+### 测试
+
+- Android：96 项（端到端 17、同步判定 11、正文解析 10、协议编解码 8、进度合并 7、
+  编码识别 7、导入 7、图片降采样 7、章节缓存 7、漫画进度 6、sha1 5、漫画缓存键 4），
+  0 失败；端到端会真的起一个桌面端服务（`tools/_lan-fixture.mjs`），
+  UDP 端口被占用或缺 `node` 时跳过 1 项
+- 桌面端局域网回归 117 项照旧全绿
+- 安装包 17MB，`versionName 3.0.0` / `versionCode 2`
+
+## [2.6.0] — 待定
+
+配合 Android 3.0 的「书架真相在本地、桌面端只做搬运」改造，局域网接口补上
+**清单 / 整文件收发 / 漫画取图** 三块能力；老接口（`/api/state`、`/api/progress`、
+`/api/toc`、`/api/chapter`、`/api/book/:id`、`/api/cover`、`/api/events`）行为一行未改，
+2.5.0 的手机与网页面板照旧可用。
+
+### 新增 · 局域网接口（apiVersion 2）
+
+- `GET /api/ping` 追加 `apiVersion: 2`、`features`（`library/upload/download/range/comic`）
+  与 `limits`；旧字段 `ok/port/version` 不变
+- `GET /api/library`：全量书架清单（最多 2000 本，超出带 `truncated`）。
+  本地书带 `contentHash`（口径固定为 `books/*.txt` 的 UTF-8 字节 sha1，缺失时
+  懒补齐并原子写回 `books.json`），带 `syncable` / `syncableReason`；云端书不参与同步
+- `GET /api/book/:id/download`：`createReadStream({start})` 流式整文件下载，
+  支持 `Range: bytes=N-`（206 + `Content-Range`），带 `X-Folio-Hash` / `X-Folio-Size`；
+  超过 30MB → 413，Range 越界 → 416
+- `GET /api/upload/status` / `POST /api/upload/chunk` / `DELETE /api/upload/:hash`：
+  4MiB 分块、单块 ≤6MiB、sha1 会话续传。offset 不连续 → 409 回权威 `received`，
+  收齐后重算 sha1 → 422 或原子 `rename` 落盘；同内容重复上传复用已有 id
+- `GET /api/comic/:id/pages` / `GET /api/comic/:id/page`：漫画按「话 + 页」取图。
+  手机只拿 `total` 与字节，**拿不到源站地址**；清单 LRU(32) + 图片字节 LRU(32MiB)
+  全在内存，不落盘
+
+### 新增 · 模块
+
+- `electron/bookfile.js`：流式 sha1、原子写、`.incoming/<hash>.part` 上传会话、contentHash 懒补齐
+- `electron/lan-books.js`：清单 / 下载 / 上传的磁盘语义
+- `electron/lan-comic.js`：漫画清单与按页字节转发（两档内存 LRU）
+
+### 变更
+
+- `electron/lan.js` 新增 `readBodyBuffer()`（二进制请求体，绝不经 `toString('utf8')`）与 8 条路由
+- 启动 3 秒后后台补齐老书的 `contentHash`，并清理超过一天的上传残片
+- `books.json` 新增 `contentHash` / `syncedFrom` / `contentVersion` 字段；老字段一个没动
+
+### 测试
+
+- 新增 `tools/_lan-sync-check.mjs`：一条命令跑完清单、12MB/30MB 下载、Range 续传、
+  30MB 分 8 块上传、改一字节 422、冲突、漫画清单与首页字节、只读 403（117 项）
+- `tools/_lan-fixture.mjs` 支持 `--big`（大书）与 `--comic`（本地假图源，不打外网）
+- 桌面端局域网回归 47 项仍然全绿
 
 ## [2.5.0] — 2026-11-14
 

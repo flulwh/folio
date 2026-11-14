@@ -1,143 +1,188 @@
 # Android 客户端
 
 Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
-它连的是桌面端已经有的那个局域网服务（`electron/lan.js`），协议完全复用，
-所以桌面端不需要为手机单独开接口。
 
-```
-手机 App  ──HTTP(X-Folio-Token)──▶  桌面端 7788 端口
-    │                                  │
-    ├─ 书架 / 进度  ◀── /api/state ────┤
-    ├─ 本地书正文  ◀── /api/book/:id ──┤
-    ├─ 云端书目录  ◀── /api/toc/:id ───┤
-    └─ 云端书单章  ◀── /api/chapter/:id?i=N
-```
+**3.0 起它是一台独立的阅读器**，不再是桌面端的遥控器：书可以只存在于手机上，
+断网、关掉电脑也能读；桌面端从「必须先开的东西」降级成「可选的搬运工与云端代理」。
 
-## 三种阅读状态
+**3.1 再加一层「被管理」**：桌面端能看见这台手机、把书推过来 / 拉回去。
+手机仍然没有后台任务，只在 App 打开且连上时才执行指令（见「设备管理」）。
 
-| 场景 | 数据来源 | 能不能读 |
+`/api/library`（清单）· `/api/book/:id/download`（整文件，支持 Range）·
+`/api/upload/chunk`（4MiB 分块）· `/api/toc` + `/api/chapter`（云端书）·
+`/api/comic/:id/pages` + `/api/comic/:id/page`（漫画）。全部走
+`X-Folio-Token`，桌面端不开也能用本机书。
+
+## 两类书，两套规则
+
+| | 本机书（`origin=LOCAL`） | 云端书（`isCloud`） |
 | --- | --- | --- |
-| 本地书，已缓存 | 手机私有目录里的 txt | 断网也能读，进度先存本地 |
-| 本地书，未缓存 | 桌面端 `/api/book/:id` | 需要连上桌面端，读完自动缓存 |
-| 云端书，联网 | 桌面端抓取后按章下发 | 能读，读过的章节顺手缓存 |
-| 云端书，断网 | 已缓存的章节 | 只能读缓存过的部分，目录降级成章号 |
+| 正文 | 手机私有目录 `books/<id>.txt` | 桌面端书源缓存，按章现取 |
+| 断网 | **能读**，进度先存本地 | **不能读**，提示「云端书需要连接桌面端才能阅读」 |
+| 同步 | 整文件双向（手机 ↔ 桌面端） | 不搬正文，只同步清单与进度 |
+| 缓存 | 文件本身是数据，不叫缓存 | **零磁盘缓存**，正文只在内存待 3 章 |
 
-本地书是桌面端书架目录里的 `.txt`/`.md` 文件，正文一次拿全，手机上按与桌面端
-同一套规则切段、认章节（`core/TextParser.kt` 对应 `src/utils/chapters.js`）。
-段落序号两端一致，进度才能互相认。
+「没连桌面端」不是错误状态，只是少了搬运能力：书架照常打开、本机书照常翻页，云端书标 `需连接`。
 
-云端书有几百章，全量下载既慢又费流量。手动「下载到手机」只缓存前
-`OFFLINE_CHAPTER_LIMIT`（12）章，其余章节在联网读到时自动落盘。
+## 本机导入
 
-## 双端进度
+「导入」走系统 `OpenMultipleDocuments`，可一次选多本（`text/plain`、`text/*`、`application/octet-stream`），单本上限 30MB。
 
-进度条目与桌面端 `progress.json` 完全同构：
+- 编码识别：UTF-8（含 BOM）→ UTF-16 → GB18030，都不行按 UTF-8 硬解并保留原文
+- 正文落 `books/<id>.txt`，先写 `.part` 再原子改名，中断不留半本书
+- **不重复入架**：`contentHash = sha1(UTF-8 正文)`，撞上已有哈希就提示「《书名》已在书架里」
+  并滚到那一本；书 id 还与桌面端下发的 id 归并，同一本书两台设备各导一次最后只剩一条
+
+## 本地书同步
+
+协议细节见 [lan-panel.md](lan-panel.md)，这里只说规则：
+
+- **同一本书用 `contentHash`（sha1）判定**，不看文件名，改过名不会变成两本
+- **上传** 4MiB 分块（`/api/upload/chunk`），单块 ≤6MiB；`offset` 不连续时服务端回 409
+  带权威 `received`，从断点继续；收齐后服务端重算 sha1 再原子落盘
+- **下载**走 `Range: bytes=N-` 续传，写 `.part` 后改名
+- **两边都有但哈希不同** → 不猜不覆盖，标 `内容不一致` 挂起，等用户在同步状态页选
+- **超过 30MB 不同步**（标 `仅本机`）；小于 20MB 的书连上就顺手搬（可关），
+  计费流量下按「仅 Wi-Fi」让路
+
+## 进度
+
+与桌面端 `progress.json` 同构，字段名一字不差：
 
 ```jsonc
-// 本地书
+// 本机书
 { "paraIndex": 42, "chapterTitle": "第二章", "percent": 66.0, "updatedAt": 1794587125373 }
-// 云端书
-{ "chapter": 417, "chapterIndex": 417, "windowBase": 417,
-  "paraIndex": 42, "chapterTitle": "第十节：为了明天！", "percent": 17.6,
-  "updatedAt": 1794587125373 }
+// 云端书 / 漫画（漫画的四个位置字段写的都是「话」）
+{ "chapter": 417, "chapterIndex": 417, "windowBase": 417, "paraIndex": 42, "percent": 17.6 }
 ```
 
-合并规则与桌面端 `mergeProgressEntry` 一致：**`updatedAt` 新的一方赢，字段浅合并**，
-某一端缺字段时不会把对端已有的信息抹掉。
+合并只有一条规则：**`updatedAt` 新的一方赢，字段浅合并**，不会用空值抹掉对端已有的信息。写入分三层，
+任何一层断开都不丢：内存（滚动即刻更新）→ 本地磁盘（600ms 防抖写 `library/progress.json`）→
+桌面端（1.5s 节流 POST `/api/progress`，失败进 `pending.json` 下次补写）。
 
-写入路径分三层，任何一层断开都不会丢进度：
+**漫画按「话」对齐**：`chapter` / `chapterIndex` / `windowBase` / `paraIndex` 都写话序号，
+`percent = (话下标 + 页下标 / 本话页数) / 话总数 × 100`（`core/ComicProgress.kt`）。话内页号不进
+同步，只落在本机 `books.json` 的 `comicPage` 上 —— 换台设备从话首开始，好过污染两端口径。
 
-1. **内存**：滚动时立刻更新状态，界面不卡
-2. **本地磁盘**：600ms 防抖写 `files/library/progress.json`
-3. **桌面端**：1.5s 节流 POST `/api/progress`；失败记进 `pending.json`，
-   下次联网（手动同步、回到前台、后台周期任务）补写
+## 零缓存
 
-`updatedAt` 用的是手机系统时间。手机与电脑时区/时间差太大时，以时间更新的
-一端为准 —— 这是有意的取舍：宁可偶尔多覆盖一次，也不要有进度卡在旧值上。
+| 内容 | 落盘 | 说明 |
+| --- | --- | --- |
+| 本机书正文 | ✅ `books/<id>.txt` | 这就是数据本身，不是缓存 |
+| 云端文章节 | ❌ | `ChapterMemoryCache` 只留最近 3 章 |
+| 漫画图片 / 封面 | ❌ | `ImageLoader` 内存 LRU（≤96MiB，按堆 1/8 取小），不写 `cacheDir` |
 
-## 省电
+自证靠读数：设置页「存储」里的**磁盘缓存**直接读 `cacheDir` 的实际大小，必须恒为 0，旁边挂
+「零缓存」角标；单测 `ChapterMemoryCacheTest.读四章不产生任何磁盘文件` 断言文件数不变。
 
-原生实现本身比 WebView 省一截，但真正耗电的是后台唤醒，所以：
+## 漫画阅读器
 
-- **没有前台服务、没有常驻通知、没有轮询**。App 不读的时候不跑任何循环。
-- **后台同步交给 WorkManager**：15 分钟一次（系统允许的最小间隔），
-  约束为「有网络 + 电量不低」，由系统合并唤醒，App 进程可以被随时回收。
-- **网络请求只在用户动作时发**：打开书、翻章、拖进度条、点同步。
-  HTTP 用系统自带的 `HttpURLConnection`，不引第三方网络库，没有常驻连接池线程。
-- **封面按需加载**，`LruCache` 缓存 24 本，滚动时不重复请求。
-- **阅读页无动画**，正文是 `LazyColumn`，只组合可见段落；离开页面即停止一切计时器。
-- **局域网发现用 UDP 广播**，只在用户点「搜索桌面端」时发一次，手机端不常驻监听。
+竖向整页流，item 先按屏宽等比占位（`aspectRatio`），图片到位前列表不跳高；双指 1–3x、
+双击 2x、放大态拖动平移不越界（不引第三方缩放库）；`ImageLoader` 内 `Semaphore(3)` 限并发，
+当前页变化预取 ±2 页，读到本话 80% 预取下一话；单页失败只影响那一页（占位显示原因 + 重试）。
 
 ## 连接桌面端
 
 1. 桌面端：设置 → 网络 → 打开「局域网面板」，记下地址（形如 `http://192.168.1.3:7788`）与访问码
-2. 手机：设置 → 桌面端连接，填地址与访问码（或点「搜索桌面端」自动发现）
-3. 点「测试连接」，看到「连上了桌面端」即可
+2. 手机：设置 → 桌面端连接，填地址与访问码，或点「搜索桌面端」
+3. 点「测试连接」，看到「桌面端 2.7.0 · api 2 · 端口 7788 · 12ms」即为通
 
-手机与电脑要在同一个 Wi-Fi。Windows 防火墙第一次询问时选「允许访问」，
-否则手机会看到「连不上桌面端」。
+两者要在同一个 Wi-Fi，Windows 防火墙第一次询问选「允许访问」。搜索是 5 秒 UDP 广播，只在点的
+时候发；App 没有前台服务、没有轮询，不读的时候不跑循环。
 
-「搜索桌面端」依赖桌面端 2.5.0 起提供的 UDP 发现（`lan.js` 里的 `startDiscovery`）。
-旧版桌面端不会回应广播，手动填地址照样能用。
+## 设备管理（3.1）
+
+桌面端设置 →「我的手机」里能看到这台手机，并把书推过来 / 拉回去。手机侧只做三件事：
+**报身份、收事件、执行指令**。
+
+### 身份
+
+`installId` 在第一次发设备请求时懒生成（UUID），写进 SharedPreferences，永不变更；
+重装即换新，桌面端当作新设备。设备名取 `Build.MODEL`。所有请求统一带五个头：
+
+```
+X-Folio-Device: <installId>          X-Folio-Device-Name: <URL 编码的型号>
+X-Folio-Platform: android            X-Folio-App-Version: 3.1.0
+X-Folio-Api-Version: 2
+```
+
+不带头的请求能过鉴权但不建档 —— 旧版客户端与旧版桌面端都不受影响。
+
+### 前台在线通道
+
+App 在前台（`ON_START`）时挂一根 `/api/events` 的 SSE 长连接，退到后台（`ON_STOP`）
+立即断开。桌面端一入队就 `publish('command')`，手机收到事件立刻拉队列执行，
+不用等下一次手动同步。
+
+**这是红线**：没有 WorkManager、没有前台服务、没有轮询。App 一死连接就没了，
+桌面端显示「离线」是真的离线，不会出现「对着锁屏手机发指令、等一个永远不执行的队列」。
+
+掉线 3 秒后重连。桌面端没有设备接口（心跳 404）时整条通道**静默关闭**，
+既不改连接状态、也不弹错误 —— 只是设备管理不可用。
+
+### 四条路由
+
+| 方法 | 路径 | 手机什么时候调 |
+| --- | --- | --- |
+| POST | `/api/device/heartbeat` | 连上时、每次重连前；顺便拿 `pending` 条数 |
+| GET | `/api/device/commands` | 收到 `command` 事件、或心跳报有积压 |
+| POST | `/api/device/commands/:id/receipt` | 每条执行完（`done` / `failed` + `error`） |
+| POST | `/api/device/snapshot` | 连接后 / 对齐结束 / 退出阅读器，60s 节流 |
+
+### 指令与失败原因
+
+三类指令逐条串行执行：`push-book`（Range 下载 + sha1 校验）、`remove-book`、
+`pull-book`（4MiB 分块上传）。都复用 3.0 已有的传输代码，指令本身不携带字节。
+
+| 回执 `error` | 什么时候出现 |
+| --- | --- |
+| `insufficient_space` | 剩余空间不够这本书 |
+| `too_large` | 超过 30MiB 同步上限 |
+| `hash_mismatch` | 下载完 sha1 对不上，已丢弃 |
+| `network_interrupted` | 传到一半断了 |
+| `user_rejected` | 删唯一副本时用户点了取消 |
+| `source_gone` | 桌面端已经没有这份副本 |
+| `unsupported` | 手机端版本太旧，不支持这条指令 |
+
+**删唯一副本必须问人**：`remove-book{unique:true}` 会先弹「把《书名》从手机上删掉？」，
+红字说明「手机上是唯一副本，手机端会再问你一次。」。点确认才动文件；点取消回执
+`user_rejected`，正文一个字节都不改。
+
+过期指令在桌面端清扫，手机领不到；迟到的回执会被 404 拒绝，不会把过期指令「救活」。
 
 ## 构建
 
-需要 JDK 17+、Android SDK（`compileSdk 35`、`build-tools 35`）。
+JDK 17+、Android SDK（`compileSdk 35`、`build-tools 35`）。
 
 ```bash
-cd android
-./gradlew assembleDebug      # 调试包，包名带 .debug 后缀，可与正式包共存
-./gradlew assembleRelease    # 发布包
-./gradlew testDebugUnitTest  # 39 项测试
+cd android && ./gradlew assembleDebug testDebugUnitTest
 ```
 
-签名：默认用 debug 签名，方便直接安装。正式签名走环境变量：
-
-```bash
-FOLIO_KEYSTORE=/path/to/folio.jks \
-FOLIO_KEYSTORE_PASSWORD=... \
-FOLIO_KEY_ALIAS=... \
-FOLIO_KEY_PASSWORD=... \
-./gradlew assembleRelease
-```
-
-产物在 `android/app/build/outputs/apk/`。
+调试包包名带 `.debug` 后缀，可与正式包共存。正式签名走 `FOLIO_KEYSTORE` / `FOLIO_KEYSTORE_PASSWORD` / `FOLIO_KEY_ALIAS` / `FOLIO_KEY_PASSWORD`
+四个环境变量，默认用 debug 签名。产物在 `android/app/build/outputs/apk/`。
 
 ## 测试
 
-```bash
-cd android && ./gradlew testDebugUnitTest
-```
-
-| 测试 | 项数 | 覆盖 |
-| --- | --- | --- |
-| `ProgressMergerTest` | 7 | updatedAt 胜负、字段浅合并、整份合并 |
-| `TextParserTest` | 10 | 切段、硬换行合并、中英文章节、章节归属 |
-| `ProgressCodecTest` | 8 | 进度/书架 JSON 与桌面端字段对齐 |
-| `ChapterFallbackTest` | 6 | 断网时退到最近的已缓存章节 |
-| `LanIntegrationTest` | 8 | **真的起一个桌面端服务**，用客户端代码走 HTTP 与 UDP |
-
-`LanIntegrationTest` 会启动 `tools/_lan-fixture.mjs`（真实 `createLanService`），
-验证书架、正文、单章、进度回写、旧进度不覆盖新进度、错误访问码被挡住、UDP 发现。
-本机没有 `node` 时自动跳过。
+共 153 项，`./gradlew testDebugUnitTest` 一次跑完。`LanIntegrationTest` 21 项**真的起一个桌面端服务**
+（ping / 清单 / 下载 / 分块上传 / 漫画取图 / 进度回写 / 错误访问码 / UDP 发现，
+以及设备流的心跳建档 / 推书下载与 sha1 校验 / 过期清扫 / 唯一副本拒绝 / 快照上报），
+缺 `node` 或 UDP 45678 被占用时跳过、不算失败；其余是纯函数与协议测试：
+`CommandExecutorTest` 16、`SyncDiffTest` 13、`TextParserTest` 10、`SnapshotThrottleTest` 10、
+`ProgressCodecTest` 8、`TextDecoderTest` 7、`BookImporterTest` 7、`SampleSizeTest` 7、
+`ChapterMemoryCacheTest` 7（含「读四章不产生任何磁盘文件」）、`ProgressMergerTest` 7、
+`ComicProgressTest` 6、`DeviceHeadersTest` 6、`HashUtilsTest` 5、`SyncEngineCloudTest` 5、
+`ShelfSectionsTest` 5、`DeviceChannelTest` 5（Lifecycle 翻转 → 连接数 0→1→0）、
+`ComicPageKeyTest` 4、`DeleteConfirmQueueTest` 4。
 
 ## 数据位置
 
-| 内容 | 位置 |
-| --- | --- |
-| 书架缓存 | `files/library/books.json` |
-| 进度缓存 | `files/library/progress.json` |
-| 待补写进度 | `files/library/pending.json` |
-| 本地书正文 | `files/offline/<hash>.txt` + `.json`（章节表） |
-| 云端书章节 | `files/offline/cloud/<hash>-<章号>.txt` |
-| 设置 | `shared_prefs/folio_settings.xml` |
-
-卸载 App 会清掉离线缓存。桌面端的进度不受影响，重装后再同步一次就回来了。
+`files/library/` 下四份 json：书架真相 `books.json`、进度 `progress.json`、待补写 `pending.json`、每本书的 `sync-state.json`；
+本机正文在 `files/books/<id>.txt`（导入中为 `.txt.part`），设置在 `shared_prefs/folio_settings.xml`。
+`cacheDir` 下没有 Folio 的文件 —— 这是红线，不是巧合。从 2.5 升上来时 `Migration` 会把老
+`library/books.json` 的 `{"books":[...]}` 迁成顶层数组，并删掉 `offline/` 里那批章节副本。
 
 ## 已知限制
 
-- **明文 HTTP**。局域网内不加密，换来「扫一眼地址就能用」。访问码是唯一的门，
-  不要把端口映射到公网。
-- **云端书离线只覆盖读过的部分**。要整本离线请用桌面端，或连着网一章章翻过去。
-- **封面依赖桌面端能取到图**。源站图片挂了（如 404）时显示占位图标，不影响阅读。
-- **不做书籍导入**。导入、书源管理、书籍市场仍然只在桌面端。
+- **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。
+- **云端书必须连着桌面端**：想整本离线请用本机导入（云端书不做离线副本）。
+- **超过 30MB 的书不同步**，只在本机读；封面取不到时退回首字色块。

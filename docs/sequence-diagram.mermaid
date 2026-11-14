@@ -1,0 +1,107 @@
+%% Folio 3.0 · 关键时序（对应 docs/arch-android-v3.md §4）
+%% ① 连接后清单对齐 + 双向整文件传输（含冲突分支）
+sequenceDiagram
+  autonumber
+  participant VM as AppViewModel
+  participant CM as ConnectionManager
+  participant SE as SyncEngine
+  participant FC as FolioClient
+  participant LAN as lan.js
+  participant BT as lan-books.js
+  participant DSK as books.json / books/
+
+  VM->>CM: connect(url, token)
+  CM->>FC: GET /api/ping
+  FC->>LAN: (X-Folio-Token)
+  alt 401
+    LAN-->>CM: {ok:false,error:"unauthorized"}
+    CM-->>VM: "访问码不对"
+  else apiVersion < 2
+    LAN-->>CM: {ok:true, apiVersion:1}
+    CM-->>VM: "桌面端太旧，请升级到 2.6.0"
+  else 网络异常
+    CM-->>VM: "连不上桌面端，确认同一 Wi-Fi"
+  else 连接成功
+    LAN-->>CM: {ok,apiVersion:2,features[...]}
+    CM->>SE: align()
+    SE->>FC: GET /api/library
+    FC->>LAN: ...
+    LAN->>BT: library()
+    BT->>DSK: 读 books.json（contentHash 缺失则算 sha1 并写回）
+    BT-->>LAN: [{id,contentHash,title,size,syncable}]
+    LAN-->>SE: {ok,books[]}
+    SE->>SE: diff → toPull / toPush / both / conflict
+    SE->>SE: 合并元数据；conflict 标 CONTENT_MISMATCH（不传）
+    loop 每本 toPull 且 size ≤ 30MB
+      SE->>FC: GET /api/book/:id/download (Range: bytes=bytesDone-)
+      FC->>LAN: ...
+      LAN->>BT: openDownload(id, start)
+      BT-->>FC: 200/206 流 + X-Folio-Hash
+      SE->>SE: 写 <id>.txt.part，边写边 SHA-1
+      alt 校验通过
+        SE->>SE: rename → syncState=SYNCED
+      else 校验失败
+        SE->>SE: 删 .part → FAILED（下轮重下）
+      end
+    end
+    opt 用户确认（或 ≤20MB 自动）
+      loop 每本 toPush
+        SE->>FC: POST /api/upload/status?hash&size
+        LAN-->>SE: {received}
+        loop offset < total（4MB/块，串行）
+          SE->>FC: POST /api/upload/chunk（X-Folio-Offset, octet-stream）
+          LAN->>BT: appendChunk → .incoming/<hash>.part
+          LAN-->>SE: {received,done}
+        end
+        BT->>BT: sha1(.part)==hash → rename books/<title>-<hash8>.txt
+        BT->>DSK: 写 books.json（同 hash 已有 → 复用其 id）
+        LAN-->>SE: {done:true, id}
+        SE->>SE: id 变更则迁移本地 id + 进度 key → SYNCED
+      end
+    end
+    SE->>SE: 写 sync-state.json + lastSyncAt
+    SE-->>VM: "新增 3 · 上传 2 · 冲突 1"
+  end
+
+%% ② 云端漫画取图（预取 + 失败重试）
+sequenceDiagram
+  autonumber
+  participant R as ComicReaderScreen
+  participant IL as ImageLoader
+  participant FC as FolioClient
+  participant LAN as lan.js
+  participant CP as lan-comic.js
+  participant SRC as 源站
+
+  R->>FC: GET /api/comic/:id/pages?i=12
+  FC->>LAN: ...
+  LAN->>CP: pages(book, 12)
+  alt 内存清单命中（32 条 LRU）
+    CP-->>LAN: {total:38}
+  else 未命中
+    CP->>SRC: 抓章节页（Referer + 桌面代理）
+    SRC-->>CP: HTML
+    CP->>CP: 解析图片 URL（不落盘、不外发）
+    CP-->>LAN: {total:38}
+  end
+  LAN-->>R: {ok,total:38}
+  R->>R: LazyColumn 按 total 出固定高度占位（防跳动）
+  R->>IL: request(chapter=12, pages=可见页±2, 并发3)
+  loop 每页
+    IL->>FC: GET /api/comic/:id/page?i=12&p=K
+    FC->>LAN: (X-Folio-Token)
+    LAN->>CP: image(book,12,K)
+    CP->>SRC: GET url（Referer 12s / 重试1）
+    alt 200
+      SRC-->>CP: bytes
+      LAN-->>IL: 200 image/* + no-store
+      IL->>IL: 采样解码 → LruCache(按字节) → StateFlow
+      IL-->>R: Bitmap（替换占位）
+    else 超时 / 403 / 空
+      LAN-->>IL: 502 {error:"源站没有返回这张图"}
+      IL-->>R: PageState.Failed(原因) → 占位显示"重试"
+      R->>IL: 点重试 → request(force=true)
+    end
+  end
+  R->>R: 滚到本话 80% → 预取 i=13 的 pages + 前 2 张
+  R->>IL: 离开阅读器 → clear()（位图与章节内存全释放）

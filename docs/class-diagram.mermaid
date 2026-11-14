@@ -1,0 +1,65 @@
+%% Folio 3.0 · Android 数据模型（对应 docs/arch-android-v3.md §3.2）
+classDiagram
+  class LocalBook {
+    +String id
+    +String title
+    +String? author
+    +Origin origin
+    +String? remoteKind
+    +BookType type
+    +String? contentHash
+    +long size
+    +String? encoding
+    +boolean hasLocalFile
+    +String? cover
+    +String? remoteId
+    +long addedAt
+    +long lastReadAt
+    +SyncState syncState
+    +toJson() JSONObject
+    +fromJson(JSONObject) LocalBook?
+  }
+  class ProgressEntry {
+    +String id
+    +int? paraIndex
+    +int? chapter
+    +int? chapterIndex
+    +String? chapterTitle
+    +int? windowBase
+    +double? percent
+    +long updatedAt
+    +toJson(kind) JSONObject
+  }
+  class SyncState {
+    <<enumeration>>
+    NOT_SYNCED
+    TRANSFERRING
+    SYNCED
+    FAILED
+    CONTENT_MISMATCH
+    EXCLUDED
+  }
+  class Origin { <<enumeration>> LOCAL DESKTOP }
+  class BookType { <<enumeration>> NOVEL COMIC }
+
+  class BookStore { +read() List~LocalBook~ +write(list) +upsert(book) +remove(id) }
+  class ProgressStore { +read() Map~String,ProgressEntry~ +write(map) +readPending() Set~String~ +writePending(set) }
+  class SyncStateStore { +read() Map~String,SyncSnapshot~ +write(map) +mark(id, state, err, bytes) }
+  class BookFileStore { +textFile(id) File +partFile(id) File +openRead(id) File +commit(id) +delete(id) }
+  class SyncEngine { +align() SyncReport +pull(book) +push(book) +diff(local, remote) Diff }
+  class ConnectionManager { +connect(url, token) ConnectResult +health() bool +state StateFlow~ConnState~ }
+  class ChapterMemoryCache { +get(id, i) String? +put(id, i, text) +clear() }
+  class ImageLoader { +request(chapter, page) StateFlow~PageState~ +retry(page) +clear() +sizeBytes() long }
+
+  LocalBook --> Origin
+  LocalBook --> BookType
+  LocalBook --> SyncState
+  ProgressEntry --> LocalBook : keyed by id
+  BookStore "1" o-- "*" LocalBook
+  SyncEngine --> BookStore
+  SyncEngine --> ProgressStore
+  SyncEngine --> SyncStateStore
+  SyncEngine --> BookFileStore
+  SyncEngine --> ConnectionManager
+  ChapterMemoryCache --> LocalBook : cloud only
+  ImageLoader --> LocalBook : type=COMIC

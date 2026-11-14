@@ -1,6 +1,6 @@
 {
   "name": "immersive-reader",
-  "version": "2.5.0",
+  "version": "2.7.0",
   "description": "A minimalist, immersive e-book reader built with Electron and React.",
   "license": "MIT",
   "author": "Folio contributors",
@@ -16,6 +16,8 @@
     "start": "node scripts/start-electron.mjs",
     "check": "node scripts/verify-release.mjs",
     "check:theme": "node tools/_theme-sync.mjs",
+    "check:lan-edge": "node tools/_run-lan-edge.mjs",
+    "check:lan-sync": "node tools/_lan-sync-check.mjs",
     "build:vite": "vite build",
     "build": "vite build && node scripts/build-win.mjs",
     "build:dir": "node scripts/build-win.mjs --win dir",
