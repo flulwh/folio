@@ -1,7 +1,6 @@
 package com.folio.reader.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,40 +8,47 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Book
 import com.folio.reader.core.SyncState
+import com.folio.reader.ui.miuix.HyperGroup
+import com.folio.reader.ui.miuix.HyperRow
+import com.folio.reader.ui.miuix.HyperSectionTitle
 import java.util.Locale
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 同步报告。
+ * 同步报告（HyperOS）：状态卡 + 两个操作 + 冲突提示 + 逐本账本 + 诊断。
  *
- * 存在的理由很朴素：同步失败时用户需要知道**是哪一本、为什么**。
- * 这一版把它排成一份报告 —— 表格式状态块、两枚操作、逐本账本、尾部诊断，
- * 而不是一串 Material 列表。数据仍然只来自 [ShelfUiState]，不在这里另算。
+ * 同步失败时用户需要知道「是哪一本、为什么」，所以每本书都带一行原因。
  */
 @Composable
 fun SyncStatusScreen(
@@ -51,137 +57,138 @@ fun SyncStatusScreen(
 ) {
     val state by vm.shelf.collectAsState()
     val books = state.books.distinctBy { it.id }
+    val scheme = MiuixTheme.colorScheme
     val hasConflicts = state.conflictCount > 0
-    val booksNumber = if (hasConflicts) "02" else "01"
-    val diagNumber = if (hasConflicts) "03" else "02"
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+    Column(Modifier.fillMaxSize().background(scheme.background)) {
+        SyncHeader(onBack = onBack)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
+            contentPadding = PaddingValues(bottom = 32.dp),
         ) {
-            SyncMasthead(onBack = onBack)
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(bottom = 32.dp),
-            ) {
-                item {
-                    StatusTable(state)
-                }
-                item {
-                    ActionRow(
-                        syncing = state.syncing,
-                        onSync = { vm.syncNow() },
-                        onDetect = { vm.testConnection() },
-                    )
-                }
-
-                if (books.isEmpty()) {
-                    item {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .padding(top = 28.dp, bottom = 28.dp),
-                        ) {
-                            Text(
-                                text = "无条目",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "导入一本 txt，或连上桌面端同步一次。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    return@LazyColumn
-                }
-
-                if (hasConflicts) {
-                    item {
-                        SyncSection(
-                            number = "01",
-                            title = "冲突",
-                            trailing = "${state.conflictCount} 本",
+            item {
+                HyperSectionTitle("状态")
+                HyperGroup {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StatCard(
+                            value = if (state.online) "在线" else "离线",
+                            label = "连接",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            value = state.serverVersion.ifBlank { "—" },
+                            label = "桌面端",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatCard(
+                            value = lastSyncText(state.lastSyncAt),
+                            label = "上次同步",
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                    item {
-                        Column(Modifier.background(MaterialTheme.colorScheme.background)) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp)
-                                    .padding(top = 10.dp, bottom = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = "CONFLICT",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    maxLines = 1,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = "有 ${state.conflictCount} 本内容不一致，请选择保留哪一版",
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
-                            FolioListRow(
-                                index = null,
-                                title = "内容不一致",
-                                subtitle = "两端内容不一样，需要逐本确认",
-                                trailing = "${state.conflictCount} 本",
-                                onClick = {},
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(
+                            onClick = { vm.syncNow() },
+                            enabled = !state.syncing,
+                            modifier = Modifier.weight(1f),
+                            cornerRadius = 14.dp,
+                            minHeight = 44.dp,
+                        ) {
+                            Text(
+                                text = if (state.syncing) "同步中…" else "立即同步",
+                                fontSize = 14.sp,
+                                color = scheme.onPrimary,
                             )
-                            FolioHairline()
+                        }
+                        TextButton(
+                            text = "重新检测",
+                            onClick = { vm.testConnection() },
+                            modifier = Modifier.weight(1f),
+                            cornerRadius = 14.dp,
+                            minHeight = 44.dp,
+                        )
+                    }
+                }
+            }
+
+            if (hasConflicts) {
+                item {
+                    HyperSectionTitle("冲突")
+                    HyperGroup {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(scheme.primary)
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "${state.conflictCount} 本内容不一致，请选择保留哪一版",
+                                fontSize = 12.5.sp,
+                                color = scheme.onSurface,
+                                maxLines = 2,
+                            )
                         }
                     }
                 }
+            }
 
-                item {
-                    SyncSection(
-                        number = booksNumber,
-                        title = "逐本状态",
-                        trailing = "${books.size} 项",
-                    )
-                }
+            item {
+                HyperSectionTitle(if (books.isEmpty()) "无条目" else "逐本状态 · ${books.size} 项")
+            }
 
-                items(books, key = { it.id }) { book ->
-                    SyncBookRow(
-                        book = book,
-                        state = state,
-                        onRetry = { vm.retrySync(book) },
-                    )
-                }
-
-                item {
-                    SyncSection(
-                        number = diagNumber,
-                        title = "诊断",
-                        trailing = null,
-                    )
-                }
+            if (books.isEmpty()) {
                 item {
                     Text(
+                        text = "导入一本 txt，或连上桌面端同步一次。",
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        fontSize = 12.5.sp,
+                        color = scheme.onSurfaceVariantSummary,
+                    )
+                }
+            } else {
+                item {
+                    HyperGroup {
+                        books.forEachIndexed { index, book ->
+                            SyncBookRow(
+                                book = book,
+                                state = state,
+                                onRetry = { vm.retrySync(book) },
+                            )
+                            if (index < books.lastIndex) {
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 18.dp)
+                                        .height(1.dp)
+                                        .background(scheme.dividerLine)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                HyperSectionTitle("诊断")
+                HyperGroup {
+                    Text(
                         text = diagnosticsOf(state),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp)
-                            .padding(top = 10.dp, bottom = 24.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        fontSize = 11.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = scheme.onSurfaceVariantSummary,
                     )
                 }
             }
@@ -189,93 +196,130 @@ fun SyncStatusScreen(
     }
 }
 
-/* ---------------- 报头 ---------------- */
-
 @Composable
-private fun SyncMasthead(onBack: () -> Unit) {
+private fun SyncHeader(onBack: () -> Unit) {
+    val scheme = MiuixTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            .background(scheme.background)
             .statusBarsPadding()
-            .padding(horizontal = 20.dp)
-            .padding(top = 4.dp),
+            .padding(horizontal = 18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            FolioIconAction(
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                onClick = onBack,
-                size = 36.dp,
-                iconSize = 18.dp,
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = "SYNC / REPORT",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onBack),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    modifier = Modifier.size(20.dp),
+                    tint = scheme.onSurface,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(text = "SYNC / REPORT", fontSize = 11.sp, color = scheme.primary)
         }
         Text(
             text = "同步",
-            modifier = Modifier.padding(top = 2.dp),
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+            fontSize = 30.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = scheme.onSurface,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun StatCard(value: String, label: String, modifier: Modifier = Modifier) {
+    val scheme = MiuixTheme.colorScheme
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(scheme.secondary)
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = value,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = scheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(12.dp))
-        FolioRule()
-    }
-}
-
-/* ---------------- 状态块 ---------------- */
-
-/** 三列统计表，列间一条 1dp 竖线。 */
-@Composable
-private fun StatusTable(state: ShelfUiState) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(top = 16.dp, bottom = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FolioStat(
-            value = if (state.online) "在线" else "离线",
-            label = "连接状态",
-            modifier = Modifier.weight(1f),
-        )
-        VerticalHairline()
-        FolioStat(
-            value = state.serverVersion.ifBlank { "—" },
-            label = "桌面端版本",
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
-        )
-        VerticalHairline()
-        FolioStat(
-            value = lastSyncText(state.lastSyncAt),
-            label = "上次同步",
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
-        )
+        Spacer(Modifier.height(2.dp))
+        Text(text = label, fontSize = 10.5.sp, color = scheme.onSurfaceVariantSummary, maxLines = 1)
     }
 }
 
 @Composable
-private fun VerticalHairline() {
-    Box(
-        Modifier
-            .width(1.dp)
-            .height(38.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant),
-    )
+private fun SyncBookRow(book: Book, state: ShelfUiState, onRetry: () -> Unit) {
+    val scheme = MiuixTheme.colorScheme
+    val syncState = state.stateOf(book)
+    val reason = state.reasonOf(book)
+    val percent = state.transferPercent(book)
+    val retryable = syncState == SyncState.FAILED || syncState == SyncState.NOT_SYNCED
+
+    Column(Modifier.fillMaxWidth()) {
+        HyperRow(
+            title = book.title,
+            summary = buildString {
+                append(state.sourceLabelOf(book))
+                append(" · ")
+                append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
+                if (!reason.isNullOrBlank()) append(" · ").append(reason)
+            },
+            onClick = if (retryable) onRetry else null,
+            trailing = {
+                Text(text = labelOf(syncState), fontSize = 11.5.sp, color = scheme.onSurfaceVariantSummary)
+            },
+        )
+        if (syncState == SyncState.TRANSFERRING) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(scheme.dividerLine),
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(scheme.primary)
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(text = "$percent%", fontSize = 11.sp, color = scheme.onSurfaceVariantSummary)
+            }
+        }
+        if (retryable) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text(
+                    text = "重试",
+                    modifier = Modifier
+                        .clickable(onClick = onRetry)
+                        .padding(horizontal = 18.dp, vertical = 6.dp),
+                    fontSize = 11.5.sp,
+                    color = scheme.primary,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 
 private fun lastSyncText(at: Long): String {
@@ -288,153 +332,6 @@ private fun lastSyncText(at: Long): String {
         else -> android.text.format.DateFormat.format("MM-dd", at).toString()
     }
 }
-
-/* ---------------- 操作行 ---------------- */
-
-@Composable
-private fun ActionRow(syncing: Boolean, onSync: () -> Unit, onDetect: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .height(44.dp)
-                .background(
-                    MaterialTheme.colorScheme.onSurface,
-                    RoundedCornerShape(2.dp),
-                )
-                .clickable(enabled = !syncing, onClick = onSync),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (syncing) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 1.5.dp,
-                        color = MaterialTheme.colorScheme.background,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "同步中",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.background,
-                        maxLines = 1,
-                    )
-                }
-            } else {
-                Text(
-                    text = "立即同步",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.background,
-                    maxLines = 1,
-                )
-            }
-        }
-        Box(
-            Modifier
-                .weight(1f)
-                .height(44.dp)
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    shape = RoundedCornerShape(2.dp),
-                )
-                .clickable(onClick = onDetect),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "重新检测",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-/* ---------------- 区块 / 逐本 ---------------- */
-
-@Composable
-private fun SyncSection(number: String, title: String, trailing: String?) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 20.dp)
-            .padding(top = 18.dp, bottom = 8.dp),
-    ) {
-        FolioSectionHeader(number = number, title = title, trailing = trailing)
-    }
-}
-
-@Composable
-private fun SyncBookRow(book: Book, state: ShelfUiState, onRetry: () -> Unit) {
-    val syncState = state.stateOf(book)
-    val reason = state.reasonOf(book)
-    val percent = state.transferPercent(book)
-    val retryable = syncState == SyncState.FAILED || syncState == SyncState.NOT_SYNCED
-
-    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background)) {
-        FolioListRow(
-            index = null,
-            title = book.title,
-            subtitle = buildString {
-                append(state.sourceLabelOf(book))
-                append(" · ")
-                append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
-                if (!reason.isNullOrBlank()) append(" · ").append(reason)
-            },
-            trailing = labelOf(syncState),
-            onClick = { if (retryable) onRetry() },
-        )
-        if (syncState == SyncState.TRANSFERRING) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp)
-                    .padding(bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FolioProgressRail(
-                    progress = (percent / 100f).coerceIn(0f, 1f),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text = "$percent%",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                )
-            }
-        }
-        if (retryable) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Text(
-                    text = "重试",
-                    modifier = Modifier
-                        .clickable(onClick = onRetry)
-                        .padding(horizontal = 20.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                )
-            }
-        }
-        FolioHairline()
-    }
-}
-
-/* ---------------- 尾部诊断 ---------------- */
 
 private fun diagnosticsOf(state: ShelfUiState): String {
     val last = if (state.lastSyncAt > 0L) {

@@ -1467,6 +1467,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 fontFamily = settings.fontFamily,
                 themePreset = settings.themePreset,
                 pagePadding = settings.pagePadding,
+                readingMode = settings.readingMode,
                 comicDirection = settings.comicDirection,
                 accent = settings.accent.toLong() and 0xFFFFFFFFL,
                 paper = settings.paper.toLong() and 0xFFFFFFFFL,
@@ -1514,6 +1515,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun updateLineHeight(value: Float) {
         settings.lineHeight = value
         _settings.update { it.copy(lineHeight = value) }
+    }
+
+    fun updateReadingMode(mode: String) {
+        val safe = if (mode == SettingsStore.MODE_PAGED) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+        settings.readingMode = safe
+        _settings.update { it.copy(readingMode = safe) }
     }
 
     fun updateLetterSpacing(value: Float) {

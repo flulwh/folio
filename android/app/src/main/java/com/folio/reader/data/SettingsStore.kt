@@ -110,6 +110,16 @@ class SettingsStore(context: Context) {
         get() = prefs.getInt(KEY_PAGE_PADDING, 24)
         set(value) = prefs.edit().putInt(KEY_PAGE_PADDING, value.coerceIn(12, 48)).apply()
 
+    /**
+     * 阅读方式：`scroll` 上下滚动 / `paged` 左右翻页。
+     *
+     * 翻页模式按「章」分页（`ReaderPager`），只计算当前这一章的页边界，
+     * 所以四十多万段的长篇也不会在打开时整本排一遍。
+     */
+    var readingMode: String
+        get() = prefs.getString(KEY_READING_MODE, MODE_SCROLL) ?: MODE_SCROLL
+        set(value) = prefs.edit().putString(KEY_READING_MODE, value).apply()
+
     /** 主题色（ARGB）。 */
     var accent: Int
         get() = prefs.getInt(KEY_ACCENT, 0xFFC4251C.toInt())
@@ -221,6 +231,10 @@ class SettingsStore(context: Context) {
         const val COMIC_VERTICAL = "vertical"
         const val COMIC_HORIZONTAL = "horizontal"
 
+        /** 阅读方式：上下滚动 / 左右翻页。 */
+        const val MODE_SCROLL = "scroll"
+        const val MODE_PAGED = "paged"
+
         /** 自动滚动速度档位（px/秒），与 UI 上的四档一一对应。 */
         val AUTO_SCROLL_SPEEDS = intArrayOf(18, 32, 52, 80)
 
@@ -239,6 +253,7 @@ class SettingsStore(context: Context) {
         private const val KEY_THEME_PRESET = "theme_preset"
         private const val KEY_COMIC_DIRECTION = "comic_direction"
         private const val KEY_PAGE_PADDING = "page_padding"
+        private const val KEY_READING_MODE = "reading_mode"
         private const val KEY_ACCENT = "accent"
         private const val KEY_PAPER = "paper"
         private const val KEY_INK = "ink"

@@ -8,6 +8,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -17,14 +18,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /* ==========================================================================
-   Folio · 现代主义网格（Swiss editorial）
+   Folio · HyperOS 皮肤
    --------------------------------------------------------------------------
-   冷白纸底、墨黑字、正红一点。发丝线代替阴影，直角代替胶囊，等宽数字代替
-   圆体数字。界面上所有「元信息」——章节号、百分比、时间、页码——都用等宽，
-   让读者一眼看到结构；正文则留白、克制、只服务阅读。
-
-   颜色只有三层：纸、墨、朱。其余层级靠透明度与 1dp 发丝线拉出来，
-   避免 Material 默认的紫色渐变与阴影堆叠。
+   组件结构、圆角、动效全部交给 Miuix（HyperOS 观感）；品牌色仍然是纸、墨、朱：
+   - 底色 = 当前阅读底色预设（白 / 纸 / 米 / 石墨 / 夜间）
+   - 卡片 = 纸底提亮一点，圆角 16–28dp，层级靠底色差而不是重阴影
+   - 强调色 = 朱砂（#C4251C），只出现在进度、开关、当前项
+   正文的排版（字号 / 行距 / 字距 / 段距）与皮肤无关，仍由阅读设置驱动。
    ========================================================================== */
 
 /** 阅读底色预设（同时决定阅读器与整个 App 的明暗）。 */
@@ -214,13 +214,13 @@ val FolioTypography: Typography = Typography(
     ),
 )
 
-/** 纸是方的：所有组件统一 2dp 直角，抽屉顶角也不做圆。 */
+/** 纸是软的：HyperOS 的圆角语言，卡片 16dp、抽屉 28dp。 */
 val FolioShapes: Shapes = Shapes(
-    extraSmall = RoundedCornerShape(1.dp),
-    small = RoundedCornerShape(2.dp),
-    medium = RoundedCornerShape(2.dp),
-    large = RoundedCornerShape(2.dp),
-    extraLarge = RoundedCornerShape(2.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
 )
 
 /* --------------------------------- 主题 --------------------------------- */
@@ -293,18 +293,116 @@ private fun tint(from: Color, toward: Color, amount: Float): Color =
         alpha = 1f,
     )
 
+/* ------------------------------ Miuix 配色 ------------------------------ */
+
+/**
+ * 把纸色预设映射到 Miuix 的 HyperOS 色板。
+ *
+ * 只覆盖「有品牌含义」的几组，其余用 Miuix 默认值：
+ * primary = 朱砂（开关 / 滑杆 / 选中）；
+ * background = 阅读底色；surface = 提亮后的卡片色；
+ * secondaryContainer = 输入框 / 分段控件的浅底。
+ */
+fun miuixSchemeFor(palette: ReadingPalette) = with(palette) {
+    val card = if (isDark) mix(bg, ink, 0.10f) else mix(bg, Color.White, 0.72f)
+    val elevated = if (isDark) mix(bg, ink, 0.16f) else mix(bg, ink, 0.06f)
+    val quiet = if (isDark) mix(bg, ink, 0.22f) else mix(bg, ink, 0.10f)
+    if (isDark) {
+        top.yukonga.miuix.kmp.theme.darkColorScheme(
+            primary = accent,
+            onPrimary = Color(0xFF1A0503),
+            primaryVariant = accent,
+            primaryContainer = accent.copy(alpha = 0.22f),
+            onPrimaryContainer = ink,
+            secondary = elevated,
+            onSecondary = ink,
+            secondaryVariant = card,
+            onSecondaryVariant = soft,
+            secondaryContainer = elevated,
+            onSecondaryContainer = soft,
+            tertiaryContainer = accent.copy(alpha = 0.18f),
+            onTertiaryContainer = accent,
+            background = bg,
+            onBackground = ink,
+            onBackgroundVariant = soft,
+            surface = card,
+            onSurface = ink,
+            surfaceVariant = card,
+            onSurfaceSecondary = ink.copy(alpha = 0.82f),
+            onSurfaceVariantSummary = soft,
+            onSurfaceVariantActions = soft.copy(alpha = 0.72f),
+            disabledOnSurface = soft.copy(alpha = 0.38f),
+            outline = quiet,
+            dividerLine = ink.copy(alpha = 0.10f),
+            surfaceContainer = elevated,
+            onSurfaceContainer = ink,
+            onSurfaceContainerVariant = soft,
+            surfaceContainerHigh = quiet,
+            onSurfaceContainerHigh = soft,
+            surfaceContainerHighest = quiet,
+            onSurfaceContainerHighest = ink,
+        )
+    } else {
+        top.yukonga.miuix.kmp.theme.lightColorScheme(
+            primary = accent,
+            onPrimary = Color.White,
+            primaryVariant = accent,
+            primaryContainer = accent.copy(alpha = 0.14f),
+            onPrimaryContainer = ink,
+            secondary = elevated,
+            onSecondary = ink,
+            secondaryVariant = Color.White,
+            onSecondaryVariant = ink,
+            secondaryContainer = elevated,
+            onSecondaryContainer = soft,
+            tertiaryContainer = accent.copy(alpha = 0.10f),
+            onTertiaryContainer = accent,
+            background = bg,
+            onBackground = ink,
+            onBackgroundVariant = soft,
+            surface = card,
+            onSurface = ink,
+            surfaceVariant = card,
+            onSurfaceSecondary = ink.copy(alpha = 0.82f),
+            onSurfaceVariantSummary = soft,
+            onSurfaceVariantActions = soft.copy(alpha = 0.72f),
+            disabledOnSurface = soft.copy(alpha = 0.38f),
+            outline = quiet,
+            dividerLine = ink.copy(alpha = 0.08f),
+            surfaceContainer = elevated,
+            onSurfaceContainer = ink,
+            onSurfaceContainerVariant = soft,
+            surfaceContainerHigh = elevated,
+            onSurfaceContainerHigh = soft,
+            surfaceContainerHighest = card,
+            onSurfaceContainerHighest = ink,
+        )
+    }
+}
+
+private fun mix(a: Color, b: Color, amount: Float): Color =
+    Color(
+        red = a.red + (b.red - a.red) * amount,
+        green = a.green + (b.green - a.green) * amount,
+        blue = a.blue + (b.blue - a.blue) * amount,
+        alpha = 1f,
+    )
+
 @Composable
 fun FolioTheme(
     preset: String,
     content: @Composable () -> Unit,
 ) {
     val palette = readingPalette(preset)
+    val miuixColors = remember(palette) { miuixSchemeFor(palette) }
     androidx.compose.runtime.CompositionLocalProvider(LocalReadingPalette provides palette) {
-        MaterialTheme(
-            colorScheme = schemeFor(palette),
-            typography = FolioTypography,
-            shapes = FolioShapes,
-            content = content,
-        )
+        top.yukonga.miuix.kmp.theme.MiuixTheme(colors = miuixColors) {
+            MaterialTheme(
+                colorScheme = schemeFor(palette),
+                typography = FolioTypography,
+                shapes = FolioShapes,
+                content = content,
+            )
+        }
     }
 }
