@@ -10,6 +10,7 @@
 <meta property="og:description" content="书架在自己硬盘上，进度只在局域网里走。Windows + Android，免费开源。" />
 <meta property="og:type" content="website" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2314110f'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23f4ece1'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23c75b3f'/%3E%3C/svg%3E" />
+<script>document.documentElement.classList.add('js');</script>
 <style>
   :root {
     --ink: #14110f;
@@ -124,7 +125,7 @@
   }
   .hero .wrap {
     display: grid;
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
     align-items: center;
     gap: 40px;
     position: relative;
@@ -149,7 +150,7 @@
   h1 {
     font-family: var(--serif);
     font-weight: 500;
-    font-size: clamp(44px, 5.6vw, 76px);
+    font-size: clamp(44px, 4.9vw, 66px);
     line-height: 1.16;
     letter-spacing: -0.01em;
     margin: 0 0 24px;
@@ -698,17 +699,17 @@
   .site-foot a { transition: color 0.2s var(--ease); }
   .site-foot a:hover { color: var(--text); }
 
-  /* reveal */
-  .reveal {
+  /* reveal：默认可见，只有 JS 正常时才隐藏等滚动进场 */
+  html.js .reveal {
     opacity: 0;
     transform: translateY(22px);
     transition: opacity 0.8s var(--ease), transform 0.8s var(--ease);
   }
-  .reveal.in { opacity: 1; transform: none; }
+  html.js .reveal.in { opacity: 1; transform: none; }
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    .reveal { opacity: 1; transform: none; transition: none; }
+    html.js .reveal { opacity: 1; transform: none; transition: none; }
     .reader, .panel, .phone { transition: none; }
     .btn { transition: none; }
   }
@@ -768,7 +769,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <span class="eyebrow">本地优先 · 桌面 + 安卓</span>
-        <h1>把书架，<br>放回<em>你自己的硬盘</em>。</h1>
+        <h1>把书架，放回<br><em>你自己的硬盘</em>。</h1>
         <p class="lede">Folio 是一台 Windows 阅读器，也是一个独立的安卓阅读器。两端各自存书，只在局域网里交换进度、书签和阅读痕迹。</p>
         <div class="cta-row">
           <a class="btn btn-primary" id="dl-win" href="https://github.com/flulwh/folio/releases" data-label="下载 Windows 版">
