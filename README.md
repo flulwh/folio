@@ -4,6 +4,8 @@
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
 Android 端是原生 **Kotlin + Compose** 客户端，与桌面端走局域网同步进度和阅读痕迹。
 
+官网：[flulwh.github.io/folio](https://flulwh.github.io/folio/) · 源码在 `site/`，推送即由 GitHub Pages 发布。
+
 ![desktop](https://img.shields.io/github/v/release/flulwh/folio?filter=v2.*&label=desktop&color=2b2e33) ![android](https://img.shields.io/github/v/release/flulwh/folio?filter=android-*&label=Android&logo=android&logoColor=white&color=3ddc84) ![license](https://img.shields.io/badge/license-MIT-087ea4) ![platform](https://img.shields.io/badge/Windows-10%20%2F%2011-2b2e33) ![tech](https://img.shields.io/badge/Electron-30-2b2e33) ![tech](https://img.shields.io/badge/React-18-087ea4) [![Android CI](https://github.com/flulwh/folio/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/flulwh/folio/actions/workflows/android.yml)
 
 ---
