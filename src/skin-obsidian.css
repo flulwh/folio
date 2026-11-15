@@ -83,15 +83,13 @@ html[data-skin='obsidian'] .app::after {
   }
 }
 
-html[data-skin='obsidian'] .view,
+/* .view 的 position:absolute / inset:0 是 index.css 的骨架，这里不能改写成
+   relative：整页内容（.settings-page 等）都是绝对定位、不参与撑高，
+   .view 一旦进入常规流就会塌成 0 高，设置页只剩页头可见。
+   纵深交给 motion-obsidian.js 的 perspective 与封面 Tilt，不需要 preserve-3d。 */
 html[data-skin='obsidian'] .shelf {
-  position: relative;
-  z-index: 1;
   background: transparent;
   transform-style: preserve-3d;
-}
-
-html[data-skin='obsidian'] .shelf {
   padding-left: 44px;
   padding-right: 44px;
 }
