@@ -441,7 +441,7 @@ export const DEFAULT_SETTINGS = {
   },
 };
 
-const THEME_NAMES = ['paper', 'sepia', 'night', 'forest'];
+const THEME_NAMES = ['paper', 'sepia', 'night', 'forest', 'obsidian'];
 
 const normalizeCustomThemes = (list) =>
   (Array.isArray(list) ? list : []).map((item) => normalizeTheme(item)).filter(Boolean);

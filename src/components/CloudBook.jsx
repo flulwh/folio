@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { useAppActions, useProgress, useSettings, dataApi } from '../store/AppStore.jsx';
 import Reader from './Reader.jsx';
 import { IconArrowLeft, IconList, IconRefresh, IconSparkle } from './Icons.jsx';

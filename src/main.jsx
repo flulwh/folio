@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { MotionGlobalConfig } from 'framer-motion';
+import { MotionGlobalConfig } from 'motion/react';
 import App from './App.jsx';
 import { AppProvider } from './store/AppStore.jsx';
 import './index.css';
@@ -11,12 +11,15 @@ import './design/base.css';
 import './design/shelf.css';
 import './design/reader.css';
 import './design/library.css';
+/* 黑曜皮肤放在 design/ 之后：它要改的是"材质与纵深"，而通用层负责排版骨架，
+   顺序在后才能用同级选择器覆盖，不必动用 !important。 */
+import './skin-obsidian.css';
 /* MIUI 的手感层必须最后加载：它要和 design/ 抢同一批控件的形态与反馈，
    放在最后才不必用 !important 硬顶。作用域仍限定在 [data-skin='miui']，
    Apple 皮肤完全不受影响。见文件头注释。 */
 import './miui-motion.css';
 
-/* 截图/回归用的确定性开关：?static=1 让 framer 的补间一律瞬时完成。
+/* 截图/回归用的确定性开关：?static=1 让 Motion 的补间一律瞬时完成。
    没有它，headless 下 AnimatePresence mode="wait" 的退场动画可能永远不结束，
    面板会截成空白（假 bug）。只影响带参数打开的窗口，正常启动无副作用。 */
 if (new URLSearchParams(window.location.search).has('static')) {

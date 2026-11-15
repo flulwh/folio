@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   useAppActions,
   useBooks,
@@ -397,15 +397,27 @@ export default function SettingsPage({ onClose }) {
                   <h3 className="settings-group-title">界面风格</h3>
                   <Row
                     title="外观语言"
-                    hint="Apple 克制风，或 MIUI Console 风；两套皮肤即时切换。皮肤决定形态与动效，配色跟随上方主题"
+                    hint="Apple 克制风、MIUI Console 风，或黑曜：深空玻璃 + 3D 纵深。皮肤决定形态与动效；黑曜自带「黑曜」主题，切走时回到深色主题"
                   >
                     <Segmented
                       options={[
                         { value: 'apple', label: 'Apple' },
                         { value: 'miui', label: 'MIUI' },
+                        { value: 'obsidian', label: '黑曜' },
                       ]}
                       value={settings.skin || 'apple'}
-                      onChange={(skin) => patchSettings({ skin })}
+                      onChange={(skin) =>
+                        patchSettings({
+                          skin,
+                          // 黑曜是「皮肤 + 配色」一体设计的：底色必须跟着走，
+                          // 否则深空玻璃会浮在浅色纸上。切走时退回普通深色主题。
+                          ...(skin === 'obsidian'
+                            ? { theme: 'obsidian' }
+                            : settings.theme === 'obsidian'
+                              ? { theme: 'night' }
+                              : {}),
+                        })
+                      }
                     />
                   </Row>
                   <label className="switch-row">

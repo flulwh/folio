@@ -63,9 +63,11 @@ src/                渲染层（React）
 ├── miui.css           MIUI 皮肤源文件
 ├── skin-miui.css      由 miui.css 作用域化生成的产物（勿直接改）
 ├── miui-motion.css    MIUI 的按下 / 悬停 / 拖动
+├── skin-obsidian.css  黑曜皮肤：深空玻璃、紫电、封面 3D（作用域 html[data-skin='obsidian']）
 ├── themes.js          主题令牌副本（设置页预览卡 + 运行时注入）
 ├── motion.js          Apple 动效套件
 ├── motion-miui.js     MIUI 动效套件
+├── motion-obsidian.js 黑曜动效套件（真实 3D：perspective + translateZ）
 ├── motion-kit.js      皮肤 → 套件映射，唯一取用入口
 ├── hooks/             useVirtualScroll / useCachedCover / usePresence / useFontLoader
 ├── utils/             chapters / sortedIndex / text / format / friendly / shortcuts
@@ -138,6 +140,8 @@ dataDir/
 
 皮肤管**形态**（圆角、阴影、动效语言），主题管**颜色**。两者正交：
 MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`。
+唯一的例外是黑曜：它的玻璃与纵深是按深空底色设计的，所以选中皮肤会连带切到同名主题
+（`obsidian`），切走时回到 `night`。
 
 扩展方式见 [themes.md](themes.md)。
 
@@ -145,6 +149,8 @@ MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`
 
 ## 六、动效系统
 
-动效分两套语言，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口。
+动效分三套语言，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口。
+底层引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`，
+framer-motion 的官方继任包）；三套皮肤共用引擎，差在令牌与变体，不重复引库。
 
 细节见 [motion.md](motion.md)。

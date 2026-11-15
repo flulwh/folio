@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
+import Tilt from 'react-parallax-tilt';
 import { useMotionKit } from '../motion-kit.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useDevices, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
@@ -67,11 +68,52 @@ function coverStyle(book) {
   };
 }
 
-function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, coverTick, variants }) {
+function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, coverTick, variants, tilt }) {
   const percentValue = Math.min(100, Math.max(0, percent || 0));
   const finished = percentValue >= 99.5;
   const coverTickValue = coverTick; // 批量封面就绪后重新求一次地址
   const coverSrc = useCachedCover(book, coverTickValue);
+
+  // 封面本体。黑曜皮肤会把它包进 Tilt（见下方），其他皮肤直接渲染。
+  const cover = (
+    <button
+      className={`book-cover${coverSrc ? ' has-art' : ''}`}
+      style={coverStyle(book)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpen(book);
+      }}
+    >
+      <span className="cover-spine" />
+      {coverSrc && (
+        <span className="cover-art">
+          <img
+            src={coverSrc}
+            alt=""
+            loading="lazy"
+            draggable={false}
+            onError={(e) => {
+              e.currentTarget.parentElement?.classList.remove('ready');
+            }}
+          />
+        </span>
+      )}
+      <span className="cover-frame" />
+      <span className="cover-title">{book.name}</span>
+      <span className="cover-shine" />
+      {book.kind === 'cloud' && (
+        <span className="cover-cloud" title={`来自书源：${cleanSourceName(book.sourceName)}`}>
+          <IconCloud size={12} />
+          书源
+        </span>
+      )}
+      {percentValue > 0 && (
+        <span className={`cover-badge${finished ? ' finished' : ''}`}>
+          {finished ? '已读完' : formatPercent(percentValue)}
+        </span>
+      )}
+    </button>
+  );
 
   return (
     <motion.div
@@ -82,43 +124,27 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, 
       onClick={() => onOpen(book)}
       onContextMenu={(e) => onContext?.(e, book)}
     >
-      <button
-        className={`book-cover${coverSrc ? ' has-art' : ''}`}
-        style={coverStyle(book)}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpen(book);
-        }}
-      >
-        <span className="cover-spine" />
-        {coverSrc && (
-          <span className="cover-art">
-            <img
-              src={coverSrc}
-              alt=""
-              loading="lazy"
-              draggable={false}
-              onError={(e) => {
-                e.currentTarget.parentElement?.classList.remove('ready');
-              }}
-            />
-          </span>
-        )}
-        <span className="cover-frame" />
-        <span className="cover-title">{book.name}</span>
-        <span className="cover-shine" />
-        {book.kind === 'cloud' && (
-          <span className="cover-cloud" title={`来自书源：${cleanSourceName(book.sourceName)}`}>
-            <IconCloud size={12} />
-            书源
-          </span>
-        )}
-        {percentValue > 0 && (
-          <span className={`cover-badge${finished ? ' finished' : ''}`}>
-            {finished ? '已读完' : formatPercent(percentValue)}
-          </span>
-        )}
-      </button>
+      {/* 3D 倾斜只在黑曜皮肤里开：其他两套的封面语言是平的，加倾斜会打架。
+          角度压得很小（7°/9°），配一层紫光 glare，像玻璃书封被灯照到。 */}
+      {tilt ? (
+        <Tilt
+          className="cover-tilt"
+          tiltMaxAngleX={7}
+          tiltMaxAngleY={9}
+          perspective={900}
+          scale={1.03}
+          transitionSpeed={900}
+          gyroscope={false}
+          glareEnable
+          glareMaxOpacity={0.16}
+          glareColor="#b3aaff"
+          glarePosition="all"
+        >
+          {cover}
+        </Tilt>
+      ) : (
+        cover
+      )}
       <div className="book-meta">
         <div className="book-meta-text">
           <div className="book-name" title={book.name}>
@@ -170,11 +196,13 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, 
 
 export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) {
   const kit = useMotionKit();
-  // 级联节奏随皮肤走：苹果 18ms 紧凑，MIUI 26ms 能看出"一列列亮起来"
-  const containerVariants = useMemo(
-    () => (kit.id === 'miui' ? kit.stagger(0.026, 0.06) : kit.stagger(0.018, 0.05)),
-    [kit]
-  );
+  // 级联节奏随皮肤走：苹果 18ms 紧凑，MIUI 26ms 能看出"一列列亮起来"，
+  // 黑曜 30ms——每项还带 60px 景深差，太密就看不出"从深处依次归位"。
+  const containerVariants = useMemo(() => {
+    if (kit.id === 'miui') return kit.stagger(0.026, 0.06);
+    if (kit.id === 'obsidian') return kit.stagger(0.03, 0.04);
+    return kit.stagger(0.018, 0.05);
+  }, [kit]);
   const books = useBooks();
   const devices = useDevices();
   const progress = useProgress();
@@ -675,6 +703,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                   index={i}
                   coverTick={coverTick}
                   variants={kit.rise}
+                  tilt={kit.id === 'obsidian'}
                   percent={percentOf(book)}
                   onOpen={onOpenBook}
                   onDelete={setPendingDelete}

@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { IconList, IconSearch, IconX } from './Icons.jsx';
 import { usePresence } from '../hooks/usePresence.js';

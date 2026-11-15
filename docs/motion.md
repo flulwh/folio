@@ -1,25 +1,37 @@
 # 动效系统
 
-动效分**两套语言**，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口：
+动效分**三套语言**，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口：
 组件不再直接 import 某个变体，而是 `const kit = useMotionKit()`，由当前皮肤决定拿到哪套。
 
+引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`）。它此前叫
+framer-motion，12 版起换了包名、重写了内核，API 基本兼容；三套皮肤共用这一个引擎。
+
 ```
-src/motion.js        Apple  ·「沉降」
-src/motion-miui.js   MIUI   ·「回弹 + 推进」
+src/motion.js        Apple    ·「沉降」
+src/motion-miui.js   MIUI     ·「回弹 + 推进」
+src/motion-obsidian.js 黑曜   ·「纵深」（perspective + translateZ）
 src/motion-kit.js    皮肤 → 套件映射 + useMotionKit() / motionKitFor(skin)
 src/miui-motion.css  MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载）
+src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容器的样式）
 ```
 
-## 两套手感差在哪
+## 三套手感差在哪
 
-| 维度 | Apple（沉降） | MIUI（回弹 + 推进） |
-| --- | --- | --- |
-| 转场 | 交叉淡化 + 0.992→1 缩放 | 从右侧推入 34px，旧页向左让位 |
-| 入书 | 缩放 1.012→1，几乎看不出位移 | 0.94→1 的「长出来」，弹簧过冲 |
-| 弹簧阻尼比 | 0.88–1.0（临界阻尼，不晃） | 0.70–0.93（刻意欠阻尼，收尾有回弹） |
-| 列表级联 | 20ms 一拍 | 26ms 一拍，能看出「一列列亮起来」 |
-| 亮度 | 悬停抬起 3–5px | 悬停不位移，只有按压才位移 |
-| 按压 | 0.97，140ms 平滑 | 0.96，按下 80ms 直线、松手 260ms 弹簧 |
+| 维度 | Apple（沉降） | MIUI（回弹 + 推进） | 黑曜（纵深） |
+| --- | --- | --- | --- |
+| 转场 | 交叉淡化 + 0.992→1 缩放 | 从右侧推入 34px，旧页向左让位 | 旧层下沉、新层从 -140px 推上来，带 9° 微转 |
+| 入书 | 缩放 1.012→1，几乎看不出位移 | 0.94→1 的「长出来」，弹簧过冲 | 从 -240px 逼近，像把书抽出来 |
+| 弹簧阻尼比 | 0.88–1.0（临界阻尼，不晃） | 0.70–0.93（刻意欠阻尼，收尾有回弹） | 0.78–0.93（比 MIUI 稳，比 Apple 有重量） |
+| 列表级联 | 20ms 一拍 | 26ms 一拍，能看出「一列列亮起来」 | 30ms 一拍，每项还差 60px 景深 |
+| 亮度 | 悬停抬起 3–5px | 悬停不位移，只有按压才位移 | 悬停交给封面 3D 倾斜，位移只在按压 |
+| 按压 | 0.97，140ms 平滑 | 0.96，按下 80ms 直线、松手 260ms 弹簧 | 0.98 + 1px 下沉，收尾快 |
+
+### 三条原则（黑曜侧）
+
+1. **转场必须有透视。** 所有页面级变体都写成 `perspective(1600px) rotateX(…) rotateY(…) translateZ(…) scale(…)`，
+   五个函数的顺序在三个状态间完全一致 —— Motion 才能逐项插值，否则整段跳变。
+2. **旋转不超过 12°。** 它只负责暗示体积；再大就变成 PPT 翻页，正文也会跟着糊。
+3. **玻璃要有重量。** ζ 压在 0.80–0.88：落定后允许一下极轻的呼吸，不能晃。
 
 ### 三条原则（MIUI 侧）
 
@@ -58,8 +70,30 @@ src/miui-motion.css  MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载�
 | `MI_SPRING.pop` | k620 / c27 / m0.60（ζ≈0.70） | 弹窗、提示条 |
 | `MI_SPRING.chrome` | k420 / c34 / m0.80（ζ≈0.93） | 阅读器上下工具栏 |
 
-两套的键名完全一致（`page / zoom / sheet / backdrop / modal / toast / stagger / rise /
+### 黑曜（`src/motion-obsidian.js`）
+
+| Token | 值 | 用途 |
+| --- | --- | --- |
+| `EASE` | `cubic-bezier(0.16, 1, 0.3, 1)` | 长尾收束：玻璃滑到位后还要「贴住」底 |
+| `EASE_IN` | `cubic-bezier(0.4, 0, 1, 1)` | 退场，多一帧都显得迟疑 |
+| `DUR.page / slow / base / fast / instant` | 420 / 360 / 260 / 180 / 100ms | 页面、遮罩、控件、退场、即时 |
+| `SPRING.surface` | k260 / c30 / m0.90（ζ≈0.88） | 面板 |
+| `SPRING.card` | k300 / c27 / m0.85（ζ≈0.84） | 封面、列表项 |
+| `SPRING.pop` | k380 / c24 / m0.80（ζ≈0.80） | 弹窗，一次轻微过冲 |
+| `SPRING.toast` | k460 / c24 / m0.70（ζ≈0.78） | 提示条 |
+| `SPRING.chrome` | k420 / c34 / m0.85（ζ≈0.93） | 阅读器上下工具栏 |
+
+三套的键名完全一致（`page / zoom / sheet / backdrop / modal / toast / stagger / rise /
 settle / spring / dur / ease / chrome / section`），缺一个切皮肤时就会漏动画。
+
+## 封面 3D（只属于黑曜）
+
+`react-parallax-tilt` 负责指针跟随的倾斜与紫光 glare，参数在 `Bookshelf.jsx` 的 `BookCard`：
+最大 7°/9°、`scale 1.03`、`transitionSpeed 900`。只包在 `kit.id === 'obsidian'` 时启用——
+另两套的封面语言是平的，加倾斜会打架。
+
+CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴影、`cover-shine` 扫光。
+透视由 Tilt 自己给，所以 `.book-grid` 上**不能**再写 `perspective`，否则双重透视会变形。
 
 ## 组件映射
 
@@ -84,20 +118,21 @@ settle / spring / dur / ease / chrome / section`），缺一个切皮肤时就�
 皮肤想要的那套交互才真的跑得起来。它整套规则仍挂在 `[data-skin='miui']` 下，Apple 不受影响。
 
 高频交互（按下、悬停、拖动）必须是 CSS：按下到变色之间不能有一次 React 渲染的延迟。
-位移和转场才交给 framer。
+位移和转场才交给 Motion。
 
 ## 降低动效
 
 - 设置里的「减少动效」→ `document.documentElement.dataset.motion = off`，`design/base.css`
   统一把动画/过渡压到 0.01ms；
-- `<MotionConfig reducedMotion>` 让 framer 只保留透明度动画（所以每个变体都带 opacity 通道）；
+- `<MotionConfig reducedMotion>` 让 Motion 只保留透明度动画（所以每个变体都带 opacity 通道）；
 - `@media (prefers-reduced-motion: reduce)` 兜底系统级偏好；
 - 橡皮筋开关是靠 `width` 变形的，压掉时长仍会留一个静态宽度，`miui-motion.css` 里单独锁死。
 
 ## 改动的文件
 
-`src/motion.js`、`src/motion-miui.js`、`src/motion-kit.js`、`src/miui-motion.css`、
-`src/main.jsx`、`src/App.jsx`、`src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`
+`src/motion.js`、`src/motion-miui.js`、`src/motion-obsidian.js`、`src/motion-kit.js`、
+`src/skin-obsidian.css`、`src/miui-motion.css`、`src/main.jsx`、`src/App.jsx`、
+`src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`
 
 ## 实测数据（脚本测得，非目测）
 

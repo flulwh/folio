@@ -18,6 +18,7 @@
  */
 import * as apple from './motion.js';
 import * as miui from './motion-miui.js';
+import * as obsidian from './motion-obsidian.js';
 import { useSettings } from './store/AppStore.jsx';
 
 const APPLE_KIT = {
@@ -62,12 +63,31 @@ const MIUI_KIT = {
   section: miui.sectionVariants,
 };
 
-export const MOTION_KITS = { apple: APPLE_KIT, miui: MIUI_KIT };
+const OBSIDIAN_KIT = {
+  id: 'obsidian',
+  page: obsidian.pageVariants,
+  zoom: obsidian.zoomInVariants,
+  sheet: obsidian.sheetVariants,
+  backdrop: obsidian.backdropVariants,
+  modal: obsidian.modalVariants,
+  toast: obsidian.toastVariants,
+  stagger: obsidian.staggerContainer,
+  rise: obsidian.riseItem,
+  settle: obsidian.settleItem,
+  spring: obsidian.SPRING,
+  dur: obsidian.DUR,
+  ease: obsidian.EASE,
+  chrome: obsidian.chromeTransition,
+  section: obsidian.sectionVariants,
+};
 
-export const motionKitFor = (skin) => (skin === 'miui' ? MIUI_KIT : APPLE_KIT);
+export const MOTION_KITS = { apple: APPLE_KIT, miui: MIUI_KIT, obsidian: OBSIDIAN_KIT };
+
+export const motionKitFor = (skin) =>
+  skin === 'miui' ? MIUI_KIT : skin === 'obsidian' ? OBSIDIAN_KIT : APPLE_KIT;
 
 /** 当前皮肤的动效套件。皮肤只在设置里改，重渲染成本可以忽略。 */
 export function useMotionKit() {
   const settings = useSettings();
-  return settings?.skin === 'miui' ? MIUI_KIT : APPLE_KIT;
+  return motionKitFor(settings?.skin);
 }

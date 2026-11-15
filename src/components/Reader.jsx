@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { motionKitFor } from '../motion-kit.js';
 import { useAppActions, useFonts, useMarks, useProgress, useSettings } from '../store/AppStore.jsx';
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';

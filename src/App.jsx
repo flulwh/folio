@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { useMotionKit } from './motion-kit.js';
 import { useAppActions, useBooks, useLoaded, useSettings, useThemeState, useToast } from './store/AppStore.jsx';
 import Bookshelf from './components/Bookshelf.jsx';
@@ -248,9 +248,10 @@ export default function App() {
     document.documentElement.dataset.motion = settings.reduceMotion ? 'off' : 'on';
   }, [settings.reduceMotion]);
 
-  // 界面风格：apple.css 与 skin-miui.css 并存，靠 html[data-skin] 切换
+  // 界面风格：apple.css / skin-miui.css / skin-obsidian.css 并存，靠 html[data-skin] 切换
   useEffect(() => {
-    document.documentElement.dataset.skin = settings.skin === 'miui' ? 'miui' : 'apple';
+    const skin = settings.skin === 'miui' || settings.skin === 'obsidian' ? settings.skin : 'apple';
+    document.documentElement.dataset.skin = skin;
   }, [settings.skin]);
 
   // 全局「?」打开快捷键说明；输入框里不拦截

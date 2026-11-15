@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { usePresence } from '../hooks/usePresence.js';
 import NoteDialog from './NoteDialog.jsx';

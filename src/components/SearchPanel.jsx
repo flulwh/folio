@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { usePresence } from '../hooks/usePresence.js';
 import { IconSearch, IconX } from './Icons.jsx';

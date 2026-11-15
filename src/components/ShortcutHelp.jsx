@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { IconCommand, IconX } from './Icons.jsx';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';

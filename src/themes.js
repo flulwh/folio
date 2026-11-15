@@ -129,6 +129,27 @@ export const BUILTIN_THEMES = [
       toolbarBg: 'rgba(242, 244, 243, 0.9)',
     },
   },
+  {
+    id: 'obsidian',
+    label: '黑曜',
+    tone: 'dark',
+    builtin: true,
+    tokens: {
+      bg: '#07070b',
+      bgElevated: '#101018',
+      bgSunken: '#030305',
+      bgHover: 'rgba(236, 235, 245, 0.06)',
+      text: '#ecebf5',
+      textSoft: '#9e9bb3',
+      textFaint: '#89869c',
+      line: 'rgba(236, 235, 245, 0.11)',
+      accent: '#8a7cff',
+      accentSoft: 'rgba(138, 124, 255, 0.16)',
+      accentContrast: '#07070b',
+      sheetBg: 'rgba(16, 16, 24, 0.86)',
+      toolbarBg: 'rgba(7, 7, 11, 0.76)',
+    },
+  },
 ];
 
 const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|[a-z]+)$/i;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import { motionKitFor } from '../motion-kit.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useSettings, useSources, dataApi } from '../store/AppStore.jsx';

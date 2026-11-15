@@ -11,8 +11,11 @@
 2. **不加 `!important`**。靠加载顺序（新层在最后）+ 特异性解决。新层文件按下面顺序导入：
    ```
    index.css → apple.css → skin-miui.css → design/tokens.css → design/base.css
-   → design/shelf.css → design/reader.css → design/library.css → miui-motion.css
+   → design/shelf.css → design/reader.css → design/library.css
+   → skin-obsidian.css → miui-motion.css
    ```
+   `skin-obsidian.css` 是黑曜皮肤的材质层（玻璃 / 纵深 / 封面 3D），作用域
+   `html[data-skin='obsidian']`，放在 `design/` 之后是因为它要改的是既有的控件外观。
    `miui-motion.css` 是 MIUI 皮肤的手感层，只在 `[data-skin='miui']` 下生效，必须排在最后
    —— 否则 design/ 的控件形态会把皮肤的按压与滑块盖回去（见 `docs/motion.md`）。
 3. **只用 tokens**，不写死颜色。可用变量见 `src/design/tokens.css`：
