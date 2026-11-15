@@ -12,9 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
-        // 3.5.3：修字体商店首次打开报错（内置目录兜底）与已装字体重复 key 崩溃（versionCode 19）。
-        versionCode = 19
-        versionName = "3.5.3"
+        // 3.6.0：设备页「刷新快照」改为下发 refresh-snapshot 指令（versionCode 20）。
+        versionCode = 20
+        versionName = "3.6.0"
         vectorDrawables.useSupportLibrary = true
     }
 

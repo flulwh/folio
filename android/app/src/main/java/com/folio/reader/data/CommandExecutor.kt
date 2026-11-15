@@ -103,6 +103,23 @@ fun interface DeleteConfirmer {
 }
 
 /**
+ * `refresh-snapshot` 的执行体。
+ *
+ * 桌面端设备页的「刷新快照」按钮以前只是重读 `devices.json`，并没有真的问手机；
+ * 现在它入队一条无 hash 的指令，手机收到后**强刷**一次快照（跳过 60s 节流）。
+ */
+fun interface SnapshotReporter {
+
+    /** @return true 表示桌面端已收下；false 表示不支持或网络失败 */
+    suspend fun report(): Boolean
+
+    companion object {
+        /** 没接同步引擎时的默认实现：什么都没发生。 */
+        val NONE: SnapshotReporter = SnapshotReporter { false }
+    }
+}
+
+/**
  * 一条指令的执行结果，直接对应桌面端回执的 `{state, error, detail}`。
  *
  * @param state 只有 `done` / `failed` 两个值（桌面端 400 挡掉其余）
@@ -135,8 +152,8 @@ data class CommandOutcome(
 }
 
 /**
- * 指令执行器（T08）：把桌面端排队的 `push-book` / `remove-book` / `pull-book`
- * 变成手机上的真动作，并把结果回执给桌面端。
+ * 指令执行器（T08）：把桌面端排队的 `push-book` / `remove-book` / `pull-book` /
+ * `refresh-snapshot` 变成手机上的真动作，并把结果回执给桌面端。
  *
  * 四条纪律：
  *  1. **不写传输代码**。两类搬运全走 [BookTransfer]（真身是 [SyncEngine]），
@@ -156,6 +173,7 @@ class CommandExecutor(
     private val files: BookFileStore,
     private val transfer: BookTransfer,
     private val confirmer: DeleteConfirmer = DeleteConfirmer.REJECT,
+    private val snapshot: SnapshotReporter = SnapshotReporter.NONE,
 ) {
 
     /**
@@ -202,6 +220,8 @@ class CommandExecutor(
      * 单独暴露出来是为了让单测能只验「做的事对不对」，不必起一个 HTTP 服务器收回执。
      */
     suspend fun run(command: DeviceCommand): CommandOutcome {
+        // 刷新快照不针对某本书，没有 hash；它要走的也不是搬运通道。
+        if (command.type == TYPE_REFRESH_SNAPSHOT) return refreshSnapshot(command)
         val hash = hashOf(command)
             ?: return CommandOutcome.failed(
                 commandId = command.id,
@@ -220,7 +240,28 @@ class CommandExecutor(
         }
     }
 
-    /* ---------------- 三类指令 ---------------- */
+    /** `refresh-snapshot`：立刻上报一次快照，跳过 60s 节流。 */
+    private suspend fun refreshSnapshot(command: DeviceCommand): CommandOutcome {
+        val sent = try {
+            snapshot.report()
+        } catch (err: CancellationException) {
+            throw err
+        } catch (err: Exception) {
+            false
+        }
+        return if (sent) {
+            CommandOutcome.done(command.id, "已上报书架与存储快照")
+        } else {
+            // 失败原因枚举只有七种，都是搬运语义；这里最接近的是「可重试」。
+            CommandOutcome.failed(
+                commandId = command.id,
+                code = CommandError.NETWORK_INTERRUPTED,
+                detail = "快照没能送到电脑端，请检查连接",
+            )
+        }
+    }
+
+    /* ---------------- 三类搬运指令 ---------------- */
 
     /** `push-book`：桌面端说「把这本书推到手机」→ 手机这里就是拉下来。 */
     private suspend fun pushBook(command: DeviceCommand, hash: String): CommandOutcome =
@@ -318,6 +359,9 @@ class CommandExecutor(
         const val TYPE_PUSH_BOOK = "push-book"
         const val TYPE_REMOVE_BOOK = "remove-book"
         const val TYPE_PULL_BOOK = "pull-book"
+
+        /** 桌面端设备页「刷新快照」：payload 为空对象，不携带 hash。 */
+        const val TYPE_REFRESH_SNAPSHOT = "refresh-snapshot"
 
         /** sha1 十六进制长度。 */
         private const val HASH_LENGTH = 40

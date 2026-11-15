@@ -7,8 +7,8 @@
 | [architecture.md](architecture.md) | 进程模型、目录职责、关键设计取舍、主题与动效系统 | 2026-11-14 |
 | [lan-panel.md](lan-panel.md) | 局域网面板：架构、接口表、双向同步链路、安全边界、故障排查 | 2026-11-14 |
 | [arch-android-v3.md](arch-android-v3.md) | 安卓 3.0 实现方案：选型、数据结构、关键时序、文件清单 | 2026-11-14 |
-| [arch-device-manager.md](arch-device-manager.md) | 设备管理：设备身份、指令队列协议、失败原因 | 2026-11-14 |
-| [android.md](android.md) | Android 客户端：独立阅读器定位、两类书的同步规则、零缓存自证、漫画、构建与测试 | 2026-11-14 |
+| [arch-device-manager.md](arch-device-manager.md) | 设备管理：设备身份、指令队列协议、失败原因 | 2026-11-15 |
+| [android.md](android.md) | Android 客户端：独立阅读器定位、两类书的同步规则、零缓存自证、漫画、构建与测试 | 2026-11-15 |
 | [prd-android-v3.md](prd-android-v3.md) | 安卓 3.0 需求池与书源模型 | 2026-11-14 |
 | [prd-device-manager.md](prd-device-manager.md) | 设备管理需求范围 | 2026-11-14 |
 

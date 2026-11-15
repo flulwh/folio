@@ -494,6 +494,8 @@ class SyncEngine(
             files = files,
             transfer = this@SyncEngine,
             confirmer = confirmer,
+            // 用户手动点「刷新快照」：跳过 60s 节流，马上把当前书架与存储余量报上去。
+            snapshot = SnapshotReporter { reportSnapshot(force = true) },
         ).runAll(client, fetched.commands)
     }
 

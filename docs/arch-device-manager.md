@@ -74,7 +74,7 @@
 
 - 鉴权：沿用 `authorized()`；设备头缺失的请求能过鉴权但**不建记录、不回指令**。
 - 大小限制：snapshot body ≤ 256KB（`readBody` 现有 512KB 够用）；指令 payload ≤ 4KB。
-- 入队即广播：`publish('command',{deviceId,commandId})`（手机若在线会立刻拉取）+ `broadcast('lan:command')`。
+- 入队即广播：`publish('command',{deviceId,commandId})`（手机若在线会立刻拉取）+ `broadcast('lan:command')`；手机回执落盘后也会再广播一次 `lan:command`，设备页据此重读队列与快照。
 
 ### 2.2 指令类型
 
@@ -83,10 +83,13 @@
 | `push-book` | `{hash,title,size}` | 手机 | 手机先 `GET /api/library` 按 hash 反查桌面 id，再走现有 `GET /api/book/:id/download`（Range 续传） |
 | `remove-book` | `{hash,title,unique:boolean}` | 手机 | 本地删除（`unique=true` 必须手机端二次确认） |
 | `pull-book` | `{hash,title,size}` | 手机 | 手机走现有 `POST /api/upload/status|chunk`，桌面端 `commitUpload` 落盘 |
+| `refresh-snapshot` | `{}`（无 hash） | 手机 | 立刻 `POST /api/device/snapshot`，跳过 60s 节流 |
 
 **`push-book` 的 id 反查**：payload 里只有 `hash`，而下载接口要的是桌面端 `book.id`。手机收到指令后先拉一次 `/api/library`（几十 KB）按 `contentHash` 反查 id；查不到说明桌面端确实已经没有这份副本 → 回执 `source_gone`。**不要为此给 payload 加字段** —— 那会让协议和桌面端 2.6.0 的清单语义分叉，而一次清单快照的成本远低于双端兼容成本。
 
-**没有第四种类型**：A3 补齐 = 一次入队 N 条 `push-book`（带同一 `batchId`），单批 ≤50 本 / ≤2GB，超出直接拒绝（"单批最多 50 本 / 2GB，请分批"），不做批量指令类型。
+**`refresh-snapshot` 为什么不带 hash**：它不针对任何一本书，只是「请把当前书架与存储余量报上来」。桌面端设备页的「刷新快照」按钮走它，手机执行后回 `done`；上报失败回 `network_interrupted`（枚举里没有更贴切的值，桌面文案是「传输中断，可重试」）。它和另外三类一样入队、去重、7 天过期，但**不能放进批量**。
+
+**批量不用第四种类型**：A3 补齐 = 一次入队 N 条 `push-book`（带同一 `batchId`），单批 ≤50 本 / ≤2GB，超出直接拒绝（"单批最多 50 本 / 2GB，请分批"），不做批量指令类型。
 
 ---
 
@@ -152,10 +155,10 @@ pending ──桌面端取消/清空──▶ cancelled(仅history)
 
 | 规则 | 定义 |
 | --- | --- |
-| 去重 | 入队时同 `type + payload.hash` 已有 pending → 不新增，只刷 `createdAt/expiresAt`，响应带 `duplicate:true` |
+| 去重 | 入队时同 `type + payload.hash` 已有 pending → 不新增，只刷 `createdAt/expiresAt`，响应带 `duplicate:true`；`refresh-snapshot` 没有 hash，同类型有 pending 即视为重复 |
 | 寿命 | `expiresAt = createdAt + 7d`；读路径与手机领取前惰性清扫，`devices:list` 亦触发；**绝不静默重发** |
 | 重试 | 仅用户点按（单条重试/重发按钮），生成新的 `createdAt/expiresAt` |
-| 幂等 | push-book 已有同 hash → 直接回执 done；remove-book 手机已无此书 → done；pull-book 桌面已有同 hash → done |
+| 幂等 | push-book 已有同 hash → 直接回执 done；remove-book 手机已无此书 → done；pull-book 桌面已有同 hash → done；refresh-snapshot 每次都会真的再报一次快照 |
 
 **失败原因枚举（回执 `error` 值 ↔ 桌面端红点文案，逐字）**
 
@@ -206,7 +209,7 @@ pending ──桌面端取消/清空──▶ cancelled(仅history)
 | Android | 修改 | `data/SettingsStore.kt` | `installId`（UUID 懒生成持久化）、`deviceName` |
 | Android | 修改 | `net/FolioClient.kt` | 统一设备头；`heartbeat/fetchCommands/postReceipt/postSnapshot/openEvents`（SSE 读循环） |
 | Android | 新增 | `data/DeviceChannel.kt` | 前台 SSE 生命周期（lifecycle 感知）、command 事件→触发拉取 |
-| Android | 新增 | `data/CommandExecutor.kt` | 逐条执行三类指令，复用 SyncEngine 下载/上传路径；失败原因枚举 |
+| Android | 新增 | `data/CommandExecutor.kt` | 逐条执行三类搬运指令 + `refresh-snapshot`，复用 SyncEngine 下载/上传路径；失败原因枚举 |
 | Android | 修改 | `data/SyncEngine.kt` | align 结束回调 → 快照上报（60s 节流）+ pending 检查 |
 | Android | 修改 | `ui/ShelfScreen.kt`（或新 `ui/DeviceConfirmDialog.kt`） | `remove-book unique=true` 全局确认弹层（文案逐字） |
 | Android | 修改 | `app/build.gradle.kts` | 3.1.0 / versionCode 3 |

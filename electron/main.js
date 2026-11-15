@@ -1311,6 +1311,10 @@ function ensureLanService() {
     onDeviceChanged: (id, online) => {
       broadcast('lan:device', { id, online, at: Date.now() });
     },
+    // 手机回执落盘（含 refresh-snapshot 带来的新快照）后让设备页重读一次。
+    onCommandReceipt: (deviceId, commandId, state) => {
+      broadcast('lan:command', { deviceId, commandId, state, at: Date.now() });
+    },
   });
   return lanService;
 }

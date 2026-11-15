@@ -476,6 +476,8 @@ export function createLanService(opts) {
     devices = null,
     // 设备在线/离线时通知主进程 broadcast('lan:device')。
     onDeviceChanged = () => {},
+    // 手机回执落盘后通知主进程 broadcast('lan:command')：设备页据此重读队列与快照。
+    onCommandReceipt = () => {},
     // 已安装字体的只读视图（list / open）；手机直连 GitHub 失败时回退到这里。
     fonts = null,
   } = opts;
@@ -1132,6 +1134,13 @@ export function createLanService(opts) {
     try {
       const result = devices.receipt(deviceId, commandId, input || {});
       sendJson(res, 200, { ok: true, state: result.state });
+      // 回执可能带着新快照（refresh-snapshot 的执行结果），设备页要立刻重读；
+      // 普通指令的回执也会让「待执行 N 项」少一条，同样值得推一次。
+      try {
+        onCommandReceipt(deviceId, commandId, result.state);
+      } catch (err) {
+        log('warn', `指令回执回推失败：${err?.message || err}`);
+      }
     } catch (err) {
       sendDeviceError(res, err);
     }

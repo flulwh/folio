@@ -337,6 +337,33 @@ process.stdout.write('\n--- 7. retry / cancel / clear ---\n');
 }
 
 /* ------------------------------------------------------------------ */
+/* 7.5 refresh-snapshot：不携带 hash 的指令                              */
+/* ------------------------------------------------------------------ */
+process.stdout.write('\n--- 7.5 refresh-snapshot ---\n');
+{
+  const first = store.enqueue({ deviceId: 'dev-a', type: 'refresh-snapshot' });
+  check(
+    'refresh-snapshot 允许没有 payload',
+    first.ok === true && first.command.type === 'refresh-snapshot',
+    JSON.stringify(first.command).slice(0, 160),
+  );
+  check(
+    'refresh-snapshot payload 归一成空对象',
+    Object.keys(first.command.payload || {}).length === 0,
+    JSON.stringify(first.command.payload),
+  );
+
+  const again = store.enqueue({ deviceId: 'dev-a', type: 'refresh-snapshot', payload: { hash: 'ignored' } });
+  check(
+    '排队中的 refresh-snapshot 去重',
+    again.duplicate === true &&
+      deviceById(file, 'dev-a').commands.filter((c) => c.type === 'refresh-snapshot').length === 1,
+    String(again.duplicate),
+  );
+  store.clear('dev-a');
+}
+
+/* ------------------------------------------------------------------ */
 /* 8. history 裁到 50                                                   */
 /* ------------------------------------------------------------------ */
 process.stdout.write('\n--- 8. history 裁剪 ---\n');

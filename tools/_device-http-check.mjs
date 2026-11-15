@@ -54,6 +54,8 @@ const writeJson = (file, data) => {
 let clock = 1_700_000_000_000;
 const deviceStore = createDeviceStore({ dataDir: root, readJson, writeJson, now: () => clock });
 const deviceEvents = [];
+/** 回执落盘后的回推（main.js 据此 broadcast('lan:command')）。 */
+const commandEvents = [];
 const service = createLanService({
   files,
   booksDir,
@@ -63,6 +65,7 @@ const service = createLanService({
   getVersion: () => '2.7.0-device-check',
   devices: deviceStore,
   onDeviceChanged: (id, online) => deviceEvents.push({ id, online }),
+  onCommandReceipt: (deviceId, commandId, state) => commandEvents.push({ deviceId, commandId, state }),
 });
 
 const port = 24000 + Math.floor(Math.random() * 800);
@@ -266,6 +269,11 @@ try {
       device: true,
     });
     check('receipt done → 200', done.res.status === 200 && done.json?.state === 'done', `status=${done.res.status} body=${done.text.slice(0, 120)}`);
+    check(
+      '回执落盘后回推 lan:command',
+      commandEvents.some((e) => e.deviceId === DEVICE_ID && e.commandId === commandId && e.state === 'done'),
+      JSON.stringify(commandEvents),
+    );
     check('done 后进 history', savedDevice()?.history?.some((h) => h.id === commandId && h.state === 'done') === true, JSON.stringify(savedDevice()?.history?.map((h) => h.state)));
   }
 

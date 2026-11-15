@@ -40,7 +40,10 @@ export const HISTORY_LIMIT = 50;
 /** 指令 payload 序列化上限 4KB。 */
 export const PAYLOAD_LIMIT = 4096;
 
-const COMMAND_TYPES = new Set(['push-book', 'remove-book', 'pull-book']);
+const COMMAND_TYPES = new Set(['push-book', 'remove-book', 'pull-book', 'refresh-snapshot']);
+
+/** 不需要书籍 hash 的指令：只表达「做什么」，payload 为空对象。 */
+const HASH_FREE_TYPES = new Set(['refresh-snapshot']);
 const HASH_RE = /^[0-9a-f]{40}$/i;
 
 /** 抛一个带 code 的异常，供 lan.js 映射成 HTTP 状态码。 */
@@ -410,7 +413,9 @@ export function createDeviceStore({ dataDir, readJson, writeJson, now } = {}) {
 
   /* ---------------- 指令 ---------------- */
 
-  function normalizePayload(payload) {
+  function normalizePayload(payload, kind) {
+    // 「请上报快照」不针对某本书，没有 hash 可校验；payload 一律归一成空对象。
+    if (HASH_FREE_TYPES.has(kind)) return {};
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       fail('bad_payload', '指令 payload 必须是对象');
     }
@@ -430,12 +435,13 @@ export function createDeviceStore({ dataDir, readJson, writeJson, now } = {}) {
 
   /**
    * 入队。同 `type + payload.hash` 已有 pending → 只刷新时间并返回 duplicate:true。
+   * `refresh-snapshot` 没有 hash，同类型有排队就视为重复，避免连点堆一队。
    * 单批上限（50 本 / 2GB）由上层按 batchId 计算，这里只管单条。
    */
   function enqueue({ deviceId, type, payload, batchId } = {}) {
     const kind = String(type || '');
     if (!COMMAND_TYPES.has(kind)) fail('bad_type', '不支持的指令类型');
-    const data = normalizePayload(payload);
+    const data = normalizePayload(payload, kind);
     const ts = at();
     const state = load();
     const rec = recById(state, deviceId);
@@ -445,7 +451,9 @@ export function createDeviceStore({ dataDir, readJson, writeJson, now } = {}) {
       (command) =>
         command.state === 'pending' &&
         command.type === kind &&
-        String(command.payload?.hash || '').toLowerCase() === data.hash,
+        // refresh-snapshot 没有 hash，排队中的同类指令只留一条
+        (HASH_FREE_TYPES.has(kind) ||
+          String(command.payload?.hash || '').toLowerCase() === data.hash),
     );
     if (duplicate) {
       duplicate.createdAt = ts;

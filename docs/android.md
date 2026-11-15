@@ -131,8 +131,10 @@ App 在前台（`ON_START`）时挂一根 `/api/events` 的 SSE 长连接，退�
 
 ### 指令与失败原因
 
-三类指令逐条串行执行：`push-book`（Range 下载 + sha1 校验）、`remove-book`、
-`pull-book`（4MiB 分块上传）。都复用 3.0 已有的传输代码，指令本身不携带字节。
+四类指令逐条串行执行：`push-book`（Range 下载 + sha1 校验）、`remove-book`、
+`pull-book`（4MiB 分块上传）、`refresh-snapshot`（立刻上报一次快照，跳过 60s 节流）。
+前三类都复用 3.0 已有的传输代码，指令本身不携带字节；`refresh-snapshot` 没有 hash，
+只复用 `SyncEngine.reportSnapshot(force = true)`。
 
 | 回执 `error` | 什么时候出现 |
 | --- | --- |

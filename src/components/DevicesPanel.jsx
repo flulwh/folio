@@ -42,6 +42,7 @@ const TYPE_LABEL = {
   'push-book': '发送到手机',
   'remove-book': '从手机移除',
   'pull-book': '拉到电脑',
+  'refresh-snapshot': '刷新快照',
 };
 
 const MAX_BATCH_BOOKS = 50;
@@ -549,11 +550,24 @@ export default function DevicesPanel() {
           <button
             className="btn ghost small"
             type="button"
-            disabled={!online}
-            title={online ? '重新读取这台手机最近一次上报的书架' : '需要手机在线'}
-            onClick={() => {
-              deviceActions.refresh?.();
-              notify('已重新读取设备记录');
+            disabled={!online || busy}
+            title={online ? '请手机立刻上报一次书架与存储快照' : '需要手机在线'}
+            onClick={async () => {
+              if (!selected) return;
+              setBusy(true);
+              const result = await deviceActions.enqueue({
+                deviceId: selected.id,
+                type: 'refresh-snapshot',
+                payload: {},
+              });
+              setBusy(false);
+              // enqueue 刚广播过一次 lan:command，回执落盘后还会再来一次，
+              // 设备页两次都会重读，所以这里只需要一句话交代发生了什么。
+              if (!result?.ok) {
+                notify('刷新没成功，请稍后再试', 'error');
+                return;
+              }
+              notify(result?.duplicate ? '手机正在刷新，稍等一下' : '已请手机上报最新书架');
             }}
           >
             刷新快照

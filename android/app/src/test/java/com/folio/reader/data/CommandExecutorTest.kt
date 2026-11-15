@@ -18,7 +18,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 
 /**
- * 指令执行器（T08）：三类指令 + 幂等 + 失败原因枚举。
+ * 指令执行器（T08）：四类指令 + 幂等 + 失败原因枚举。
  *
  * 传输层用 [FakeTransfer] 替身：这一层要验的是**指令层自己做的事**（payload 解析、
  * 方向对不对、删除顺序、确认分支、回执内容），字节怎么走属于 `SyncEngine` 的测试范围。
@@ -41,6 +41,10 @@ class CommandExecutorTest {
 
     private var confirmCount = 0
 
+    /** 快照上报被叫了几次、结果如何（refresh-snapshot 用）。 */
+    private var snapshotCalls = 0
+    private var snapshotOk = true
+
     @Before
     fun setUp() {
         libraryDir = File(tmp.root, "library").apply { mkdirs() }
@@ -51,6 +55,8 @@ class CommandExecutorTest {
         transfer = FakeTransfer()
         confirmCount = 0
         confirmer = DeleteConfirmer.REJECT
+        snapshotCalls = 0
+        snapshotOk = true
     }
 
     private fun executor(): CommandExecutor = CommandExecutor(
@@ -60,6 +66,10 @@ class CommandExecutorTest {
         files = files,
         transfer = transfer,
         confirmer = confirmer,
+        snapshot = SnapshotReporter {
+            snapshotCalls += 1
+            snapshotOk
+        },
     )
 
     /**
@@ -225,6 +235,33 @@ class CommandExecutorTest {
         assertEquals("unsupported", executor().run(bad).error)
         assertEquals("payload 不是 JSON 也不能崩", "unsupported", executor().run(broken).error)
         assertTrue("一条都不该真的去搬", transfer.pulls.isEmpty())
+    }
+
+    /* ---------------- 三·五、refresh-snapshot ---------------- */
+
+    @Test
+    fun refreshSnapshot强刷一次快照且不碰搬运() = runBlocking {
+        // 这条指令没有 hash，不能像其它三类那样先过 hashOf 校验
+        val outcome = executor().run(
+            DeviceCommand(id = "c-snap", type = CommandExecutor.TYPE_REFRESH_SNAPSHOT, payloadJson = "{}"),
+        )
+
+        assertTrue("快照上报成功要回 done，实际 ${outcome.state}/${outcome.error}", outcome.ok)
+        assertEquals("必须真的问一次手机快照", 1, snapshotCalls)
+        assertTrue("不能走下载", transfer.pulls.isEmpty())
+        assertTrue("不能走上传", transfer.pushes.isEmpty())
+    }
+
+    @Test
+    fun refreshSnapshot上报失败回可重试() = runBlocking {
+        snapshotOk = false
+        val outcome = executor().run(
+            DeviceCommand(id = "c-snap2", type = CommandExecutor.TYPE_REFRESH_SNAPSHOT, payloadJson = "{}"),
+        )
+
+        assertFalse(outcome.ok)
+        assertEquals(CommandError.NETWORK_INTERRUPTED.wire, outcome.error)
+        assertEquals(1, snapshotCalls)
     }
 
     /* ---------------- 四、失败原因枚举 ---------------- */
