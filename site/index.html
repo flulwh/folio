@@ -102,9 +102,9 @@
     gap: 30px;
     font-size: 13px;
     color: inherit;
-    opacity: 0.72;
   }
   .nav a { transition: opacity 0.25s var(--ease); }
+  .nav a:not(.nav-gh):not(.nav-me) { opacity: 0.72; }
   .nav a:hover { opacity: 1; }
   .nav-gh {
     padding: 7px 16px;
@@ -113,6 +113,20 @@
     opacity: 1;
   }
   .nav-gh:hover { background: rgba(217, 119, 87, 0.14); }
+  .nav-me {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 16px;
+    border-radius: 999px;
+    background: var(--clay);
+    color: #fff;
+    font-weight: 500;
+    opacity: 1;
+    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+  }
+  .nav-me:hover { opacity: 1; background: #c1653f; transform: translateY(-1px); }
+  .nav-me span { font-size: 11px; }
 
   /* ---------- hero ---------- */
   .hero {
@@ -547,7 +561,7 @@
     .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .feature:nth-child(3n + 1) { padding-left: 30px; border-left: 1px solid rgba(20, 20, 19, 0.14); }
     .feature:nth-child(2n + 1) { padding-left: 0; border-left: 0; }
-    .nav a:not(.nav-gh) { display: none; }
+    .nav a:not(.nav-gh):not(.nav-me) { display: none; }
     .deck-track { height: auto; }
     .deck-pin {
       position: static;
@@ -574,6 +588,8 @@
   @media (max-width: 640px) {
     .wrap { padding: 0 20px; }
     .site-head { padding: 16px 0; }
+    .nav { gap: 12px; font-size: 12px; }
+    .nav-me, .nav-gh { padding: 6px 12px; }
     .hero { padding-top: calc(var(--head-h) + 26px); padding-bottom: 56px; }
     h1.hero-title { font-size: clamp(36px, 10.4vw, 50px); }
     .lede { font-size: 14.5px; }
@@ -606,6 +622,7 @@
       <a href="#features">功能</a>
       <a href="#gallery">界面</a>
       <a href="#type">排版</a>
+      <a class="nav-me" href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页<span aria-hidden="true">↗</span></a>
       <a class="nav-gh" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
@@ -793,6 +810,7 @@
     <a class="brand" href="#top">Folio<span class="brand-dot"></span></a>
     <span>© <span id="year">2026</span> · 本地优先的阅读器</span>
     <nav aria-label="页脚">
+      <a href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页</a>
       <a href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/flulwh/folio/releases" target="_blank" rel="noopener">更新日志</a>
       <a href="https://github.com/flulwh/folio/tree/main/docs" target="_blank" rel="noopener">文档</a>
