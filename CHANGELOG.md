@@ -4,7 +4,7 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。桌面端版本号唯一来源是 `package.json`；
 Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
-## [未发布]
+## [2.11.0] — 2026-11-15
 
 **新的「黑曜」皮肤：深空玻璃 + 封面 3D 倾斜，暗色界面终于有了纵深。**
 
