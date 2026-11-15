@@ -9,13 +9,12 @@
 <meta property="og:title" content="Folio · 本地优先的双端阅读器" />
 <meta property="og:description" content="书架在自己硬盘上，进度只在局域网里走。Windows + Android，免费开源。" />
 <meta property="og:type" content="website" />
+<meta property="og:image" content="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/bookshelf.png" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141413'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23faf9f5'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23d97757'/%3E%3C/svg%3E" />
-<script src="./vendor/gsap.min.js"></script>
-<script src="./vendor/ScrollTrigger.min.js"></script>
+<script src="./vendor/motion.js"></script>
 <script>
-  if (window.gsap && window.ScrollTrigger &&
-      !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    document.documentElement.classList.add('has-gsap');
+  if (window.Motion && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    document.documentElement.classList.add('has-motion');
   }
 </script>
 <style>
@@ -57,6 +56,7 @@
   }
   a { color: inherit; text-decoration: none; }
   img, svg { display: block; }
+  figure { margin: 0; }
   ::selection { background: var(--clay); color: #fff; }
 
   .wrap {
@@ -191,7 +191,11 @@
     stroke-dasharray: 320;
     stroke-dashoffset: 0;
   }
-  html.has-gsap .scribble path { stroke-dashoffset: 320; }
+  html.has-motion .scribble path { stroke-dashoffset: 320; }
+  html.has-motion.drawn .scribble path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 0.9s ease-in-out 0.7s;
+  }
 
   .lede {
     max-width: 32em;
@@ -251,11 +255,11 @@
     opacity: 0.9;
   }
 
-  /* ---------- device mockups ---------- */
+  /* ---------- real screenshots ---------- */
   .stage {
     position: relative;
     min-height: 580px;
-    perspective: 1300px;
+    perspective: 1400px;
   }
   .bloom {
     position: absolute;
@@ -263,176 +267,32 @@
     background: radial-gradient(closest-side, rgba(217, 119, 87, 0.24), transparent 72%);
     filter: blur(24px);
   }
-  .reader {
+  .shot-desktop {
     position: absolute;
-    left: 1%;
-    top: 24px;
-    width: 89%;
-    rotate: -5deg;
+    left: 0;
+    top: 38px;
+    width: 93%;
     border-radius: 12px;
     overflow: hidden;
-    background: #fffdf8;
-    border: 1px solid rgba(20, 20, 19, 0.12);
-    box-shadow: 0 44px 80px -48px rgba(20, 20, 19, 0.5), 0 2px 6px rgba(20, 20, 19, 0.05);
+    background: #fff;
+    border: 1px solid rgba(20, 20, 19, 0.14);
+    box-shadow: 0 46px 84px -48px rgba(20, 20, 19, 0.5), 0 2px 8px rgba(20, 20, 19, 0.05);
+    rotate: -4deg;
   }
-  .reader-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: var(--soft);
-    border-bottom: 1px solid rgba(20, 20, 19, 0.08);
-    font-size: 10.5px;
-    color: rgba(20, 20, 19, 0.5);
-  }
-  .reader-bar .dots { display: inline-flex; gap: 5px; }
-  .reader-bar .dots i {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: rgba(20, 20, 19, 0.18);
-  }
-  .reader-bar .dots i:first-child { background: var(--clay); }
-  .reader-bar .title { color: rgba(20, 20, 19, 0.8); letter-spacing: 0.04em; }
-  .reader-bar .spacer { flex: 1; }
-  .reader-page {
-    background: var(--bg);
-    padding: 32px 38px 34px;
-    min-height: 326px;
-  }
-  .reader-page .kicker {
-    font-size: 9.5px;
-    letter-spacing: 0.26em;
-    text-transform: uppercase;
-    color: #a9664e;
-    margin: 0 0 10px;
-  }
-  .reader-page h3 {
-    font-family: var(--serif);
-    font-weight: 600;
-    font-size: 24px;
-    margin: 0 0 18px;
-    color: var(--ink);
-    letter-spacing: 0;
-  }
-  .lines { display: flex; flex-direction: column; gap: 11px; }
-  .lines i {
-    display: block;
-    height: 8px;
-    width: var(--w, 100%);
-    border-radius: 2px;
-    background: rgba(20, 20, 19, 0.13);
-  }
-  .lines i:nth-child(3n) { background: rgba(20, 20, 19, 0.2); }
-  .reader-foot {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 22px;
-    font-size: 10px;
-    color: rgba(20, 20, 19, 0.4);
-  }
-
-  .panel {
-    position: absolute;
-    right: -4px;
-    top: 9%;
-    width: 240px;
-    padding: 16px;
-    rotate: 3deg;
-    border-radius: 12px;
-    background: var(--ink);
-    color: var(--bg);
-    border: 1px solid rgba(20, 20, 19, 0.5);
-    box-shadow: 0 30px 58px -26px rgba(20, 20, 19, 0.6);
-  }
-  .panel-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    font-size: 12.5px;
-    margin-bottom: 12px;
-  }
-  .panel-head span { font-size: 9.5px; color: var(--mid); letter-spacing: 0.08em; }
-  .font-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 8px;
-    border-radius: 7px;
-    color: var(--cream-2);
-  }
-  .font-row + .font-row { margin-top: 2px; }
-  .font-row.active { background: rgba(217, 119, 87, 0.18); color: var(--bg); }
-  .font-row .glyph {
-    width: 29px;
-    height: 29px;
-    flex: none;
-    display: grid;
-    place-items: center;
-    border-radius: 6px;
-    background: rgba(250, 249, 245, 0.1);
-    font-family: var(--serif);
-    font-size: 14px;
-  }
-  .font-row.active .glyph { background: var(--clay); color: #fff; }
-  .font-row b { display: block; font-size: 11.5px; font-weight: 600; line-height: 1.5; }
-  .font-row small { display: block; font-size: 9.5px; color: var(--mid); }
-  .font-row em {
-    margin-left: auto;
-    font-style: normal;
-    font-size: 9px;
-    color: #e5a189;
-    letter-spacing: 0.06em;
-  }
-
-  .phone {
+  .shot-desktop img { width: 100%; height: auto; }
+  .shot-phone {
     position: absolute;
     right: 1%;
-    bottom: 0;
-    width: 160px;
-    height: 308px;
-    rotate: 2deg;
-    border-radius: 24px;
-    padding: 7px;
+    bottom: 2px;
+    width: 150px;
+    padding: 6px;
+    border-radius: 26px;
     background: var(--ink);
     border: 1px solid rgba(20, 20, 19, 0.3);
-    box-shadow: 0 30px 56px -28px rgba(20, 20, 19, 0.55);
+    box-shadow: 0 34px 60px -30px rgba(20, 20, 19, 0.55);
+    rotate: 3deg;
   }
-  .phone-screen {
-    height: 100%;
-    border-radius: 18px;
-    background: var(--bg);
-    padding: 22px 16px;
-    overflow: hidden;
-    position: relative;
-  }
-  .phone-screen .status {
-    position: absolute;
-    inset: 6px 14px auto;
-    display: flex;
-    justify-content: space-between;
-    font-size: 8px;
-    color: rgba(20, 20, 19, 0.4);
-  }
-  .phone-screen h4 {
-    font-family: var(--serif);
-    font-size: 12.5px;
-    font-weight: 600;
-    margin: 12px 0 10px;
-    color: var(--ink);
-  }
-  .phone-screen .lines { gap: 7px; }
-  .phone-screen .lines i { height: 5px; }
-  .phone-screen .pg {
-    position: absolute;
-    left: 16px;
-    right: 16px;
-    bottom: 12px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 8px;
-    color: rgba(20, 20, 19, 0.4);
-  }
+  .shot-phone img { width: 100%; height: auto; border-radius: 20px; }
 
   /* ---------- sections ---------- */
   section { position: relative; }
@@ -573,6 +433,37 @@
     color: var(--text-2);
   }
 
+  /* 3D gallery */
+  .band-gallery { padding-bottom: 0; }
+  .deck-track {
+    position: relative;
+    height: 230vh;
+    margin-top: 12px;
+  }
+  .deck {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    display: grid;
+    place-items: center;
+    perspective: 1500px;
+    transform-style: preserve-3d;
+  }
+  .deck .shot {
+    position: absolute;
+    width: min(46vw, 640px);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(20, 20, 19, 0.14);
+    box-shadow: 0 54px 96px -52px rgba(20, 20, 19, 0.55), 0 2px 8px rgba(20, 20, 19, 0.05);
+    will-change: transform;
+  }
+  .deck .shot img { width: 100%; height: auto; }
+  .deck .main { width: min(50vw, 700px); z-index: 3; }
+  .deck .left { transform: translate3d(-46%, 0, -240px) rotateY(24deg); z-index: 2; }
+  .deck .right { transform: translate3d(46%, 0, -240px) rotateY(-24deg); z-index: 1; }
+
   /* typography showcase */
   .band-dark { background: var(--ink); color: var(--bg); }
   .band-dark::before {
@@ -624,33 +515,17 @@
     border-radius: 12px;
     border: 1px solid var(--cream-line);
     background: rgba(250, 249, 245, 0.04);
-    padding: 26px;
+    padding: 22px;
   }
-  .demo-paper {
-    background: var(--bg);
-    color: var(--ink);
+  .type-demo .shot {
     border-radius: 8px;
-    padding: 30px 32px;
-    font-family: var(--serif);
-    font-size: 15px;
-    line-height: 2;
+    overflow: hidden;
+    border: 1px solid rgba(20, 20, 19, 0.2);
+    background: #fff;
     box-shadow: 0 26px 50px -30px rgba(0, 0, 0, 0.55);
   }
-  .demo-paper .demo-chapter {
-    font-family: var(--sans);
-    font-size: 9.5px;
-    letter-spacing: 0.26em;
-    text-transform: uppercase;
-    color: #a9664e;
-    margin: 0 0 10px;
-  }
-  .demo-paper h3 {
-    margin: 0 0 12px;
-    font-size: 21px;
-    font-weight: 600;
-  }
-  .demo-paper p { margin: 0; }
-  .demo-controls { display: flex; gap: 8px; margin-top: 16px; }
+  .type-demo .shot img { width: 100%; height: auto; }
+  .demo-controls { display: flex; gap: 8px; margin-top: 14px; }
   .demo-controls span {
     flex: 1;
     height: 30px;
@@ -717,13 +592,27 @@
     .hero { padding-top: 132px; }
     .hero .wrap { grid-template-columns: 1fr; gap: 34px; }
     .stage { min-height: 560px; max-width: 560px; margin: 6px auto 0; width: 100%; }
-    .reader { width: 84%; left: 4%; }
-    .panel { right: 2%; width: 220px; }
+    .shot-desktop { width: 88%; left: 4%; }
     .sync-grid, .type-grid { grid-template-columns: 1fr; gap: 40px; }
     .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .feature:nth-child(3n + 1) { padding-left: 30px; border-left: 1px solid rgba(20, 20, 19, 0.14); }
     .feature:nth-child(2n + 1) { padding-left: 0; border-left: 0; }
     .nav a:not(.nav-gh) { display: none; }
+    .deck-track { height: auto; }
+    .deck {
+      position: static;
+      height: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px 20px 48px;
+      perspective: none;
+    }
+    .deck .shot, .deck .left, .deck .right, .deck .main {
+      position: static;
+      width: 100%;
+      transform: none;
+    }
   }
 
   @media (max-width: 640px) {
@@ -734,12 +623,9 @@
     .lede { font-size: 14.5px; }
     .btn { padding: 12px 16px; font-size: 13.5px; }
     .stage { min-height: 420px; }
-    .reader { left: 0; width: 88%; }
-    .reader-page { padding: 22px 20px 26px; min-height: 240px; }
-    .reader-page h3 { font-size: 19px; }
-    .panel { right: -2px; top: 2%; width: 174px; padding: 12px; }
-    .panel .font-row:nth-child(4) { display: none; }
-    .phone { width: 126px; height: 238px; right: 0; bottom: 0; }
+    .shot-desktop { left: 0; top: 26px; width: 92%; }
+    .shot-phone { width: 118px; padding: 5px; border-radius: 20px; }
+    .shot-phone img { border-radius: 15px; }
     .band { padding: 72px 0; }
     .features { grid-template-columns: 1fr; }
     .feature, .feature + .feature, .feature:nth-child(3n + 1), .feature:nth-child(2n + 1) {
@@ -750,7 +636,6 @@
     .link { width: 40px; }
     .link span { font-size: 8px; letter-spacing: 0.06em; }
     .type-list { gap: 10px 18px; }
-    .demo-paper { padding: 22px 20px; }
     .final { padding: 70px 0; }
     .final .wrap { align-items: flex-start; }
     .site-foot nav { margin-left: 0; }
@@ -765,6 +650,7 @@
     <nav class="nav" aria-label="主导航">
       <a href="#sync">同步</a>
       <a href="#features">功能</a>
+      <a href="#gallery">界面</a>
       <a href="#type">排版</a>
       <a class="nav-gh" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
     </nav>
@@ -800,47 +686,14 @@
         </div>
       </div>
 
-      <div class="stage" id="stage" aria-hidden="true">
+      <div class="stage" aria-label="Folio 实际界面截图">
         <div class="bloom"></div>
-        <div class="reader">
-          <div class="reader-bar">
-            <span class="dots"><i></i><i></i><i></i></span>
-            <span class="title">夜航西飞</span>
-            <span class="spacer"></span>
-            <span>第 3 章 · 42%</span>
-          </div>
-          <div class="reader-page">
-            <p class="kicker">Chapter Three</p>
-            <h3>风从海上来</h3>
-            <div class="lines">
-              <i style="--w:97%"></i><i style="--w:92%"></i><i style="--w:99%"></i>
-              <i style="--w:88%"></i><i style="--w:95%"></i><i style="--w:76%"></i>
-              <i style="--w:98%"></i><i style="--w:90%"></i><i style="--w:84%"></i>
-              <i style="--w:60%"></i>
-            </div>
-            <div class="reader-foot"><span>思源宋体 · 20px</span><span>1 / 12</span></div>
-          </div>
-        </div>
-
-        <aside class="panel">
-          <div class="panel-head">字体商店 <span>已安装 2</span></div>
-          <div class="font-row active"><span class="glyph">宋</span><div><b>思源宋体</b><small>正文 · 20px</small></div><em>使用中</em></div>
-          <div class="font-row"><span class="glyph">楷</span><div><b>霞鹜文楷</b><small>预览 · 22px</small></div></div>
-          <div class="font-row"><span class="glyph">黑</span><div><b>思源黑体</b><small>标题 · 24px</small></div></div>
-        </aside>
-
-        <div class="phone">
-          <div class="phone-screen">
-            <div class="status"><span>21:48</span><span>Wi-Fi · 78%</span></div>
-            <h4>风从海上来</h4>
-            <div class="lines">
-              <i style="--w:96%"></i><i style="--w:88%"></i><i style="--w:99%"></i>
-              <i style="--w:82%"></i><i style="--w:93%"></i><i style="--w:70%"></i>
-              <i style="--w:97%"></i><i style="--w:86%"></i>
-            </div>
-            <div class="pg"><span>42%</span><span>第 3 章</span></div>
-          </div>
-        </div>
+        <figure class="shot-desktop">
+          <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架界面" fetchpriority="high" />
+        </figure>
+        <figure class="shot-phone">
+          <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面" />
+        </figure>
       </div>
     </div>
   </section>
@@ -899,12 +752,36 @@
     </div>
   </section>
 
+  <!-- 3D GALLERY -->
+  <section class="band band-gallery" id="gallery">
+    <div class="wrap">
+      <div class="band-head" data-reveal>
+        <span class="kicker"><i>03</i> Interface</span>
+        <h2>就是它在跑，不是效果图。</h2>
+        <p class="sub">书架、沉浸阅读、夜间主题，三张都是实际运行时的截图，滚动时在三维里换位。</p>
+      </div>
+    </div>
+    <div class="deck-track" id="deck-track">
+      <div class="deck">
+        <figure class="shot left">
+          <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架截图" decoding="async" />
+        </figure>
+        <figure class="shot main">
+          <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/reader.png" width="1583" height="922" alt="Folio 桌面端沉浸阅读截图" decoding="async" />
+        </figure>
+        <figure class="shot right">
+          <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/night.png" width="1583" height="922" alt="Folio 夜间主题阅读截图" decoding="async" />
+        </figure>
+      </div>
+    </div>
+  </section>
+
   <!-- TYPE -->
   <section class="band band-dark" id="type">
     <div class="wrap">
       <div class="type-grid">
         <div class="type-copy" data-reveal>
-          <span class="kicker"><i>03</i> Typography</span>
+          <span class="kicker"><i>04</i> Typography</span>
           <h2>排版，是阅读的一部分。</h2>
           <p>字号、行距、页边距、背景纸色，逐项可调；中英文混排的字距与缩进也按中文习惯处理。</p>
           <p>装进本机的字体立刻出现在正文里，不经过网页渲染，翻页时不会闪一下。</p>
@@ -918,11 +795,9 @@
           </ul>
         </div>
         <div class="type-demo" data-reveal>
-          <div class="demo-paper">
-            <p class="demo-chapter">Chapter Three</p>
-            <h3>风从海上来</h3>
-            <p>海面在夜里是另一种黑，像一块被反复摩挲过的旧木头。风从很远的地方赶来，把盐的气味留在窗上。</p>
-          </div>
+          <figure class="shot">
+            <img src="https://raw.githubusercontent.com/flulwh/folio-assets/main/docs/themes-appearance.png" width="1583" height="922" alt="Folio 外观与阅读排版设置界面" decoding="async" />
+          </figure>
           <div class="demo-controls" aria-hidden="true">
             <span>字号 20</span>
             <span>行距 1.9</span>
@@ -1002,98 +877,89 @@
             if (a) a.href = apk ? apk.browser_download_url : android.html_url;
           });
           setText('android-ver', 'Android 8.0+ · ' + aver);
-          setText('android-ver-2', aver + ' · 直接装 APK');
+          setText('android-ver-2', 'aver · 直接装 APK'.replace('aver', aver));
         }
       })
       .catch(function () { /* 接口不可达时保留 Releases 兜底链接 */ });
 
-    // 动效：GSAP。脚本没加载或用户要求减弱动效时，页面保持静态终态。
-    if (!window.gsap || !window.ScrollTrigger || reduce) return;
-    gsap.registerPlugin(ScrollTrigger);
-    gsap.defaults({ ease: 'power3.out' });
-
+    // 顶栏吸顶
     var head = document.querySelector('.site-head');
-    ScrollTrigger.create({
-      start: 40,
-      end: 'max',
-      onToggle: function (self) { head.classList.toggle('is-stuck', self.isActive); }
-    });
+    var onScroll = function () { head.classList.toggle('is-stuck', window.scrollY > 40); };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
 
-    // 首屏：标题逐行升起、手绘下划线、设备依次入场。
-    var intro = gsap.timeline({ defaults: { duration: 1, ease: 'expo.out' } });
-    intro
-      .from('.eyebrow', { y: 14, opacity: 0, duration: 0.7 }, 0)
-      .from('.line-in', { yPercent: 112, stagger: 0.12, duration: 1.15 }, 0.1)
-      .fromTo('.scribble path', { strokeDashoffset: 320 }, { strokeDashoffset: 0, duration: 0.9, ease: 'power2.inOut' }, 0.75)
-      .from('.lede', { y: 16, opacity: 0, duration: 0.8 }, 0.55)
-      .from('.cta-row > .btn', { y: 16, opacity: 0, duration: 0.7, stagger: 0.08 }, 0.7)
-      .from('.hero-meta span', { y: 10, opacity: 0, duration: 0.6, stagger: 0.06 }, 0.85)
-      .from('.bloom', { opacity: 0, scale: 0.7, duration: 1.6, ease: 'power2.out' }, 0)
-      .from('.reader', { y: 44, opacity: 0, scale: 0.97, duration: 1.25 }, 0.15)
-      .from('.panel', { x: 36, opacity: 0, duration: 1.05 }, 0.45)
-      .from('.phone', { y: 46, opacity: 0, duration: 1.05 }, 0.55);
+    // 动效：Motion。脚本没加载或用户要求减弱动效时，页面保持静态终态。
+    var M = window.Motion;
+    if (!M || reduce) return;
+    var animate = M.animate;
+    var scroll = M.scroll;
+    var inView = M.inView;
+    var stagger = M.stagger;
+    var easeOut = [0.22, 1, 0.36, 1];
 
-    // 滚动视差：只在大屏启用，变换用 yPercent 与入场互不打架。
-    if (window.matchMedia('(min-width: 1000px)').matches) {
-      gsap.to('.stage', {
-        yPercent: -7, ease: 'none',
-        scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
-      });
-      gsap.to('.panel', {
-        yPercent: -16, ease: 'none',
-        scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
-      });
-      gsap.to('.phone', {
-        yPercent: -24, ease: 'none',
-        scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true }
+    // 首屏：标题逐行升起、手绘下划线、真机截图入场。
+    animate('.eyebrow', { opacity: [0, 1], transform: ['translateY(14px)', 'translateY(0px)'] }, { duration: 0.7, ease: easeOut });
+    animate('.line-in', { transform: ['translateY(112%)', 'translateY(0%)'] }, { duration: 1.1, delay: stagger(0.12, { startDelay: 0.08 }), ease: [0.16, 1, 0.3, 1] });
+    // 下划线用 CSS 描边过渡：Motion 的 animate 不接管 SVG 的 stroke-dashoffset。
+    requestAnimationFrame(function () { document.documentElement.classList.add('drawn'); });
+    animate('.lede', { opacity: [0, 1], transform: ['translateY(16px)', 'translateY(0px)'] }, { duration: 0.8, delay: 0.45, ease: easeOut });
+    animate('.cta-row > .btn', { opacity: [0, 1], transform: ['translateY(16px)', 'translateY(0px)'] }, { duration: 0.7, delay: stagger(0.08, { startDelay: 0.6 }), ease: easeOut });
+    animate('.hero-meta span', { opacity: [0, 1], transform: ['translateY(10px)', 'translateY(0px)'] }, { duration: 0.6, delay: stagger(0.06, { startDelay: 0.75 }), ease: easeOut });
+    animate('.bloom', { opacity: [0, 1], transform: ['scale(0.7)', 'scale(1)'] }, { duration: 1.6, ease: 'easeOut' });
+    animate('.shot-desktop', { opacity: [0, 1], transform: ['translateY(46px) scale(0.97)', 'translateY(0px) scale(1)'] }, { duration: 1.25, delay: 0.15, ease: [0.16, 1, 0.3, 1] });
+    animate('.shot-phone', { opacity: [0, 1], transform: ['translateY(48px)', 'translateY(0px)'] }, { duration: 1.1, delay: 0.5, ease: [0.16, 1, 0.3, 1] });
+
+    // 首屏视差
+    var heroEl = document.querySelector('.hero');
+    if (heroEl) {
+      scroll(animate('.stage', { transform: ['translateY(0px)', 'translateY(-44px)'] }, { ease: 'linear' }), {
+        target: heroEl,
+        offset: ['start start', 'end start']
       });
     }
 
-    // 各区块进场
-    gsap.utils.toArray('[data-reveal]').forEach(function (el) {
-      gsap.from(el, {
-        y: 26, opacity: 0, duration: 0.9,
-        scrollTrigger: { trigger: el, start: 'top 88%', once: true }
-      });
+    // 区块进场
+    document.querySelectorAll('[data-reveal]').forEach(function (el) {
+      inView(el, function () {
+        animate(el, { opacity: [0, 1], transform: ['translateY(26px)', 'translateY(0px)'] }, { duration: 0.9, ease: easeOut });
+      }, { amount: 0.2 });
     });
 
-    gsap.from('.feature', {
-      y: 22, opacity: 0, duration: 0.8, stagger: 0.06,
-      scrollTrigger: { trigger: '.features', start: 'top 84%', once: true }
-    });
+    inView('.features', function () {
+      animate('.feature', { opacity: [0, 1], transform: ['translateY(22px)', 'translateY(0px)'] }, { duration: 0.8, delay: stagger(0.06), ease: easeOut });
+    }, { amount: 0.15 });
 
-    var diagram = document.querySelector('.sync-diagram');
-    if (diagram) {
-      gsap.from(diagram.querySelectorAll('.node'), {
-        scale: 0.94, opacity: 0, duration: 0.8, stagger: 0.14,
-        scrollTrigger: { trigger: diagram, start: 'top 82%', once: true }
-      });
-      gsap.from(diagram.querySelector('.link'), {
-        scaleX: 0, transformOrigin: 'left center', duration: 0.9, delay: 0.25,
-        scrollTrigger: { trigger: diagram, start: 'top 82%', once: true }
-      });
+    // 同步图示：连线先展开，两端节点再浮出。
+    inView('.sync-diagram', function () {
+      animate('.sync-diagram .link', { transform: ['scaleX(0)', 'scaleX(1)'], opacity: [0, 1] }, { duration: 0.9, ease: easeOut });
+      animate('.sync-diagram .node', { opacity: [0, 1], transform: ['scale(0.94)', 'scale(1)'] }, { duration: 0.8, delay: stagger(0.14, { startDelay: 0.2 }), ease: easeOut });
+    }, { amount: 0.3 });
+
+    // 排版区截图
+    inView('.type-demo', function () {
+      animate('.type-demo .shot', { opacity: [0, 1], transform: ['translateY(26px)', 'translateY(0px)'] }, { duration: 1, ease: easeOut });
+      animate('.demo-controls span', { opacity: [0, 1], transform: ['translateY(8px)', 'translateY(0px)'] }, { duration: 0.6, delay: stagger(0.07, { startDelay: 0.15 }), ease: easeOut });
+    }, { amount: 0.25 });
+
+    // 3D 画廊：滚动时整组卡片旋转，左右两张向两侧退开。
+    var trackEl = document.querySelector('#deck-track');
+    if (trackEl && window.matchMedia('(min-width: 1041px)').matches) {
+      var deckScroll = { target: trackEl, offset: ['start end', 'end start'] };
+      scroll(animate('.deck', { transform: ['rotateY(-12deg) rotateX(5deg)', 'rotateY(12deg) rotateX(-2deg)'] }, { ease: 'linear' }), deckScroll);
+      scroll(animate('.deck .left', { transform: ['translate3d(-56%, 60px, -420px) rotateY(34deg)', 'translate3d(-40%, -10px, -160px) rotateY(20deg)'] }, { ease: 'linear' }), deckScroll);
+      scroll(animate('.deck .main', { transform: ['translate3d(0, 40px, 0) scale(0.92)', 'translate3d(0, -20px, 90px) scale(1)'] }, { ease: 'linear' }), deckScroll);
+      scroll(animate('.deck .right', { transform: ['translate3d(56%, 60px, -420px) rotateY(-34deg)', 'translate3d(40%, -10px, -160px) rotateY(-20deg)'] }, { ease: 'linear' }), deckScroll);
     }
 
-    gsap.from('.demo-paper', {
-      y: 26, opacity: 0, duration: 1,
-      scrollTrigger: { trigger: '.type-demo', start: 'top 84%', once: true }
-    });
-    gsap.from('.demo-controls span', {
-      y: 8, opacity: 0, duration: 0.6, stagger: 0.07,
-      scrollTrigger: { trigger: '.type-demo', start: 'top 80%', once: true }
-    });
-
-    // 按钮：轻微的磁贴位移，交给 GSAP 而不是 CSS transition。
-    gsap.utils.toArray('.btn').forEach(function (btn) {
+    // 按钮：轻微上浮，Motion 负责，不用 CSS transform 过渡。
+    document.querySelectorAll('.btn').forEach(function (btn) {
       btn.addEventListener('pointerenter', function () {
-        gsap.to(btn, { y: -3, duration: 0.3, ease: 'power2.out' });
+        animate(btn, { transform: 'translateY(-3px)' }, { duration: 0.3, ease: 'easeOut' });
       });
       btn.addEventListener('pointerleave', function () {
-        gsap.to(btn, { y: 0, duration: 0.45 });
+        animate(btn, { transform: 'translateY(0px)' }, { duration: 0.45, ease: easeOut });
       });
     });
-
-    window.addEventListener('load', function () { ScrollTrigger.refresh(); });
   })();
 </script>
 </body>
