@@ -12,7 +12,7 @@ Folio 是**本地优先的双端阅读器**，两端各自独立、只走局域�
 
 | 端 | 技术栈 | 版本真相（唯一的改法） |
 | --- | --- | --- |
-| 桌面端（Electron + React） | Vite + Electron 30（`devDependencies.electron`），入口 `electron/main.js`、`src/main.jsx` | `package.json` 的 `version` |
+| 桌面端（Electron + React） | Vite + Electron 45（`devDependencies.electron`），入口 `electron/main.js`、`src/main.jsx` | `package.json` 的 `version` |
 | 安卓端（原生客户端） | Kotlin + Jetpack Compose + Miuix | `android/app/build.gradle.kts` 的 `versionCode` / `versionName` |
 
 两端**版本线不同步**：桌面端 `2.x`，安卓端 `3.x`。这是有意为之，不要「对齐」。
