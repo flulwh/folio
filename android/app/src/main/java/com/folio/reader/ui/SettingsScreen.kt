@@ -112,9 +112,12 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = { SettingsTopBar(onBack = onBack) },
         bottomBar = bottomBar,
+        containerColor = scheme.systemBackground,
+        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(scheme.systemBackground),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding() + 24.dp,

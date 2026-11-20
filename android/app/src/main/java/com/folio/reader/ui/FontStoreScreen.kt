@@ -78,11 +78,13 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
     CupertinoScaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = { FontStoreTopBar(onBack = onBack) },
+        containerColor = scheme.systemGroupedBackground,
+        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         Column(
             Modifier
                 .fillMaxSize()
-                .background(scheme.systemGroupedBackground)
                 .verticalScroll(rememberScrollState())
                 .padding(
                     top = padding.calculateTopPadding(),

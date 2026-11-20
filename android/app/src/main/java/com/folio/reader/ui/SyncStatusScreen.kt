@@ -69,9 +69,12 @@ fun SyncStatusScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = { SyncTopBar(onBack = onBack) },
         bottomBar = bottomBar,
+        containerColor = scheme.systemGroupedBackground,
+        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(scheme.systemGroupedBackground),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding() + 24.dp,

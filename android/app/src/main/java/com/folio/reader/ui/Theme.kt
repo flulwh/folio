@@ -10,8 +10,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.alexzhirkevich.cupertino.CupertinoScaffoldDefaults
 import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import io.github.alexzhirkevich.cupertino.theme.Shapes
 import io.github.alexzhirkevich.cupertino.theme.Typography
@@ -135,6 +137,22 @@ fun readingPalette(id: String?): ReadingPalette =
 
 /** 当前生效的纸色，组件与阅读器共用。 */
 val LocalReadingPalette = staticCompositionLocalOf { WHITE_PALETTE }
+
+/* ------------------------------ 顶栏毛玻璃 ------------------------------ */
+
+/**
+ * 顶栏与 Tab Bar 的毛玻璃半径。
+ *
+ * compose-cupertino 默认 40dp，安卓上每一帧都要按这个半径重做一次卷积：
+ * 书架上下滑、封面滚动时它是最主要的 GPU 开销。压到 60%（约 24dp）后
+ * 仍是磨砂观感，代价明显下降；系统「减弱透明度」时基准是 50dp，同样按比例缩。
+ */
+val FolioAppBarBlurRadius: Dp
+    get() = CupertinoScaffoldDefaults.AppBarsBlurRadius * 0.6f
+
+/** 与 [FolioAppBarBlurRadius] 配套：半径缩小后把底色提一点，避免发灰发薄。 */
+val FolioAppBarBlurAlpha: Float
+    get() = CupertinoScaffoldDefaults.AppBarsBlurAlpha.let { if (it > 0.6f) it else 0.62f }
 
 /* --------------------------------- 字体 --------------------------------- */
 

@@ -35,7 +35,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -186,11 +185,14 @@ fun ShelfScreen(
             )
         },
         bottomBar = bottomBar,
+        containerColor = scheme.systemGroupedBackground,
+        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             state = gridState,
-            modifier = Modifier.fillMaxSize().background(scheme.systemGroupedBackground),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = PageMargin,
                 end = PageMargin,
@@ -248,7 +250,9 @@ fun ShelfScreen(
 
             if (sections.isEmpty()) {
                 item(key = "shelf-empty", span = { GridItemSpan(maxLineSpan) }) {
-                    Box(Modifier.fillMaxWidth().heightIn(min = 340.dp)) {
+                    // 固定高度而不是 heightIn：网格项的最大高度是无穷大，
+                    // heightIn 会让 EmptyShelf 的 fillMaxSize 失效、内容贴顶。
+                    Box(Modifier.fillMaxWidth().height(340.dp)) {
                         EmptyShelf(
                             hasBooks = state.books.isNotEmpty(),
                             onImport = importAction,
@@ -288,7 +292,13 @@ fun ShelfScreen(
                             Reveal(index = index) {
                                 BookCell(
                                     book = book,
-                                    state = state,
+                                    // 只传单元格自己用得到的值：整份 ShelfUiState 是不稳定类型，
+                                    // 传进来会让同步 / 进度变化时每个可见封面都跟着重组。
+                                    badge = state.badgeOf(book),
+                                    transferPercent = state.transferPercent(book),
+                                    percent = state.progressPercentOf(book),
+                                    summary = state.progressSummaryOf(book),
+                                    readable = state.readable(book),
                                     highlighted = state.highlightId == book.id,
                                     menuOpen = menuFor == rowKey,
                                     onToggleMenu = {
@@ -771,7 +781,11 @@ private fun ContinueCard(
 @Composable
 private fun BookCell(
     book: Book,
-    state: ShelfUiState,
+    badge: BookBadge,
+    transferPercent: Int,
+    percent: Double,
+    summary: ProgressSummary,
+    readable: Boolean,
     highlighted: Boolean,
     menuOpen: Boolean,
     onToggleMenu: () -> Unit,
@@ -782,17 +796,15 @@ private fun BookCell(
     onSyncStatus: () -> Unit,
 ) {
     val scheme = CupertinoTheme.colorScheme
-    val badge = state.badgeOf(book)
-    val percent = state.progressPercentOf(book)
-    val summary = state.progressSummaryOf(book)
-    val readable = state.readable(book)
     val dimmed = !readable
 
+    val source = remember { MutableInteractionSource() }
     Column(
         Modifier
             .fillMaxWidth()
+            .pressScale(source, pressedScale = 0.97f)
             .combinedClickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = source,
                 indication = null,
                 onClick = onOpen,
                 onLongClick = onToggleMenu,
@@ -822,7 +834,7 @@ private fun BookCell(
                     )
                     Spacer(Modifier.width(4.dp))
                     CupertinoText(
-                        text = badgeLabel(badge, state.transferPercent(book)),
+                        text = badgeLabel(badge, transferPercent),
                         fontSize = 9.sp,
                         color = badgeColor(badge),
                         maxLines = 1,
@@ -860,20 +872,24 @@ private fun BookCell(
                         color = scheme.secondaryLabel,
                     )
                 }
-                CupertinoDropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = onToggleMenu,
-                ) {
-                    if (!book.isCloud && !book.hasLocalFile) {
-                        MenuAction(onClick = onDownload) { CupertinoText("下载到手机", fontSize = 14.sp) }
+                // 菜单只在打开时才组合：折叠状态下几十个封面各挂一个弹出层宿主，
+                // 滚动时纯属白搭构图与测量。
+                if (menuOpen) {
+                    CupertinoDropdownMenu(
+                        expanded = true,
+                        onDismissRequest = onToggleMenu,
+                    ) {
+                        if (!book.isCloud && !book.hasLocalFile) {
+                            MenuAction(onClick = onDownload) { CupertinoText("下载到手机", fontSize = 14.sp) }
+                        }
+                        if (book.hasLocalFile) {
+                            MenuAction(onClick = onDeleteLocal) { CupertinoText("删除本机副本", fontSize = 14.sp) }
+                        }
+                        if (book.origin == Origin.DESKTOP) {
+                            MenuAction(onClick = onRemoveFromShelf) { CupertinoText("从手机书架移除", fontSize = 14.sp) }
+                        }
+                        MenuAction(onClick = onSyncStatus) { CupertinoText("查看同步状态", fontSize = 14.sp) }
                     }
-                    if (book.hasLocalFile) {
-                        MenuAction(onClick = onDeleteLocal) { CupertinoText("删除本机副本", fontSize = 14.sp) }
-                    }
-                    if (book.origin == Origin.DESKTOP) {
-                        MenuAction(onClick = onRemoveFromShelf) { CupertinoText("从手机书架移除", fontSize = 14.sp) }
-                    }
-                    MenuAction(onClick = onSyncStatus) { CupertinoText("查看同步状态", fontSize = 14.sp) }
                 }
             }
         }
