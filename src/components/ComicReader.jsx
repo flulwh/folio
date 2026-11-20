@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
 import { dataApi, useAppActions, useProgress, useSettings } from '../store/AppStore.jsx';
 import {
   IconArrowLeft,
@@ -15,6 +16,13 @@ import {
  * 数据：目录来自云端书源；每一章先取图片地址列表，再把图片下载进本地缓存，
  * 通过 folio-cover:// 协议渲染，断网也能看已经打开过的章节。
  */
+
+// 放大层缩放范围沿用旧实现：手势（捏合/双击）最多 4x，键盘与工具按钮最多 3x。
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 4;
+const ZOOM_PRESET_MAX = 3;
+const ZOOM_DOUBLE_CLICK = 2.5;
+
 export default function ComicReader({ book, onClose }) {
   const progress = useProgress();
   const settings = useSettings();
@@ -32,20 +40,18 @@ export default function ComicReader({ book, onClose }) {
   const [tocOpen, setTocOpen] = useState(false);
   const [zoomed, setZoomed] = useState(null);
   const [page, setPage] = useState(0);
+  // 放大层：缩放/平移交给 react-zoom-pan-pinch，这里只留展示用的比例读数
   const [zoomScale, setZoomScale] = useState(1);
-  const [zoomOffset, setZoomOffset] = useState({ x: 0, y: 0 });
-  const [zooming, setZooming] = useState(false);
   const [showTop, setShowTop] = useState(false);
 
   const fit = settings.comicFit === 'original' ? 'original' : 'width';
   const scrollRef = useRef(null);
   const aliveRef = useRef(true);
-  // 放大层手势状态：指针表、手势基线、是否发生过拖动
-  const zoomRef = useRef(null);
-  const zoomImgRef = useRef(null);
-  const pointersRef = useRef(new Map());
-  const gestureRef = useRef(null);
+  const zoomApiRef = useRef(null);
+  const zoomScaleRef = useRef(1);
   const movedRef = useRef(false);
+  // 单击关闭与双击复位共用一次点击：把关闭推迟一帧，等 dblclick 有机会取消它
+  const closeTimerRef = useRef(0);
   const idleTimer = useRef(0);
   const listCache = useRef(new Map());
   // 当前章节的图片预取任务 key；warmRef 是下一章预热任务，切章时一起取消
@@ -57,6 +63,7 @@ export default function ComicReader({ book, onClose }) {
     return () => {
       aliveRef.current = false;
       if (idleTimer.current) clearTimeout(idleTimer.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
     };
   }, []);
 
@@ -254,137 +261,74 @@ export default function ComicReader({ book, onClose }) {
     });
   }, [fit, notify, patchSettings]);
 
-  /** 放大的那层：+ / − / 0 调整，双击复位 */
+  /* ------------------------------ 放大层 ------------------------------ */
+  /** 比例读数：只在百分比变化时 setState，平移时不会反复渲染。 */
+  const syncZoomScale = useCallback((scale) => {
+    zoomScaleRef.current = scale;
+    const rounded = Math.round(scale * 100) / 100;
+    setZoomScale((prev) => (prev === rounded ? prev : rounded));
+  }, []);
+
   useEffect(() => {
-    if (zoomed) {
-      setZoomScale(1);
-      setZoomOffset({ x: 0, y: 0 });
-    }
+    if (!zoomed) return;
+    zoomScaleRef.current = 1;
+    setZoomScale(1);
+    movedRef.current = false;
   }, [zoomed]);
 
-  /* ---------------- 放大层手势：捏合缩放 / 拖动平移 / 橡皮筋边界 ---------------- */
-  const ZOOM_MIN = 1;
-  const ZOOM_MAX = 4;
-
-  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
-
-  /** 图片放大后可平移的范围：超出容器的那一半 */
-  const zoomLimits = useCallback(() => {
-    const box = zoomRef.current?.getBoundingClientRect();
-    const img = zoomImgRef.current?.getBoundingClientRect();
-    if (!box || !img) return { x: 0, y: 0 };
-    return {
-      x: Math.max(0, (img.width - box.width) / 2),
-      y: Math.max(0, (img.height - box.height) / 2),
-    };
-  }, []);
-
-  /** 越界阻尼：越拖越沉，但不完全不让动（iOS 橡皮筋） */
-  const rubber = useCallback((value, limit) => {
-    if (value > limit) return limit + (value - limit) * 0.42;
-    if (value < -limit) return -limit + (value + limit) * 0.42;
-    return value;
-  }, []);
-
-  const onZoomPointerDown = (event) => {
-    const points = pointersRef.current;
-    points.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    try {
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    } catch {
-      /* 某些环境不支持指针捕获，忽略 */
-    }
-    if (points.size === 2) {
-      const [a, b] = [...points.values()];
-      gestureRef.current = {
-        mode: 'pinch',
-        dist: Math.hypot(a.x - b.x, a.y - b.y),
-        scale: zoomScale,
-      };
-      movedRef.current = true;
-      setZooming(true);
-    } else if (points.size === 1) {
-      gestureRef.current = {
-        mode: 'pan',
-        x: event.clientX,
-        y: event.clientY,
-        baseX: zoomOffset.x,
-        baseY: zoomOffset.y,
-      };
-    }
-  };
-
-  const onZoomPointerMove = (event) => {
-    const points = pointersRef.current;
-    if (!points.has(event.pointerId)) return;
-    points.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    const gesture = gestureRef.current;
-    if (!gesture) return;
-
-    if (gesture.mode === 'pinch' && points.size >= 2) {
-      const [a, b] = [...points.values()];
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (gesture.dist > 0) {
-        movedRef.current = true;
-        setZoomScale(clamp(gesture.scale * (dist / gesture.dist), ZOOM_MIN, ZOOM_MAX));
-      }
+  /** 工具条 / 键盘用：缩放到指定倍率并居中。 */
+  const applyZoom = useCallback((next) => {
+    const api = zoomApiRef.current;
+    if (!api) return;
+    const scale = Math.max(ZOOM_MIN, Math.min(ZOOM_PRESET_MAX, next));
+    if (scale <= ZOOM_MIN) {
+      api.resetTransform(200);
       return;
     }
+    api.centerView(scale, 160);
+  }, []);
 
-    if (gesture.mode === 'pan' && zoomScale > 1) {
-      const limits = zoomLimits();
-      const dx = event.clientX - gesture.x;
-      const dy = event.clientY - gesture.y;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) movedRef.current = true;
-      setZooming(true);
-      setZoomOffset({
-        x: rubber(gesture.baseX + dx, limits.x),
-        y: rubber(gesture.baseY + dy, limits.y),
-      });
-    }
-  };
+  const zoomIn = useCallback(() => {
+    applyZoom(Math.round((zoomScaleRef.current + 0.25) * 100) / 100);
+  }, [applyZoom]);
 
-  const endZoomGesture = (event) => {
-    pointersRef.current.delete(event.pointerId);
-    if (pointersRef.current.size === 0) {
-      gestureRef.current = null;
-      setZooming(false);
-      // 松手回弹：越界的部分弹回边界
-      const limits = zoomLimits();
-      setZoomOffset((prev) => ({
-        x: clamp(prev.x, -limits.x, limits.x),
-        y: clamp(prev.y, -limits.y, limits.y),
-      }));
-    } else if (pointersRef.current.size === 1) {
-      const [only] = [...pointersRef.current.values()];
-      gestureRef.current = {
-        mode: 'pan',
-        x: only.x,
-        y: only.y,
-        baseX: zoomOffset.x,
-        baseY: zoomOffset.y,
-      };
-    }
-  };
+  const zoomOut = useCallback(() => {
+    applyZoom(Math.round((zoomScaleRef.current - 0.25) * 100) / 100);
+  }, [applyZoom]);
 
-  /** 双击：以点击点为中心放大到 2.5 倍，再点收回（Photos 的定点缩放） */
+  const zoomReset = useCallback(() => {
+    zoomApiRef.current?.resetTransform(200);
+  }, []);
+
+  /** 双击：以点击点为中心放大到 2.5 倍，再点收回（Photos 的定点缩放）。 */
   const onZoomDoubleClick = (event) => {
     event.stopPropagation();
-    const img = zoomImgRef.current?.getBoundingClientRect();
-    if (!img) {
-      setZoomScale((v) => (v > 1 ? 1 : 2));
+    // 第一次 click 已经排了「关闭」，双击要把它取消
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = 0;
+    }
+    const api = zoomApiRef.current;
+    if (!api) return;
+    if (zoomScaleRef.current > 1) {
+      api.resetTransform(220);
       return;
     }
-    if (zoomScale > 1) {
-      setZoomScale(1);
-      setZoomOffset({ x: 0, y: 0 });
+    api.zoomToPoint(ZOOM_DOUBLE_CLICK, event.clientX, event.clientY, 220);
+  };
+
+  /** 点击背景关闭；拖动/捏合后的那一下 click 不应该关掉放大层。 */
+  const onZoomBackdropClick = () => {
+    if (movedRef.current) {
+      movedRef.current = false;
       return;
     }
-    const next = 2.5;
-    const cx = event.clientX - (img.left + img.width / 2);
-    const cy = event.clientY - (img.top + img.height / 2);
-    setZoomScale(next);
-    setZoomOffset({ x: -cx * (next - 1), y: -cy * (next - 1) });
+    if (closeTimerRef.current) return;
+    // 等一小会儿看是不是双击：双击会取消这次关闭（保留双击复位）。
+    closeTimerRef.current = window.setTimeout(() => {
+      closeTimerRef.current = 0;
+      setZoomed(null);
+    }, 250);
   };
 
   const goTo = useCallback(
@@ -426,16 +370,13 @@ export default function ComicReader({ book, onClose }) {
         if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
       } else if (zoomed && (event.key === '+' || event.key === '=')) {
         event.preventDefault();
-        setZoomScale((v) => Math.min(3, Math.round((v + 0.25) * 100) / 100));
-        setZoomOffset({ x: 0, y: 0 });
+        zoomIn();
       } else if (zoomed && (event.key === '-' || event.key === '_')) {
         event.preventDefault();
-        setZoomScale((v) => Math.max(1, Math.round((v - 0.25) * 100) / 100));
-        setZoomOffset({ x: 0, y: 0 });
+        zoomOut();
       } else if (zoomed && event.key === '0') {
         event.preventDefault();
-        setZoomScale(1);
-        setZoomOffset({ x: 0, y: 0 });
+        zoomReset();
       } else if (event.key === 'f' || event.key === 'F') {
         event.preventDefault();
         toggleFit();
@@ -443,7 +384,7 @@ export default function ComicReader({ book, onClose }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [goTo, index, onClose, scrollToTop, tocOpen, toggleFit, uiVisible, zoomed]);
+  }, [goTo, index, onClose, scrollToTop, tocOpen, toggleFit, uiVisible, zoomed, zoomIn, zoomOut, zoomReset]);
 
   const chapter = toc[index];
   const total = toc.length;
@@ -629,66 +570,56 @@ export default function ComicReader({ book, onClose }) {
         {zoomed && (
           <motion.div
             className="comic-zoom"
-            ref={zoomRef}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => {
-              // 捏合/拖动之后的那一下 click 不该关掉放大层
-              if (movedRef.current) {
-                movedRef.current = false;
-                return;
-              }
-              setZoomed(null);
-            }}
+            onClick={onZoomBackdropClick}
           >
-            <img
-              ref={zoomImgRef}
-              src={zoomed}
-              alt=""
-              draggable={false}
-              style={{
-                transform: `translate(${zoomOffset.x}px, ${zoomOffset.y}px) scale(${zoomScale})`,
-                transition: zooming ? 'none' : 'transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1)',
-                cursor: zoomScale > 1 ? 'grab' : 'zoom-out',
-                touchAction: 'none',
+            <TransformWrapper
+              ref={zoomApiRef}
+              minScale={ZOOM_MIN}
+              maxScale={ZOOM_MAX}
+              limitToBounds
+              disablePadding
+              doubleClick={{ disabled: true }}
+              wheel={{ disabled: true }}
+              panning={{ velocityDisabled: true }}
+              onInit={() => syncZoomScale(ZOOM_MIN)}
+              onTransform={(ref, state) => syncZoomScale(state.scale)}
+              onPanningStart={() => {
+                movedRef.current = true;
               }}
-              onPointerDown={onZoomPointerDown}
-              onPointerMove={onZoomPointerMove}
-              onPointerUp={endZoomGesture}
-              onPointerCancel={endZoomGesture}
-              onDoubleClick={onZoomDoubleClick}
-            />
-            <div className="comic-zoom-tools" onClick={(event) => event.stopPropagation()}>
-              <button
-                className="icon-btn"
-                onClick={() => {
-                  setZoomScale((v) => Math.max(1, Math.round((v - 0.25) * 100) / 100));
-                  setZoomOffset({ x: 0, y: 0 });
+            >
+              {/* 内容盒不锁高度：超高页保持原始比例，靠上下拖动查看（和旧版
+                  原生滚动一致）。锁成 100% 再配 object-fit: contain 会把整页
+                  压进一屏，细节全糊。minHeight 只负责让矮图在暗底里居中。
+                  容器尺寸由 .comic-zoom .comic-zoom-frame 的绝对定位给死，
+                  否则 grid 的自动行会被内容撑高，库量到的视口等于整页高度，
+                  平移边界就变成 0。 */}
+              <TransformComponent
+                wrapperClass="comic-zoom-frame"
+                contentClass="comic-zoom-content"
+                contentStyle={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  minHeight: '100%',
                 }}
-                title="缩小 (−)"
+                wrapperProps={{ onDoubleClick: onZoomDoubleClick }}
               >
+                <img src={zoomed} alt="" draggable={false} />
+              </TransformComponent>
+            </TransformWrapper>
+            <div className="comic-zoom-tools" onClick={(event) => event.stopPropagation()}>
+              <button className="icon-btn" onClick={zoomOut} title="缩小 (−)">
                 −
               </button>
               <span>{Math.round(zoomScale * 100)}%</span>
-              <button
-                className="icon-btn"
-                onClick={() => {
-                  setZoomScale((v) => Math.min(3, Math.round((v + 0.25) * 100) / 100));
-                  setZoomOffset({ x: 0, y: 0 });
-                }}
-                title="放大 (+)"
-              >
+              <button className="icon-btn" onClick={zoomIn} title="放大 (+)">
                 +
               </button>
-              <button
-                className="icon-btn"
-                onClick={() => {
-                  setZoomScale(1);
-                  setZoomOffset({ x: 0, y: 0 });
-                }}
-                title="复位 (0)"
-              >
+              <button className="icon-btn" onClick={zoomReset} title="复位 (0)">
                 1:1
               </button>
             </div>

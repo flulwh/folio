@@ -1,43 +1,20 @@
-import React, { useEffect } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
+import React from 'react';
+import { Modal } from '../ui/Dialog.jsx';
 import { IconCommand, IconX } from './Icons.jsx';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
 
 /** 「?」唤出的快捷键速查；也承担新手引导的作用。 */
 export default function ShortcutHelp({ open, onClose }) {
-  const kit = useMotionKit();
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (event) => {
-      if (event.key === 'Escape') onClose?.();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="modal-backdrop shortcuts-backdrop"
-          variants={kit.backdrop}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          onClick={onClose}
-        >
-          <motion.div
-            className="shortcuts"
-            role="dialog"
-            aria-modal="true"
-            aria-label="快捷键说明"
-            variants={kit.modal}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            onClick={(event) => event.stopPropagation()}
-          >
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      className="shortcuts"
+      backdropClassName="modal-backdrop shortcuts-backdrop"
+      ariaLabel="快捷键说明"
+    >
             <header className="shortcuts-head">
               <div>
                 <span className="panel-eyebrow">
@@ -79,9 +56,6 @@ export default function ShortcutHelp({ open, onClose }) {
                 知道了
               </button>
             </footer>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </Modal>
   );
 }

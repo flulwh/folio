@@ -1,7 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
-import { usePresence } from '../hooks/usePresence.js';
+import { Sheet } from '../ui/Dialog.jsx';
 import { IconSearch, IconX } from './Icons.jsx';
 
 /** 命中摘录：关键词用朱砂薄底标出来，前后文保持墨色。 */
@@ -39,16 +37,8 @@ export default function SearchPanel({
   onStep,
   onClose,
 }) {
-  const kit = useMotionKit();
-  const alive = usePresence(open);
   const inputRef = useRef(null);
   const listRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const timer = setTimeout(() => inputRef.current?.focus(), 80);
-    return () => clearTimeout(timer);
-  }, [open]);
 
   // 游标变化时把当前命中带进视口
   useEffect(() => {
@@ -60,28 +50,18 @@ export default function SearchPanel({
   const total = hits.length;
 
   return (
-    <AnimatePresence>
-      {alive && (
-        <>
-          <motion.div
-            key="search-backdrop"
-            className="panel-backdrop"
-            variants={kit.backdrop}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            style={{ pointerEvents: open ? 'auto' : 'none' }}
-            onClick={onClose}
-          />
-          <motion.aside
-            key="search-panel"
-            className="panel search-panel"
-            variants={kit.sheet('right')}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <header className="panel-head">
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      side="right"
+      className="panel search-panel"
+      backdropClassName="panel-backdrop"
+      ariaLabel="全书搜索"
+      initialFocusRef={inputRef}
+    >
+      <header className="panel-head">
               <div>
                 <span className="panel-eyebrow">
                   <IconSearch size={13} /> 全书搜索
@@ -197,9 +177,6 @@ export default function SearchPanel({
               <span className="hint">Enter 下一处 · Shift+Enter 上一处 · Esc 关闭</span>
               <span className="panel-foot-actions" />
             </footer>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+    </Sheet>
   );
 }

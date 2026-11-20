@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { motionKitFor } from '../motion-kit.js';
+import { motionKitFor } from '../design/motion.js';
 import { useAppActions, useFonts, useMarks, useProgress, useSettings } from '../store/AppStore.jsx';
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
 import { useReaderMeasure } from '../hooks/useReaderMeasure.js';

@@ -11,6 +11,9 @@ import './design/base.css';
 import './design/shelf.css';
 import './design/reader.css';
 import './design/library.css';
+/* Radix 原语的外观层：只补交互态与定位，皮肤变量全部来自 tokens。
+   放在通用层之后、皮肤层之前，皮肤仍能覆盖形态。 */
+import './ui/primitives.css';
 /* 黑曜皮肤放在 design/ 之后：它要改的是"材质与纵深"，而通用层负责排版骨架，
    顺序在后才能用同级选择器覆盖，不必动用 !important。 */
 import './skin-obsidian.css';

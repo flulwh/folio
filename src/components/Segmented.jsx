@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
+import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group';
+import { useMotionKit } from '../design/motion.js';
 
 /**
  * Apple 风格分段控件（Segmented Control）。
@@ -8,7 +9,8 @@ import { useMotionKit } from '../motion-kit.js';
  * 与普通 segmented 的区别：选中态是一块会「滑过去」的拇指，而不是硬切背景。
  * - 拇指只挂一个，用 x / width 弹簧跟着选中项滑，不再靠 layoutId 跨按钮搬家
  * - 文字颜色交叉淡化，选中项与未选中项同时在场，切换时亮度渐变
- * - 语义上是 tablist：roving tabindex，键盘可达、aria-selected 同步
+ * - 交互与 aria 交给 Radix ToggleGroup（单选）：radiogroup 语义、方向键、
+ *   roving tabindex 都由它管，拇指只负责画动画
  * - 皮肤差异：两套皮肤都用这块拇指，但弹簧不同 —— Apple 近乎临界阻尼
  *   （panel），MIUI 刻意欠阻尼（control），滑动末尾能看见一点过冲。
  *   MIUI 版本以前是"隐藏拇指、硬切底色"，那是效果最少的一种做法；
@@ -66,11 +68,16 @@ export default function Segmented({ options, value, onChange, full = false, clas
   }, [measure]);
 
   return (
-    <div
+    <ToggleGroupPrimitive.Root
       ref={wrapRef}
+      type="single"
+      value={value == null ? '' : String(value)}
+      onValueChange={(next) => {
+        // 单选组允许再点一次把值清空；分段控件不接受「没有选中项」
+        if (next) onChange?.(next);
+      }}
       className={`segmented${full ? ' full' : ''}${className ? ` ${className}` : ''}`}
       style={{ position: 'relative', ...style }}
-      role="tablist"
       aria-label={ariaLabel}
     >
       <motion.span
@@ -87,17 +94,14 @@ export default function Segmented({ options, value, onChange, full = false, clas
         transition={kit.spring.control}
       />
       {items.map((option) => {
-        const active = option.value === value;
+        const active = String(option.value) === String(value);
         return (
-          <button
+          <ToggleGroupPrimitive.Item
             key={option.value}
             type="button"
-            role="tab"
-            aria-selected={active}
-            tabIndex={active ? 0 : -1}
+            value={String(option.value)}
             className={`segmented-item${active ? ' active' : ''}`}
             style={option.style}
-            onClick={() => onChange?.(option.value)}
           >
             <motion.span
               className="segmented-label"
@@ -106,9 +110,9 @@ export default function Segmented({ options, value, onChange, full = false, clas
             >
               {option.label}
             </motion.span>
-          </button>
+          </ToggleGroupPrimitive.Item>
         );
       })}
-    </div>
+    </ToggleGroupPrimitive.Root>
   );
 }

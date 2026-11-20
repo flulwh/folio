@@ -1,8 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
-import { usePresence } from '../hooks/usePresence.js';
-import { useDialogFocus } from '../hooks/useDialogFocus.js';
+import { Sheet } from '../ui/Dialog.jsx';
 import NoteDialog from './NoteDialog.jsx';
 import { IconBookmark, IconHighlight, IconNote, IconX } from './Icons.jsx';
 
@@ -33,9 +30,6 @@ export default function MarksPanel({
   onUpdateNote,
   onClose,
 }) {
-  const kit = useMotionKit();
-  const alive = usePresence(open);
-  const panelRef = useDialogFocus(open);
   const [editing, setEditing] = useState(null);
 
   const sorted = useMemo(
@@ -54,32 +48,17 @@ export default function MarksPanel({
 
   return (
     <>
-      <AnimatePresence>
-        {alive && (
-          <>
-            <motion.div
-              key="marks-backdrop"
-              className="panel-backdrop"
-              variants={kit.backdrop}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              style={{ pointerEvents: open ? 'auto' : 'none' }}
-              onClick={onClose}
-            />
-            <motion.aside
-              key="marks-panel"
-              ref={panelRef}
-              className="panel marks-panel"
-              role="dialog"
-              aria-modal="true"
-              aria-label="阅读痕迹"
-              variants={kit.sheet('right')}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-            >
-              <header className="panel-head">
+      <Sheet
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) onClose?.();
+        }}
+        side="right"
+        className="panel marks-panel"
+        backdropClassName="panel-backdrop"
+        ariaLabel="阅读痕迹"
+      >
+        <header className="panel-head">
                 <div>
                   <span className="panel-eyebrow">
                     <IconBookmark size={13} /> 书签与笔记
@@ -195,10 +174,7 @@ export default function MarksPanel({
                 <span className="hint">点整行跳转 · B 加书签 · Esc 关闭</span>
                 <span className="panel-foot-actions" />
               </footer>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
+      </Sheet>
 
       <NoteDialog
         open={!!editing}

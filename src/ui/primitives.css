@@ -1,0 +1,308 @@
+/**
+ * Radix 原语的外观层（2.13.0）。
+ *
+ * 原则：Radix 只负责行为（定位、焦点、键盘、无障碍），这里只补「交互态 + 定位」，
+ * 颜色 / 圆角 / 阴影一律取 design/tokens.css 的变量，三套皮肤仍然生效。
+ * 皮肤专属的形态由 skin-*.css 覆盖，本文件不写皮肤分支。
+ */
+
+/* ------------------------------- 菜单 ---------------------------------- */
+
+.ui-menu {
+  z-index: 1200;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+}
+
+.ui-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+  outline: none;
+  user-select: none;
+}
+
+.ui-menu-item[data-highlighted] {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.ui-menu-item[data-disabled] {
+  opacity: 0.45;
+}
+
+.ui-menu-item.danger {
+  color: #b4544a;
+}
+
+.ui-menu-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line);
+}
+
+.ui-menu-label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 45%, transparent);
+}
+
+/* ------------------------------ 浮层 ----------------------------------- */
+
+.ui-popover {
+  z-index: 1200;
+  min-width: 200px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+}
+
+.ui-tooltip {
+  z-index: 1300;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+/* ------------------------------ 弹窗层 --------------------------------- */
+/*
+ * Radix 的 Overlay 与 Content 在 Portal 下是兄弟节点，而现有皮肤 CSS 是按
+ * 「弹窗是遮罩的子元素」写的（.modal-backdrop 自己负责居中）。这一层只做定位：
+ * 遮罩仍铺满视口，内容在它之上居中；层本身不吃点击，避免挡住遮罩的关闭判定。
+ */
+.ui-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.ui-dialog-layer > * {
+  pointer-events: auto;
+}
+
+/* 遮罩类自带 z-index（.modal-backdrop 80、.note-scrim 100、.shortcuts-backdrop 140），
+   内容必须压在它们之上，否则视觉上只是「被压暗」，点击会被遮罩接走。抽屉的
+   .panel(70) 本来就高于 .panel-backdrop(60)，不在此列。 */
+.ui-dialog-layer > .ui-confirm,
+.ui-dialog-layer > .modal,
+.ui-dialog-layer > .shortcuts,
+.ui-dialog-layer > .note-dialog {
+  position: relative;
+  z-index: 200;
+}
+
+/* ------------------------------ 确认框 --------------------------------- */
+
+.ui-confirm {
+  width: min(92vw, 400px);
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+}
+
+.ui-confirm-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ui-confirm-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--text) 68%, transparent);
+}
+
+.ui-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ------------------------------- Tabs ---------------------------------- */
+
+.ui-tabs-list {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.ui-tab {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: color-mix(in srgb, var(--text) 62%, transparent);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.ui-tab[data-state='active'] {
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.ui-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+/* ------------------------------- 表单 ---------------------------------- */
+
+.ui-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 16%, transparent);
+  transition: background 0.18s var(--ease-out, ease);
+  cursor: pointer;
+}
+
+.ui-switch[data-state='checked'] {
+  background: var(--accent);
+}
+
+.ui-switch-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateX(2px);
+  transition: transform 0.18s var(--ease-out, ease);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.ui-switch[data-state='checked'] .ui-switch-thumb {
+  transform: translateX(18px);
+}
+
+.ui-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  touch-action: none;
+  user-select: none;
+}
+
+.ui-slider-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 14%, transparent);
+}
+
+.ui-slider-range {
+  position: absolute;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.ui-slider-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  outline: none;
+}
+
+.ui-slider-thumb:focus-visible {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ui-checkbox {
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--hairline-strong);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+}
+
+.ui-checkbox[data-state='checked'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ui-radio {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--hairline-strong);
+  border-radius: 50%;
+}
+
+.ui-radio[data-state='checked'] {
+  border-color: var(--accent);
+}
+
+.ui-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ------------------------------- Toast --------------------------------- */
+
+[data-sonner-toaster] {
+  font-family: inherit;
+}
+
+/* sonner 只当队列与无障碍容器，外观完全交给现有的 .toast 皮肤。 */
+[data-sonner-toast].toast-host {
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-sonner-toast].toast-host .toast {
+  position: static;
+  transform: none;
+  margin: 0;
+}

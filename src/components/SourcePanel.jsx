@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
 import {
   useAppActions,
   useRules,
@@ -9,7 +8,8 @@ import {
 } from '../store/AppStore.jsx';
 import { IconCloud, IconPlus, IconSearch, IconSparkle, IconTrash, IconX } from './Icons.jsx';
 import RepoBrowser from './RepoBrowser.jsx';
-import { usePresence } from '../hooks/usePresence.js';
+import { Modal } from '../ui/Dialog.jsx';
+import { Checkbox, Switch } from '../ui/Form.jsx';
 
 const EXAMPLE_FEEDS = [
   ['大灰狼源合集', 'https://raw.githubusercontent.com/shidahuilang/shuyuan/shuyuan/good.json'],
@@ -39,12 +39,10 @@ function SourceRow({ source, onToggle, onTest, onRemove, testing, checked, onChe
 
   return (
     <motion.li className={`source-row${checked ? ' picked' : ''}`} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <input
-        type="checkbox"
-        className="source-check"
+      <Checkbox
         checked={Boolean(checked)}
-        onChange={(e) => onCheck?.(source.id, e.target.checked)}
-        title="选中以批量操作"
+        onCheckedChange={(next) => onCheck?.(source.id, next)}
+        ariaLabel="选中以批量操作"
       />
       <div className="source-main">
         <div className="source-line">
@@ -101,12 +99,10 @@ function SourceRow({ source, onToggle, onTest, onRemove, testing, checked, onChe
         <button className="btn tiny ghost" onClick={test} disabled={testing === source.id || !source.enabled}>
           {testing === source.id ? '测试中' : '试搜'}
         </button>
-        <input
-          type="checkbox"
-          className="switch"
+        <Switch
           checked={source.enabled !== false}
-          onChange={(e) => onToggle(source.id, e.target.checked)}
-          title={source.enabled ? '已启用' : '已停用'}
+          onCheckedChange={(next) => onToggle(source.id, next)}
+          ariaLabel={`启用「${source.name}」`}
         />
         <button className="icon-btn ghost danger" title="删除书源" onClick={() => onRemove(source)}>
           <IconTrash size={15} />
@@ -138,12 +134,10 @@ function RuleRow({ rule, onToggle, onRemove }) {
       </div>
 
       <div className="source-actions">
-        <input
-          type="checkbox"
-          className="switch"
+        <Switch
           checked={rule.enabled !== false}
-          onChange={(e) => onToggle(rule.id, e.target.checked)}
-          title={rule.enabled !== false ? '已启用' : '已停用'}
+          onCheckedChange={(next) => onToggle(rule.id, next)}
+          ariaLabel={`启用「${label}」`}
         />
         <button className="icon-btn ghost danger" title="删除规则" onClick={() => onRemove(rule)}>
           <IconTrash size={15} />
@@ -154,7 +148,6 @@ function RuleRow({ rule, onToggle, onRemove }) {
 }
 
 export default function SourcePanel({ open, onClose }) {
-  const kit = useMotionKit();
   const sources = useSources();
   const rules = useRules();
   const settings = useSettings();
@@ -405,30 +398,16 @@ export default function SourcePanel({ open, onClose }) {
     notify(`已删除规则「${rule.name}」`);
   };
 
-  const alive = usePresence(open);
-
   return (
-    <>
-      {alive && (
-        <div
-          className="modal-backdrop"
-          data-open={open ? 'true' : 'false'}
-          // 退出动画期间（或万一 AnimatePresence 没能卸载）这层铺满全屏的元素
-          // 不能再吃点击，否则整个界面会「看得见但点不动」。
-          style={{ pointerEvents: open ? 'auto' : 'none' }}
-          onClick={onClose}
-        >
-          <AnimatePresence>
-            {open && (
-              <motion.div
-                key="source-modal"
-            className="modal source-modal"
-            variants={kit.modal}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            onClick={(e) => e.stopPropagation()}
-          >
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      className="modal source-modal"
+      backdropClassName="modal-backdrop"
+      ariaLabel={tab === 'sources' ? '外部书源' : tab === 'repo' ? '书源仓库' : '净化规则'}
+    >
             <header className="source-head">
               <div>
                 <span className="panel-eyebrow">书源</span>
@@ -612,7 +591,7 @@ export default function SourcePanel({ open, onClose }) {
                       </select>
                     )}
                     <label className="source-pickall">
-                      <input type="checkbox" className="source-check" checked={allPicked} onChange={togglePickAll} />
+                      <Checkbox checked={allPicked} onCheckedChange={togglePickAll} ariaLabel="全选" />
                       全选
                     </label>
                   </div>
@@ -706,11 +685,6 @@ export default function SourcePanel({ open, onClose }) {
                 完成
               </button>
             </footer>
-          </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-    </>
+    </Modal>
   );
 }

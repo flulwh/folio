@@ -1,13 +1,11 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconList, IconSearch, IconX } from './Icons.jsx';
-import { usePresence } from '../hooks/usePresence.js';
-import { useDialogFocus } from '../hooks/useDialogFocus.js';
+import { VirtualList } from '../ui/VirtualList.jsx';
+import { Sheet } from '../ui/Dialog.jsx';
 
 // 长篇的目录可能有几千上万章：整表渲染加 framer 的布局投射会把主线程卡住，
-// 所以只渲染视口附近的行，滚动时换窗口。行高先按设计值估，首帧量到真实高度再校准
-// （各皮肤 .toc-item 的内边距不同，写死会错位）。
+// 所以交给 VirtualList 只渲染视口附近的行。行高先按设计值估，虚拟列表会按
+// 真实行高校准（各皮肤 .toc-item 的内边距不同）。
 const DESIGN_ROW_H = 44;
 const OVERSCAN = 8;
 
@@ -21,20 +19,13 @@ export default function TocPanel({
   onSelect,
   onOpenSettings,
 }) {
-  const kit = useMotionKit();
-  // 目录面板是「先改 open、下一帧才挂载」的两段式（AnimatePresence 的存活开关）：
-  // 挂在 open 上做测量/绑监听会在节点还不存在的第一帧里直接 return，之后再也不跑。
-  // 所以所有依赖 DOM 的 effect 都跟 alive 走。
-  const alive = usePresence(open);
-  const panelRef = useDialogFocus(open);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [viewHeight, setViewHeight] = useState(0);
-  const [rowH, setRowH] = useState(DESIGN_ROW_H);
   const listRef = useRef(null);
-  // 「打开时定位到当前章」只做一次；换行高 / 关掉再打开时才重新定位。
-  const positionedRef = useRef('');
+  // VirtualList 内部创建的 virtualizer，用来做程序化滚动（定位/键盘）。
+  const virtualizerRef = useRef(null);
+  // 「打开时定位到当前章」只做一次；关掉再打开时才重新定位。
+  const positionedRef = useRef(false);
   const prevCursorRef = useRef(0);
 
   const allIndexes = useMemo(
@@ -56,8 +47,7 @@ export default function TocPanel({
     if (!open) {
       setQuery('');
       setCursor(0);
-      setScrollTop(0);
-      setViewHeight(0);
+      positionedRef.current = false;
     }
   }, [open]);
 
@@ -67,63 +57,32 @@ export default function TocPanel({
     if (query && listRef.current) listRef.current.scrollTo({ top: 0, behavior: 'instant' });
   }, [query]);
 
-  // 滚动时只更新窗口，不动整张表。
-  useEffect(() => {
-    if (!alive) return undefined;
-    const el = listRef.current;
-    if (!el) return undefined;
-    let raf = 0;
-    const sync = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        setScrollTop(el.scrollTop);
-        setViewHeight(el.clientHeight);
-      });
-    };
-    sync();
-    el.addEventListener('scroll', sync, { passive: true });
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
-    ro?.observe(el);
-    return () => {
-      el.removeEventListener('scroll', sync);
-      ro?.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [alive]);
-
-  useLayoutEffect(() => {
-    if (!alive) return;
-    const node = listRef.current?.querySelector('.toc-item');
-    if (!node) return;
-    const measured = node.getBoundingClientRect().height;
-    if (measured > 1 && Math.abs(measured - rowH) > 0.5) setRowH(measured);
-  }, [alive, rowH]);
-
   // 打开时把当前章放到中间。目录行是虚拟的，不能靠 scrollIntoView，
-  // 直接按行号算出 scrollTop，连旁边几千行都不用进 DOM。
+  // 交给 virtualizer 按行号定位，旁边几千行都不用进 DOM。
   useEffect(() => {
-    if (!alive) {
-      positionedRef.current = '';
-      return undefined;
-    }
-    const el = listRef.current;
-    if (!el) return undefined;
-    const stamp = String(rowH);
-    if (positionedRef.current === stamp) return undefined;
-    positionedRef.current = stamp;
+    if (!open) return undefined;
+    if (positionedRef.current) return undefined;
+    positionedRef.current = true;
     const id = requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (!el) return;
       const position = filtered.indexOf(currentChapter);
-      const target =
-        position >= 0
-          ? Math.max(0, position * rowH - (el.clientHeight - rowH) / 2)
-          : 0;
-      el.scrollTo({ top: target, behavior: 'instant' });
-      setScrollTop(el.scrollTop);
-      setViewHeight(el.clientHeight);
+      const virtualizer = virtualizerRef.current;
+      if (position < 0) {
+        el.scrollTo({ top: 0, behavior: 'instant' });
+        return;
+      }
+      if (virtualizer) {
+        virtualizer.scrollToIndex(position, { align: 'center', behavior: 'instant' });
+      } else {
+        el.scrollTo({
+          top: Math.max(0, position * DESIGN_ROW_H - (el.clientHeight - DESIGN_ROW_H) / 2),
+          behavior: 'instant',
+        });
+      }
     });
     return () => cancelAnimationFrame(id);
-  }, [alive, rowH, filtered, currentChapter]);
+  }, [open, filtered, currentChapter]);
 
   // 键盘上下移动：只把光标那一行带进视口。
   useEffect(() => {
@@ -133,16 +92,21 @@ export default function TocPanel({
     }
     if (prevCursorRef.current === cursor) return;
     prevCursorRef.current = cursor;
+    const virtualizer = virtualizerRef.current;
+    if (virtualizer) {
+      virtualizer.scrollToIndex(cursor, { align: 'auto', behavior: 'instant' });
+      return;
+    }
     const el = listRef.current;
     if (!el) return;
-    const top = cursor * rowH;
-    const bottom = top + rowH;
+    const top = cursor * DESIGN_ROW_H;
+    const bottom = top + DESIGN_ROW_H;
     if (top < el.scrollTop) {
       el.scrollTo({ top, behavior: 'instant' });
     } else if (bottom > el.scrollTop + el.clientHeight) {
       el.scrollTo({ top: bottom - el.clientHeight, behavior: 'instant' });
     }
-  }, [cursor, open, rowH]);
+  }, [cursor, open]);
 
   const currentTitle = useMemo(
     () => (Number.isInteger(currentChapter) ? chapters[currentChapter]?.title : ''),
@@ -170,27 +134,19 @@ export default function TocPanel({
   };
 
   const total = filtered.length;
-  const start = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN);
-  const end = Math.min(total, Math.ceil((scrollTop + Math.max(viewHeight, rowH)) / rowH) + OVERSCAN);
-  const rows = [];
-  for (let position = start; position < end; position += 1) {
+
+  const renderRow = (position) => {
     const index = filtered[position];
     const chapter = chapters[index];
-    if (!chapter) continue;
+    if (!chapter) return null;
     const active = index === currentChapter;
     const focused = position === cursor;
-    rows.push(
+    return (
       <button
         key={index}
         className={`toc-item${active ? ' active' : ''}${focused ? ' focused' : ''}`}
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: position * rowH,
-          // 只渲染窗口内的行，关掉 content-visibility，免得量到的行高是占位值
-          contentVisibility: 'visible',
-        }}
+        // 只渲染窗口内的行，关掉 content-visibility，免得量到的行高是占位值
+        style={{ contentVisibility: 'visible' }}
         onClick={() => onSelect(index)}
         onMouseEnter={() => setCursor(position)}
       >
@@ -199,34 +155,19 @@ export default function TocPanel({
         {active && <span className="toc-active-dot" />}
       </button>
     );
-  }
+  };
 
   return (
-    <AnimatePresence>
-      {alive && (
-        <>
-          <motion.div
-            key="toc-backdrop"
-            className="panel-backdrop"
-            variants={kit.backdrop}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            style={{ pointerEvents: open ? 'auto' : 'none' }}
-            onClick={onClose}
-          />
-          <motion.aside
-            key="toc-panel"
-            ref={panelRef}
-            className="panel toc-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="目录"
-            variants={kit.sheet('left')}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      side="left"
+      className="panel toc-panel"
+      backdropClassName="panel-backdrop"
+      ariaLabel="目录"
+    >
             <header className="panel-head">
               <div>
                 <span className="panel-eyebrow">
@@ -269,7 +210,14 @@ export default function TocPanel({
                 </div>
               )}
               {total > 0 && (
-                <div style={{ position: 'relative', height: `${total * rowH}px` }}>{rows}</div>
+                <VirtualList
+                  scrollRef={listRef}
+                  count={total}
+                  estimate={DESIGN_ROW_H}
+                  overscan={OVERSCAN}
+                  virtualizerRef={virtualizerRef}
+                  renderRow={renderRow}
+                />
               )}
             </div>
 
@@ -294,9 +242,6 @@ export default function TocPanel({
                 ) : null}
               </span>
             </footer>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+    </Sheet>
   );
 }

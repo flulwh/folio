@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { motionKitFor } from '../motion-kit.js';
+import { motionKitFor } from '../design/motion.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useSettings, useSources, dataApi } from '../store/AppStore.jsx';
+import { Tabs, TabsList, TabsTrigger } from '../ui/Tabs.jsx';
+import { Tooltip } from '../ui/Tooltip.jsx';
 import {
   IconArrowLeft,
   IconBook,
@@ -294,9 +296,11 @@ export default function BookMarket({ onClose, onOpenBook }) {
   return (
     <div className="market">
       <header className="market-header">
-        <button className="icon-btn ghost market-back" onClick={onClose} title="返回书架 (Esc)">
-          <IconArrowLeft size={18} />
-        </button>
+        <Tooltip label="返回书架 (Esc)">
+          <button className="icon-btn ghost market-back" onClick={onClose}>
+            <IconArrowLeft size={18} />
+          </button>
+        </Tooltip>
         <div className="market-title">
           <span className="market-eyebrow">Book Market</span>
           <h1>书籍市场</h1>
@@ -316,32 +320,31 @@ export default function BookMarket({ onClose, onOpenBook }) {
         </div>
       </header>
 
-      <div className="market-kind-tabs" role="tablist" aria-label="内容类型">
-        {[
-          { id: 'all', label: '全部', hint: '小说和漫画一起搜' },
-          { id: 'novel', label: '小说', hint: '只搜文字书源' },
-          { id: 'comic', label: '漫画', hint: '只搜图片书源' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            role="tab"
-            aria-selected={kind === tab.id}
-            className={`market-kind-tab${kind === tab.id ? ' active' : ''}`}
-            title={tab.hint}
-            onClick={() => setKind(tab.id)}
-          >
-            {tab.label}
-            <b>{kindCounts[tab.id]}</b>
-          </button>
-        ))}
-        <span className="market-kind-note">
-          {kind === 'comic'
-            ? '只搜漫画书源，找到的书用图片阅读器打开'
-            : kind === 'novel'
-              ? '只搜小说书源，找到的书按章节文字显示'
-              : '小说和漫画书源一起搜，也可以按类型缩小范围'}
-        </span>
-      </div>
+      <Tabs value={kind} onValueChange={setKind}>
+        <TabsList className="market-kind-tabs" ariaLabel="内容类型">
+          {[
+            { id: 'all', label: '全部' },
+            { id: 'novel', label: '小说' },
+            { id: 'comic', label: '漫画' },
+          ].map((tab) => (
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className={`market-kind-tab${kind === tab.id ? ' active' : ''}`}
+            >
+              {tab.label}
+              <b>{kindCounts[tab.id]}</b>
+            </TabsTrigger>
+          ))}
+          <span className="market-kind-note">
+            {kind === 'comic'
+              ? '只搜漫画书源，找到的书用图片阅读器打开'
+              : kind === 'novel'
+                ? '只搜小说书源，找到的书按章节文字显示'
+                : '小说和漫画书源一起搜，也可以按类型缩小范围'}
+          </span>
+        </TabsList>
+      </Tabs>
 
       <div className="market-search">
         <label className="market-search-box">

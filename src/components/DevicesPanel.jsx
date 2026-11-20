@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppActions, useBooks, useDevices } from '../store/AppStore.jsx';
 import { IconChevron } from './Icons.jsx';
+import { Checkbox } from '../ui/Form.jsx';
 
 /**
  * 设备页图标：`Icons.jsx` 里没有手机，本轮改动范围不含它，
@@ -773,12 +774,7 @@ export default function DevicesPanel() {
               <p style={{ margin: 0, fontSize: 12, color: COLOR.danger }}>单批最多 50 本 / 2GB，请分批</p>
             ) : null}
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text)' }}>
-              <input
-                type="checkbox"
-                checked={batchAck}
-                disabled={batchTooLarge}
-                onChange={(event) => setBatchAck(event.target.checked)}
-              />
+              <Checkbox checked={batchAck} onCheckedChange={setBatchAck} disabled={batchTooLarge} ariaLabel="确认占用空间" />
               我知道会占用约 {Math.max(1, Math.round(batchBytes / MIB))} MB
             </label>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

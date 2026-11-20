@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import Tilt from 'react-parallax-tilt';
-import { useMotionKit } from '../motion-kit.js';
+import { useMotionKit } from '../design/motion.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useDevices, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
 import SourcePanel from './SourcePanel.jsx';
@@ -10,6 +10,7 @@ import Segmented from './Segmented.jsx';
 import { SAMPLE_BOOK_CONTENT, SAMPLE_BOOK_NAME } from '../data/sampleBook.js';
 import { decodeBuffer, formatDate, formatPercent, isProbablyTextFile } from '../utils/format.js';
 import { useCachedCover, useCoverReadyTick, usePrimeShelfCovers } from '../hooks/useCachedCover.js';
+import { ContextMenuArea } from '../ui/Menu.jsx';
 import {
   IconBook,
   IconCloud,
@@ -44,20 +45,6 @@ const COVER_PALETTES = [
   { a: [268, 30, 82], b: [272, 26, 65], ink: [270, 32, 19] }, // violet
 ];
 
-/** 右键菜单项：没有独立 CSS 文件时用内联样式，跟随主题变量。 */
-const MENU_ITEM_STYLE = {
-  display: 'block',
-  width: '100%',
-  padding: '8px 10px',
-  border: 0,
-  borderRadius: 8,
-  background: 'transparent',
-  color: 'inherit',
-  font: 'inherit',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
-
 function coverStyle(book) {
   const seed = book.hue ?? hashHue(book.name || 'book');
   const p = COVER_PALETTES[seed % COVER_PALETTES.length];
@@ -68,7 +55,7 @@ function coverStyle(book) {
   };
 }
 
-function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, coverTick, variants, tilt }) {
+function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, index, coverTick, variants, tilt }) {
   const percentValue = Math.min(100, Math.max(0, percent || 0));
   const finished = percentValue >= 99.5;
   const coverTickValue = coverTick; // 批量封面就绪后重新求一次地址
@@ -115,82 +102,87 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onContext, index, 
     </button>
   );
 
+  const menuItems = [];
+  if (canSend) menuItems.push({ key: 'send', label: '发送到手机', onSelect: () => onSend(book) });
+  menuItems.push({ key: 'remove', label: '从书架移除', onSelect: () => onDelete(book) });
+
   return (
-    <motion.div
-      className="book-card"
-      variants={variants}
-      layout
-      custom={index}
-      onClick={() => onOpen(book)}
-      onContextMenu={(e) => onContext?.(e, book)}
-    >
-      {/* 3D 倾斜只在黑曜皮肤里开：其他两套的封面语言是平的，加倾斜会打架。
-          角度压得很小（7°/9°），配一层紫光 glare，像玻璃书封被灯照到。 */}
-      {tilt ? (
-        <Tilt
-          className="cover-tilt"
-          tiltMaxAngleX={7}
-          tiltMaxAngleY={9}
-          perspective={900}
-          scale={1.03}
-          transitionSpeed={900}
-          gyroscope={false}
-          glareEnable
-          glareMaxOpacity={0.16}
-          glareColor="#b3aaff"
-          glarePosition="all"
-        >
-          {cover}
-        </Tilt>
-      ) : (
-        cover
-      )}
-      <div className="book-meta">
-        <div className="book-meta-text">
-          <div className="book-name" title={book.name}>
-            {book.name}
+    <ContextMenuArea items={menuItems} ariaLabel="书籍操作">
+      <motion.div
+        className="book-card"
+        variants={variants}
+        layout
+        custom={index}
+        onClick={() => onOpen(book)}
+      >
+        {/* 3D 倾斜只在黑曜皮肤里开：其他两套的封面语言是平的，加倾斜会打架。
+            角度压得很小（7°/9°），配一层紫光 glare，像玻璃书封被灯照到。 */}
+        {tilt ? (
+          <Tilt
+            className="cover-tilt"
+            tiltMaxAngleX={7}
+            tiltMaxAngleY={9}
+            perspective={900}
+            scale={1.03}
+            transitionSpeed={900}
+            gyroscope={false}
+            glareEnable
+            glareMaxOpacity={0.16}
+            glareColor="#b3aaff"
+            glarePosition="all"
+          >
+            {cover}
+          </Tilt>
+        ) : (
+          cover
+        )}
+        <div className="book-meta">
+          <div className="book-meta-text">
+            <div className="book-name" title={book.name}>
+              {book.name}
+            </div>
+            <div className="book-sub">
+              {book.kind === 'cloud' ? (
+                cleanSourceName(book.sourceName) || '云端书源'
+              ) : (
+                <>
+                  本地
+                  <span className="dot">·</span>
+                  {formatDate(book.addedAt)}
+                </>
+              )}
+            </div>
           </div>
-          <div className="book-sub">
-            {book.kind === 'cloud' ? (
-              cleanSourceName(book.sourceName) || '云端书源'
-            ) : (
-              <>
-                本地
-                <span className="dot">·</span>
-                {formatDate(book.addedAt)}
-              </>
+          <div className="book-actions">
+            {book.kind === 'cloud' && (
+              <button
+                className="icon-btn ghost book-delete"
+                title="缓存管理（已下载的章节）"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCache(book);
+                }}
+              >
+                <IconDatabase size={16} />
+              </button>
             )}
-          </div>
-        </div>
-        <div className="book-actions">
-          {book.kind === 'cloud' && (
             <button
-              className="icon-btn ghost book-delete"
-              title="缓存管理（已下载的章节）"
+              className="icon-btn ghost danger book-delete"
+              title="从书架移除"
               onClick={(e) => {
                 e.stopPropagation();
-                onCache(book);
+                onDelete(book);
               }}
             >
-              <IconDatabase size={16} />
+              <IconTrash size={16} />
             </button>
-          )}
-          <button
-            className="icon-btn ghost danger book-delete"
-            title="从书架移除"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(book);
-            }}
-          >
-            <IconTrash size={16} />
-          </button>
+          </div>
         </div>
-      </div>
-      <div className="book-progress">
-        <span style={{ width: `${percentValue}%` }} />
-      </div>
-    </motion.div>
+        <div className="book-progress">
+          <span style={{ width: `${percentValue}%` }} />
+        </div>
+      </motion.div>
+    </ContextMenuArea>
   );
 }
 
@@ -216,8 +208,6 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
     devices: deviceActions,
   } = useAppActions();
   const [query, setQuery] = useState('');
-  // 书架右键菜单：{ x, y, book }。没有现成菜单机制，这里做一份最小的。
-  const [contextMenu, setContextMenu] = useState(null);
   const [sort, setSort] = useState(() => {
     try {
       const saved = localStorage.getItem('folio:shelf-sort');
@@ -282,41 +272,8 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
     []
   );
 
-  const openContextMenu = useCallback((event, book) => {
-    if (!event?.preventDefault) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const width = 190;
-    const height = 96;
-    setContextMenu({
-      x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)),
-      book,
-    });
-  }, []);
-
-  // 点空白、滚动、按 Esc 都关掉右键菜单。
-  useEffect(() => {
-    if (!contextMenu) return undefined;
-    const close = () => setContextMenu(null);
-    const onKey = (event) => {
-      if (event.key === 'Escape') close();
-    };
-    window.addEventListener('click', close);
-    window.addEventListener('resize', close);
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('scroll', close, true);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('resize', close);
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('scroll', close, true);
-    };
-  }, [contextMenu]);
-
   const sendToDevice = useCallback(
     async (book) => {
-      setContextMenu(null);
       if (!canSendToDevice(book)) {
         notify('这本书没有可用的内容哈希，暂时不能发送到手机', 'error');
         return;
@@ -707,7 +664,8 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                   percent={percentOf(book)}
                   onOpen={onOpenBook}
                   onDelete={setPendingDelete}
-                  onContext={openContextMenu}
+                  onSend={sendToDevice}
+                  canSend={canSendToDevice(book)}
                   onCache={(b) => {
                     setCacheStats(null);
                     setCacheBook(b);
@@ -726,50 +684,6 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
           <kbd>/</kbd> 搜索 <kbd>拖拽</kbd> 导入 <kbd>?</kbd> 快捷键
         </span>
       </footer>
-
-      {contextMenu && (
-        <div
-          role="menu"
-          aria-label="书籍操作"
-          style={{
-            position: 'fixed',
-            left: contextMenu.x,
-            top: contextMenu.y,
-            zIndex: 1200,
-            minWidth: 180,
-            padding: 6,
-            borderRadius: 12,
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--line)',
-            boxShadow: 'var(--shadow-card)',
-            color: 'var(--text)',
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {canSendToDevice(contextMenu.book) && (
-            <button
-              type="button"
-              role="menuitem"
-              style={MENU_ITEM_STYLE}
-              onClick={() => sendToDevice(contextMenu.book)}
-            >
-              发送到手机
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            style={MENU_ITEM_STYLE}
-            onClick={() => {
-              const target = contextMenu.book;
-              setContextMenu(null);
-              setPendingDelete(target);
-            }}
-          >
-            从书架移除
-          </button>
-        </div>
-      )}
 
       <AnimatePresence>
         {dragging && (

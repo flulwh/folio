@@ -1,17 +1,15 @@
 # 动效系统
 
-动效分**三套语言**，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口：
+动效分**三套语言**，跟着皮肤走，不是一套参数换数字。`src/design/motion.js` 是唯一的取用入口：
 组件不再直接 import 某个变体，而是 `const kit = useMotionKit()`，由当前皮肤决定拿到哪套。
 
 引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`）。它此前叫
 framer-motion，12 版起换了包名、重写了内核，API 基本兼容；三套皮肤共用这一个引擎。
 
 ```
-src/motion.js        Apple    ·「沉降」
-src/motion-miui.js   MIUI     ·「回弹 + 推进」
-src/motion-obsidian.js 黑曜   ·「纵深」（perspective + translateZ）
-src/motion-kit.js    皮肤 → 套件映射 + useMotionKit() / motionKitFor(skin)
-src/miui-motion.css  MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载）
+src/design/motion.js  三套套件 + 皮肤映射 + useMotionKit() / motionKitFor(skin)
+src/ui/primitives.css Radix 原语的交互态与定位（颜色全部取 tokens）
+src/miui-motion.css   MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载）
 src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容器的样式）
 ```
 
@@ -45,7 +43,7 @@ src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容
 
 ## Token
 
-### Apple（`src/motion.js`）
+### Apple（`MOTION_KITS.apple`）
 
 | Token | 值 | 用途 |
 | --- | --- | --- |
@@ -57,7 +55,7 @@ src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容
 | `SPRING.modal` | k400 / c28 / m0.85（ζ≈0.95） | 对话框 |
 | `SPRING.toast` | k460 / c26 / m0.80（ζ≈0.82） | 提示条 |
 
-### MIUI（`src/motion-miui.js`）
+### MIUI（`MOTION_KITS.miui`）
 
 | Token | 值 | 用途 |
 | --- | --- | --- |
@@ -70,7 +68,7 @@ src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容
 | `MI_SPRING.pop` | k620 / c27 / m0.60（ζ≈0.70） | 弹窗、提示条 |
 | `MI_SPRING.chrome` | k420 / c34 / m0.80（ζ≈0.93） | 阅读器上下工具栏 |
 
-### 黑曜（`src/motion-obsidian.js`）
+### 黑曜（`MOTION_KITS.obsidian`）
 
 | Token | 值 | 用途 |
 | --- | --- | --- |
@@ -128,7 +126,7 @@ CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴
 
 ## 改动的文件
 
-`src/motion.js`、`src/motion-miui.js`、`src/motion-obsidian.js`、`src/motion-kit.js`、
+`src/design/motion.js`、`src/ui/primitives.css`、
 `src/skin-obsidian.css`、`src/miui-motion.css`、`src/main.jsx`、`src/App.jsx`、
 `src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`
 

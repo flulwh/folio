@@ -84,7 +84,7 @@ npm run preview        # 预览 dist/
 
 **中**
 
-6. 组件不自带硬编码颜色与动画时长，颜色取 `src/design/tokens.css`，动效取 `src/motion-kit.js`（安卓端取 `ui/Theme.kt` 的色板与现有动效常量）。
+6. 组件不自带硬编码颜色与动画时长，颜色取 `src/design/tokens.css`，动效取 `src/design/motion.js`（安卓端取 `ui/Theme.kt` 的色板与现有动效常量）。
 7. 主线程不做重活：解析、解码、大文件 IO 放后台（桌面端 `utilityProcess`/异步，安卓端 `Dispatchers.Default`）。
 8. 删除代码要删干净：不留 `// removed` 注释、不保留只为兼容旧写法的别名。
 

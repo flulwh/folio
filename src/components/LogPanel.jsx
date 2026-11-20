@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
 import { useAppActions } from '../store/AppStore.jsx';
-import { usePresence } from '../hooks/usePresence.js';
+import { Modal } from '../ui/Dialog.jsx';
 import { IconX, IconTrash, IconShare, IconSearch } from './Icons.jsx';
 
 const LEVELS = [
@@ -35,9 +33,7 @@ function bodyOf(line) {
  * 排查书源问题时，用户把这里的东西发过来就够了。
  */
 export default function LogPanel({ open, onClose }) {
-  const kit = useMotionKit();
   const { logTail, logInfo, logLevel, logClear, logOpen, logExport, notify } = useAppActions();
-  const alive = usePresence(open);
   const [lines, setLines] = useState([]);
   const [info, setInfo] = useState({ dir: '', level: 'info', files: [], size: 0 });
   const [level, setLevel] = useState('info');
@@ -114,18 +110,16 @@ export default function LogPanel({ open, onClose }) {
     refresh();
   };
 
-  if (!alive) return null;
-
   return (
-    <div className="modal-backdrop" data-open={open ? 'true' : 'false'} style={{ pointerEvents: open ? 'auto' : 'none' }} onClick={onClose}>
-      <motion.div
-        className="modal log-modal"
-        onClick={(event) => event.stopPropagation()}
-        variants={kit.modal}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-      >
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      className="modal log-modal"
+      backdropClassName="modal-backdrop"
+      ariaLabel="运行日志"
+    >
         <header className="log-head">
           <div>
             <p className="log-eyebrow">调试</p>
@@ -208,7 +202,6 @@ export default function LogPanel({ open, onClose }) {
             </button>
           </div>
         </footer>
-      </motion.div>
-    </div>
+    </Modal>
   );
 }

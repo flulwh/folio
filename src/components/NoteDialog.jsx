@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { Modal } from '../ui/Dialog.jsx';
 import { IconX } from './Icons.jsx';
 
 /**
@@ -15,8 +15,6 @@ export default function NoteDialog({ open, title = '笔记', excerpt = '', initi
   useEffect(() => {
     if (!open) return;
     setText(initial);
-    const timer = setTimeout(() => areaRef.current?.focus(), 60);
-    return () => clearTimeout(timer);
   }, [open, initial]);
 
   // 对话框打开时，Esc 只关它，不再让 Reader 顺手关掉后面的面板
@@ -33,27 +31,16 @@ export default function NoteDialog({ open, title = '笔记', excerpt = '', initi
   }, [open, onClose]);
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="note-scrim"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.16 }}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) onClose();
-          }}
-        >
-          <motion.div
-            className="note-dialog"
-            role="dialog"
-            aria-modal="true"
-            initial={{ opacity: 0, y: 12, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.99 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          >
+    <Modal
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      className="note-dialog"
+      backdropClassName="note-scrim"
+      ariaLabel={title}
+      initialFocusRef={areaRef}
+    >
             <header className="note-head">
               <span className="note-eyebrow">NOTE</span>
               <h3>{title}</h3>
@@ -92,9 +79,6 @@ export default function NoteDialog({ open, title = '笔记', excerpt = '', initi
                 </button>
               </span>
             </footer>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </Modal>
   );
 }

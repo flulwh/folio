@@ -1,16 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useMotionKit } from '../motion-kit.js';
 import { AUTO_CHAPTER_REGEX, compileRegex } from '../utils/chapters.js';
 import { formatCount } from '../utils/format.js';
 import { IconCommand, IconType, IconX } from './Icons.jsx';
 import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
-import { usePresence } from '../hooks/usePresence.js';
-import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import { useThemeState } from '../store/AppStore.jsx';
 import { fontStackFor } from '../hooks/useFontLoader.js';
+import { Sheet } from '../ui/Dialog.jsx';
+import { Slider as FormSlider, Switch } from '../ui/Form.jsx';
 
 const FONTS = [
   { key: 'sans', label: '无衬线' },
@@ -28,15 +26,7 @@ function Slider({ label, value, min, max, step, unit, onChange }) {
           {unit}
         </span>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ '--pct': `${((value - min) / (max - min)) * 100}%` }}
-      />
+      <FormSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} />
     </div>
   );
 }
@@ -49,7 +39,6 @@ export default function SettingsPanel({
   onClose,
   chapterStats,
 }) {
-  const kit = useMotionKit();
   const { themes } = useThemeState();
   const [regexDraft, setRegexDraft] = useState(settings.chapterRegex || '');
   const [regexError, setRegexError] = useState('');
@@ -85,36 +74,18 @@ export default function SettingsPanel({
     onChange({ chapterRegex: regexDraft.trim() });
   };
 
-  const alive = usePresence(open);
-  const panelRef = useDialogFocus(open);
-
   return (
-    <AnimatePresence>
-      {alive && (
-        <>
-          <motion.div
-            key="settings-backdrop"
-            className="panel-backdrop"
-            variants={kit.backdrop}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            style={{ pointerEvents: open ? 'auto' : 'none' }}
-            onClick={onClose}
-          />
-          <motion.aside
-            key="settings-panel"
-            ref={panelRef}
-            className="panel settings-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="设置"
-            variants={kit.sheet('right')}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <header className="panel-head">
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      side="right"
+      className="panel settings-panel"
+      backdropClassName="panel-backdrop"
+      ariaLabel="设置"
+    >
+      <header className="panel-head">
               <div>
                 <span className="panel-eyebrow">
                   <IconType size={14} /> 阅读设置
@@ -214,11 +185,10 @@ export default function SettingsPanel({
                     首行缩进
                     <small>每段首行空两格</small>
                   </span>
-                  <input
-                    type="checkbox"
-                    className="switch"
+                  <Switch
                     checked={settings.indent}
-                    onChange={(e) => onChange({ indent: e.target.checked })}
+                    onCheckedChange={(indent) => onChange({ indent })}
+                    ariaLabel="首行缩进"
                   />
                 </label>
                 <label className="switch-row">
@@ -226,11 +196,10 @@ export default function SettingsPanel({
                     沉浸模式自动隐藏工具栏
                     <small>鼠标静止 2.5 秒后隐藏</small>
                   </span>
-                  <input
-                    type="checkbox"
-                    className="switch"
+                  <Switch
                     checked={settings.autoHideUI}
-                    onChange={(e) => onChange({ autoHideUI: e.target.checked })}
+                    onCheckedChange={(autoHideUI) => onChange({ autoHideUI })}
+                    ariaLabel="沉浸模式自动隐藏工具栏"
                   />
                 </label>
                 <label className="switch-row">
@@ -238,11 +207,10 @@ export default function SettingsPanel({
                     显示底部进度
                     <small>阅读进度与剩余时间</small>
                   </span>
-                  <input
-                    type="checkbox"
-                    className="switch"
+                  <Switch
                     checked={settings.showProgress}
-                    onChange={(e) => onChange({ showProgress: e.target.checked })}
+                    onCheckedChange={(showProgress) => onChange({ showProgress })}
+                    ariaLabel="显示底部进度"
                   />
                 </label>
                 <label className="switch-row">
@@ -250,11 +218,10 @@ export default function SettingsPanel({
                     减少动效
                     <small>关闭页间过渡与弹簧动画，更安静</small>
                   </span>
-                  <input
-                    type="checkbox"
-                    className="switch"
+                  <Switch
                     checked={!!settings.reduceMotion}
-                    onChange={(e) => onChange({ reduceMotion: e.target.checked })}
+                    onCheckedChange={(reduceMotion) => onChange({ reduceMotion })}
+                    ariaLabel="减少动效"
                   />
                 </label>
               </section>
@@ -352,9 +319,6 @@ export default function SettingsPanel({
                 恢复全部默认设置
               </button>
             </div>
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+    </Sheet>
   );
 }

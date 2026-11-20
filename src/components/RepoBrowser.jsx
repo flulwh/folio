@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAppActions, useRules, useSources } from '../store/AppStore.jsx';
+import { Tabs, TabsList, TabsTrigger } from '../ui/Tabs.jsx';
 import { IconBook, IconCloud, IconSearch, IconSparkle } from './Icons.jsx';
 
 const PAGE_SIZE = 20;
@@ -179,14 +180,22 @@ export default function RepoBrowser({ onImported }) {
   return (
     <div className="repo">
       <div className="repo-top">
-        <div className="repo-kinds">
-          <button className={`repo-kind${kind === 'sources' ? ' active' : ''}`} onClick={() => switchKind('sources')}>
-            书源列表
-          </button>
-          <button className={`repo-kind${kind === 'collections' ? ' active' : ''}`} onClick={() => switchKind('collections')}>
-            书源合集
-          </button>
-        </div>
+        <Tabs value={kind} onValueChange={switchKind}>
+          <TabsList className="repo-kinds" ariaLabel="仓库类型">
+            <TabsTrigger
+              value="sources"
+              className={`repo-kind${kind === 'sources' ? ' active' : ''}`}
+            >
+              书源列表
+            </TabsTrigger>
+            <TabsTrigger
+              value="collections"
+              className={`repo-kind${kind === 'collections' ? ' active' : ''}`}
+            >
+              书源合集
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="repo-search">
           <IconSearch size={14} />
           <input

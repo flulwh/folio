@@ -9,12 +9,12 @@
      皮肤想要的按压、滑块、开关动效不会被通用层或视觉层盖回去，也不必比 !important。
 
    分工：
-     · 位移 / 转场 / 级联  → src/motion-miui.js（framer 弹簧，皮肤感知）
+     · 位移 / 转场 / 级联  → src/design/motion.js（framer 弹簧，皮肤感知）
      · 按下 / 悬停 / 拖动  → 本文件（CSS，高频交互不能等一次 React 渲染）
    ========================================================================== */
 @layer motion {
 /* ------------------------------ 令牌 ------------------------------------- */
-/* 与 src/motion-miui.js 的 MI_DUR / MI_SPRING 同源，改一处要对齐另一处。 */
+/* 与 src/design/motion.js 的 MI_DUR / MI_SPRING 同源，改一处要对齐另一处。 */
 [data-skin='miui'] {
   --mi-motion-instant: 80ms;   /* 按下 —— 快到读不出是动画 */
   --mi-motion-fast: 160ms;     /* 颜色 / 阴影 */

@@ -1,11 +1,12 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
-import { useMotionKit } from './motion-kit.js';
-import { useAppActions, useBooks, useLoaded, useSettings, useThemeState, useToast } from './store/AppStore.jsx';
+import { useMotionKit } from './design/motion.js';
+import { useAppActions, useBooks, useLoaded, useSettings, useThemeState } from './store/AppStore.jsx';
 import Bookshelf from './components/Bookshelf.jsx';
 import Reader from './components/Reader.jsx';
 import ShortcutHelp from './components/ShortcutHelp.jsx';
 import TrafficLights from './components/TrafficLights.jsx';
+import { ToastBridge, Toaster } from './ui/Toast.jsx';
 import { IconBook } from './components/Icons.jsx';
 import { applyTheme } from './themes.js';
 
@@ -44,49 +45,8 @@ function Splash() {
     </motion.div>
   );
 }
-function Toast({ toast, onDismiss }) {
-  const kit = useMotionKit();
-  return (
-    <AnimatePresence>
-      {toast && (
-        <motion.div
-          className={`toast ${toast.tone || 'info'}`}
-          key={toast.id}
-          role="status"
-          aria-live="polite"
-          variants={kit.toast}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-        >
-          <span className="toast-dot" aria-hidden="true" />
-          <span className="toast-text">{toast.message}</span>
-          {toast.action?.label && (
-            <button
-              className="toast-action"
-              onClick={() => {
-                onDismiss?.();
-                try {
-                  toast.action.onClick?.();
-                } catch (err) {
-                  console.error('toast action failed', err);
-                }
-              }}
-            >
-              {toast.action.label}
-            </button>
-          )}
-          <button className="toast-close" onClick={onDismiss} title="关闭提示" aria-label="关闭提示">
-            ×
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
 export default function App() {
-  // 动效词汇随皮肤切换：Apple 沉降 / MIUI 回弹推进（见 motion-kit.js）
+  // 动效词汇随皮肤切换：Apple 沉降 / MIUI 回弹推进（见 design/motion.js）
   const kit = useMotionKit();
   // 只订阅 App 自己真正需要的状态。注意这里刻意不订阅 progress：
   // 阅读进度每滚动一次就变一次，App 一旦订阅它，整个组件树都会跟着重渲染。
@@ -94,8 +54,7 @@ export default function App() {
   const settings = useSettings();
   const { activeTheme } = useThemeState();
   const loaded = useLoaded();
-  const toast = useToast();
-  const { notify, dismissToast, readBookText } = useAppActions();
+  const { notify, readBookText } = useAppActions();
   const [activeBookId, setActiveBookId] = useState(null);
   const [view, setView] = useState('shelf');
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -354,7 +313,8 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-      <Toast toast={toast} onDismiss={dismissToast} />
+      <Toaster />
+      <ToastBridge />
       <ShortcutHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       {drawTrafficLights ? (
         <TrafficLights onDoubleClickBlank={handleTitleBarDoubleClick} />

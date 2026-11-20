@@ -3843,6 +3843,15 @@ html[data-theme='night'] .cover-cloud {
   border-radius: 4px;
 }
 
+/* 放大层的可视窗口：绝对定位把尺寸钉在视口上（四周留 24px，与容器 padding 一致）。
+   交给 grid 自动行的话，超高页会把行撑到整页高度，库算出的平移边界恒为 0。 */
+.comic-zoom .comic-zoom-frame {
+  position: absolute;
+  inset: 24px;
+  width: auto;
+  height: auto;
+}
+
 .comic-zoom-close {
   position: absolute;
   top: 18px;

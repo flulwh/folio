@@ -70,17 +70,16 @@ src/                渲染层（React）
 │   ├── shelf.css      书架
 │   ├── library.css    书市 / 书源 / 设置
 │   └── reader.css     阅读器
+├── design/motion.js   三套动效套件（Apple / MIUI / 黑曜）+ 皮肤映射
 ├── index.css          Apple 皮肤（兼声明 @layer base, skin, motion 层序）
 ├── miui.css           MIUI 皮肤源文件
 ├── skin-miui.css      由 miui.css 作用域化生成的产物（勿直接改，落在 @layer skin）
 ├── miui-motion.css    MIUI 的按下 / 悬停 / 拖动（@layer motion）
 ├── skin-obsidian.css  黑曜皮肤：深空玻璃、紫电、封面 3D（作用域 html[data-skin='obsidian']）
 ├── themes.js          主题令牌副本（设置页预览卡 + 运行时注入）
-├── motion.js          Apple 动效套件
-├── motion-miui.js     MIUI 动效套件
-├── motion-obsidian.js 黑曜动效套件（真实 3D：perspective + translateZ）
-├── motion-kit.js      皮肤 → 套件映射，唯一取用入口
-├── hooks/             useVirtualScroll / useCachedCover / usePresence / useFontLoader
+├── ui/                Radix 原语封装：Dialog / Menu / Popover / Tooltip / Tabs /
+│                      Form / Toast / VirtualList，及 primitives.css 交互态
+├── hooks/             useVirtualScroll / useCachedCover / useFontLoader
 ├── utils/             chapters / sortedIndex / text / format / friendly / shortcuts
 ├── data/sampleBook.js 内置示例书《山居手记》
 └── components/        Bookshelf / BookMarket / Reader / CloudBook / ComicReader /
@@ -160,7 +159,7 @@ MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`
 
 ## 六、动效系统
 
-动效分三套语言，跟着皮肤走，不是一套参数换数字。`src/motion-kit.js` 是唯一的取用入口。
+动效分三套语言，跟着皮肤走，不是一套参数换数字。`src/design/motion.js` 是唯一的取用入口。
 底层引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`，
 framer-motion 的官方继任包）；三套皮肤共用引擎，差在令牌与变体，不重复引库。
 

@@ -12,7 +12,8 @@ import { parseThemeJson, themeToJson } from '../themes.js';
 import { AUTO_CHAPTER_REGEX, compileRegex } from '../utils/chapters.js';
 import { formatCount } from '../utils/format.js';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
-import { useMotionKit } from '../motion-kit.js';
+import { useMotionKit } from '../design/motion.js';
+import { Slider as FormSlider, Switch } from '../ui/Form.jsx';
 import SourcePanel from './SourcePanel.jsx';
 import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
@@ -75,14 +76,13 @@ function Slider({ label, hint, value, min, max, step, unit, onChange }) {
           {unit}
         </span>
       </div>
-      <input
-        type="range"
+      <FormSlider
+        value={value}
         min={min}
         max={max}
         step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        style={{ '--pct': `${((value - min) / (max - min)) * 100}%` }}
+        onChange={(next) => onChange(Number(next))}
+        ariaLabel={label}
       />
     </div>
   );
@@ -430,11 +430,10 @@ export default function SettingsPage({ onClose }) {
                         macOS 上始终使用系统原生交通灯。
                       </small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={settings.macosFrame !== false}
-                      onChange={(event) => patchSettings({ macosFrame: event.target.checked })}
+                      onCheckedChange={(macosFrame) => patchSettings({ macosFrame })}
+                      ariaLabel="macOS 风格边框"
                     />
                   </label>
                 </section>
@@ -720,11 +719,10 @@ export default function SettingsPage({ onClose }) {
                       首行缩进
                       <small>每段首行空两格</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={settings.indent}
-                      onChange={(event) => patchSettings({ indent: event.target.checked })}
+                      onCheckedChange={(indent) => patchSettings({ indent })}
+                      ariaLabel="首行缩进"
                     />
                   </label>
                   <label className="switch-row">
@@ -732,11 +730,10 @@ export default function SettingsPage({ onClose }) {
                       沉浸模式自动隐藏工具栏
                       <small>鼠标静止 2.5 秒后隐藏</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={settings.autoHideUI}
-                      onChange={(event) => patchSettings({ autoHideUI: event.target.checked })}
+                      onCheckedChange={(autoHideUI) => patchSettings({ autoHideUI })}
+                      ariaLabel="沉浸模式自动隐藏工具栏"
                     />
                   </label>
                   <label className="switch-row">
@@ -744,11 +741,10 @@ export default function SettingsPage({ onClose }) {
                       显示底部进度
                       <small>阅读进度与剩余时间</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={settings.showProgress}
-                      onChange={(event) => patchSettings({ showProgress: event.target.checked })}
+                      onCheckedChange={(showProgress) => patchSettings({ showProgress })}
+                      ariaLabel="显示底部进度"
                     />
                   </label>
                   <label className="switch-row">
@@ -756,11 +752,10 @@ export default function SettingsPage({ onClose }) {
                       减少动效
                       <small>关闭页间过渡与弹簧动画</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={!!settings.reduceMotion}
-                      onChange={(event) => patchSettings({ reduceMotion: event.target.checked })}
+                      onCheckedChange={(reduceMotion) => patchSettings({ reduceMotion })}
+                      ariaLabel="减少动效"
                     />
                   </label>
                 </section>
@@ -917,11 +912,10 @@ export default function SettingsPage({ onClose }) {
                               (source.baseUrl ? ` · ${source.baseUrl.replace(/^https?:\/\//, '')}` : '')}
                           </small>
                         </span>
-                        <input
-                          type="checkbox"
-                          className="switch"
+                        <Switch
                           checked={source.enabled !== false}
-                          onChange={(event) => toggleSource(source.id, event.target.checked)}
+                          onCheckedChange={(enabled) => toggleSource(source.id, enabled)}
+                          ariaLabel={`启用 ${source.name}`}
                         />
                       </label>
                     ))}
@@ -942,13 +936,11 @@ export default function SettingsPage({ onClose }) {
                       开启面板
                       <small>同一 Wi-Fi 下的手机、平板用浏览器打开就能看书架和读到哪了</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={!!lanSettings.enabled}
                       disabled={lanBusy}
-                      onChange={(event) => {
-                        const enabled = event.target.checked;
+                      ariaLabel="开启局域网面板"
+                      onCheckedChange={(enabled) => {
                         applyLan({
                           ...lanSettings,
                           enabled,
@@ -963,13 +955,12 @@ export default function SettingsPage({ onClose }) {
                       允许写入阅读进度
                       <small>关掉就是纯只读面板：手机上只能看，不能接着往下读</small>
                     </span>
-                    <input
-                      type="checkbox"
-                      className="switch"
+                    <Switch
                       checked={lanSettings.allowWrite !== false}
                       disabled={lanBusy || !lanSettings.enabled}
-                      onChange={(event) =>
-                        applyLan({ ...lanSettings, enabled: true, allowWrite: event.target.checked })
+                      ariaLabel="允许写入阅读进度"
+                      onCheckedChange={(allowWrite) =>
+                        applyLan({ ...lanSettings, enabled: true, allowWrite })
                       }
                     />
                   </label>

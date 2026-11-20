@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react';
 import { useAppActions, useProgress, useSettings, dataApi } from '../store/AppStore.jsx';
 import Reader from './Reader.jsx';
+import { Tooltip } from '../ui/Tooltip.jsx';
 import { IconArrowLeft, IconList, IconRefresh, IconSparkle } from './Icons.jsx';
 
 // 一个窗口里预取几章：多了浪费流量，少了翻页就断。
@@ -390,9 +391,11 @@ export default function CloudBook({ book, onClose }) {
 
   const gateHead = (
     <header className="cloud-gate-head">
-      <button className="icon-btn ghost" onClick={onClose} title="返回书架 (Esc)">
-        <IconArrowLeft size={18} />
-      </button>
+      <Tooltip label="返回书架 (Esc)">
+        <button className="icon-btn ghost" onClick={onClose}>
+          <IconArrowLeft size={18} />
+        </button>
+      </Tooltip>
       <div className="cloud-gate-meta">
         <span className="reader-book">{book.name}</span>
         <span className="reader-chapter">{book.sourceName}</span>

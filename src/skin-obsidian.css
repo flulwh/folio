@@ -8,7 +8,7 @@
      前两套（Apple / MIUI）都是"平面 + 光影"，深色主题只是把纸换成黑。
      要做出「暗黑、高级、有体积」的感觉，靠的不是更黑的底色，而是三件事：
        1. 分层：近黑底 → 玻璃面 → 高光边，三层缺一不可；
-       2. 纵深：书架封面允许 3D 倾斜，页面转场带 perspective（见 motion-obsidian.js）；
+       2. 纵深：书架封面允许 3D 倾斜，页面转场带 perspective（见 design/motion.js）；
        3. 克制：全站只有一个强调色（紫电 #8a7cff），其余靠透明度做层次。
 
    作用域全部挂在 html[data-skin='obsidian'] 下，与 Apple / MIUI 并存；
@@ -87,7 +87,7 @@ html[data-skin='obsidian'] .app::after {
 /* .view 的 position:absolute / inset:0 是 index.css 的骨架，这里不能改写成
    relative：整页内容（.settings-page 等）都是绝对定位、不参与撑高，
    .view 一旦进入常规流就会塌成 0 高，设置页只剩页头可见。
-   纵深交给 motion-obsidian.js 的 perspective 与封面 Tilt，不需要 preserve-3d。 */
+   纵深交给 design/motion.js 的 perspective 与封面 Tilt，不需要 preserve-3d。 */
 html[data-skin='obsidian'] .shelf {
   background: transparent;
   transform-style: preserve-3d;
