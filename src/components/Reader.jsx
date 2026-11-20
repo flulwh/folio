@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -10,19 +9,13 @@ import { AnimatePresence, motion } from 'motion/react';
 import { motionKitFor } from '../motion-kit.js';
 import { useAppActions, useFonts, useMarks, useProgress, useSettings } from '../store/AppStore.jsx';
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
+import { useReaderMeasure } from '../hooks/useReaderMeasure.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   chapterIndexForPara,
   parseBookCached,
 } from '../utils/chapters.js';
 import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
-import {
-  loadHeights,
-  hasHeights,
-  saveHeights,
-  measureChunkSize,
-  MEASURE_HINT_MIN,
-} from '../utils/readerHeights.js';
 import { findMatchRange, searchBook } from '../utils/search.js';
 import { clampIndex } from '../utils/virtual.js';
 import TocPanel from './TocPanel.jsx';
@@ -50,14 +43,6 @@ const UI_IDLE_MS = 2500;
 
 /** 摘录统一压成单行：段落号才是锚点，字符偏移只用于显示。 */
 const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
-
-/** 测量层用 innerHTML 拼节点，正文必须转义，否则 `<` 会被当成标签。 */
-function escapeHtml(value) {
-  return String(value).replace(/[&<>]/g, (ch) => (ch === '&' ? '&amp;' : ch === '<' ? '&lt;' : '&gt;'));
-}
-
-// 测量层里的空行探针：和正文里完全同构，用来量出 `.vp-gap` 的真实高度
-const GAP_PROBE = '<div class="measure-item"><div class="vp-gap"></div></div>';
 
 export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const settings = useSettings();
@@ -150,44 +135,11 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     );
   }, [settings.fontSize, settings.lineHeight, settings.pageWidth, settings.paragraphSpacing]);
 
-  // 空行段落是固定高度（`.vp-gap`，随字号缩放），不必逐段进 DOM 实测；
-  // 超长篇里空行常常占一半（44 万段的书里 22 万段是空行），跳过它们直接让测量量减半。
-  // 固定高度取自测量层里那一个真实的空行探针，避免把 CSS 里的系数抄到 JS 里。
-  const gapHeightRef = useRef(0);
-  const textIndexes = useMemo(() => {
-    const list = [];
-    for (let i = 0; i < paragraphs.length; i += 1) {
-      if (!paragraphs[i].blank) list.push(i);
-    }
-    return list;
-  }, [paragraphs]);
-  const measureChunk = useMemo(() => measureChunkSize(textIndexes.length), [textIndexes.length]);
-  // 新建高度表时先把空行的固定高度填好，剩下的才靠 DOM 实测。
-  const createHeightStore = () => {
-    const store = new Float64Array(paragraphs.length);
-    const gap = gapHeightRef.current;
-    if (gap > 0) {
-      for (let i = 0; i < paragraphs.length; i += 1) {
-        if (paragraphs[i].blank) store[i] = gap;
-      }
-    }
-    return store;
-  };
-
-  const [measuring, setMeasuring] = useState(true);
-  const measureHeightsRef = useRef(null);
-  const [measureFrom, setMeasureFrom] = useState(0);
-  // 「正在排版」延迟出现：命中缓存时测量只占一帧，立刻显示反而像是每次都重排了一遍。
-  const [measureHint, setMeasureHint] = useState(false);
-
-  const resetMeasure = useCallback(() => {
-    if (measureRafRef.current) {
-      cancelAnimationFrame(measureRafRef.current);
-      measureRafRef.current = 0;
-    }
-    measureHeightsRef.current = null;
-    setMeasureFrom(0);
-    setMeasuring(true);
+  // 排版测量整块在 useReaderMeasure 里；这里只留一个稳定的转接器给虚拟滚动，
+  // 因为 onResize 要在 hook 调用前就绪，而 hook 又要用 virtual 暴露的 measureItems。
+  const resetMeasureRef = useRef(null);
+  const handleResizeMeasure = useCallback(() => {
+    if (resetMeasureRef.current) resetMeasureRef.current();
   }, []);
 
   const virtual = useVirtualScroll({
@@ -196,7 +148,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     overscan: 6,
     // A width change rewraps every paragraph, so ask for a fresh full measure
     // instead of letting the scroller fall back to estimated heights.
-    onResize: resetMeasure,
+    onResize: handleResizeMeasure,
   });
   const {
     scrollRef,
@@ -284,18 +236,35 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   // 落位逻辑随排版/高度表更新，但测量 layout effect 不能被它的新引用触发重跑，
   // 所以只通过 ref 调用最新版本。
   const locateRestoreRef = useRef(null);
-  const firstSettingsRun = useRef(true);
-  const measureRef = useRef(null);
-  const measureRafRef = useRef(0);
   const searchTimer = useRef(null);
+
+  // 恢复定位请求：测量未结束只记录目标段落，绝不立即滚动。
+  // 引用保持稳定，避免测量用的 layout effect 被新引用反复触发。
+  const requestRestore = useCallback((index) => {
+    const r = restoreRef.current;
+    if (!Number.isFinite(index) || index < 0) return;
+    r.target = index;
+    r.applied = false;
+    r.asserted = false;
+    if (r.phase === 'settled' && locateRestoreRef.current) locateRestoreRef.current();
+  }, []);
 
   // Everything that can change a paragraph's height. When this changes the
   // offscreen measurement pass re-runs and the whole offset table becomes exact.
   const typographyKey = `${book.id}|${settings.fontSize}|${settings.lineHeight}|${settings.pageWidth}|${settings.paragraphSpacing}|${settings.fontFamily}|${settings.userFont || ''}|${settings.indent}`;
-  // 高度缓存键：排版 + 段落数（栏宽在读写时会再校验一次）
-  const cacheKey = `${typographyKey}|${paragraphs.length}`;
-  // 有没有现成的高度缓存：有的话首批只渲染一小撮做校验，不必把整批塞进 DOM 再丢弃。
-  const hasCachedHeights = useMemo(() => hasHeights(cacheKey), [cacheKey]);
+  const { measuring, measureHint, measureRef, measurePercent, resetMeasure } = useReaderMeasure({
+    paragraphs,
+    headingSet,
+    typographyKey,
+    activeUserFont,
+    scrollRef,
+    measureItems,
+    resume,
+    requestRestore,
+    restoreRef,
+    lastIndexRef,
+  });
+  resetMeasureRef.current = resetMeasure;
 
   overlaysOpenRef.current = tocOpen || settingsOpen || marksOpen || searchOpen;
 
@@ -586,17 +555,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   }, [assertRestoreLanding, chapters, getOffset, getScrollState, paragraphs, progress, book.id, scrollToOffset]);
   locateRestoreRef.current = locateRestore;
 
-  // 恢复定位请求：测量未结束只记录目标段落，绝不立即滚动。
-  // 引用保持稳定，避免测量用的 layout effect 被新引用反复触发。
-  const requestRestore = useCallback((index) => {
-    const r = restoreRef.current;
-    if (!Number.isFinite(index) || index < 0) return;
-    r.target = index;
-    r.applied = false;
-    r.asserted = false;
-    if (r.phase === 'settled' && locateRestoreRef.current) locateRestoreRef.current();
-  }, []);
-
   // 测量状态 → 恢复状态机。measuring 期间任何定位都只记账；
   // settled 的下一帧再落位（此时 offsets / spacer 已经在同一帧同步）。
   useEffect(() => {
@@ -620,154 +578,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     });
     return () => cancelAnimationFrame(raf);
   }, [measuring]);
-
-  /* --------------- exact heights via an offscreen pass -------------- */
-
-  // Re-run the measurement pass whenever the typography (or the book) changes.
-  useEffect(() => {
-    if (firstSettingsRun.current) {
-      firstSettingsRun.current = false;
-      return;
-    }
-    measureHeightsRef.current = createHeightStore();
-    setMeasureFrom(0);
-    setMeasuring(true);
-  }, [paragraphs.length, typographyKey]);
-
-  useEffect(() => {
-    let alive = true;
-    // 只有用户装了自己字体（@font-face 异步加载）时才需要等字体回来重测；
-    // 系统字体是同步可用的，再测一遍只会让「正在排版」多闪一次。
-    if (!activeUserFont) return undefined;
-    if (typeof document !== 'undefined' && document.fonts?.ready) {
-      document.fonts.ready.then(() => {
-        if (!alive) return;
-        measureHeightsRef.current = createHeightStore();
-        setMeasureFrom(0);
-        setMeasuring(true);
-      });
-    }
-    return () => {
-      alive = false;
-    };
-  }, [activeUserFont, paragraphs.length]);
-
-  useEffect(() => {
-    if (!measuring || paragraphs.length <= MEASURE_HINT_MIN) {
-      setMeasureHint(false);
-      return undefined;
-    }
-    const timer = setTimeout(() => setMeasureHint(true), 240);
-    return () => clearTimeout(timer);
-  }, [measuring, paragraphs.length]);
-
-  useLayoutEffect(() => {
-    if (!measuring) return;
-    const layer = measureRef.current;
-    if (!layer) return;
-    let store = measureHeightsRef.current;
-    // 首帧时被动 effect 还没跑，这里补建一次，避免游标永远停在第一块
-    if (!store || store.length !== paragraphs.length) {
-      store = createHeightStore();
-      measureHeightsRef.current = store;
-    }
-    const width = Math.round(scrollRef.current?.clientWidth || 0);
-    const total = textIndexes.length;
-    if (!total) {
-      measureItems(new Float64Array(paragraphs.length));
-      setMeasuring(false);
-      return;
-    }
-    const from = Math.min(measureFrom, total);
-    // 有缓存时第一批只渲染一小撮做校验，别为了验证把上千段塞进 DOM
-    const batch = from === 0 && hasCachedHeights ? Math.min(measureChunk, 96) : measureChunk;
-    const to = Math.min(total, from + batch);
-    // 测量层直接拼 DOM，不走 React：上万段的 reconciliation 比布局本身还贵，
-    // 而测量只关心「这个 p 有多高」，不需要事件、划线标记和动画。
-    const parts = [];
-    for (let k = from; k < to; k += 1) {
-      const index = textIndexes[k];
-      const top = index === 0 ? 'padding-top:14vh;' : '';
-      const bottom = index === paragraphs.length - 1 ? 'padding-bottom:28vh;' : '';
-      const style = top || bottom ? ` style="${top}${bottom}"` : '';
-      const cls = headingSet.has(index) ? 'para chapter-title' : 'para';
-      parts.push(
-        `<div class="measure-item" data-index="${index}"${style}><p class="${cls}">${escapeHtml(
-          paragraphs[index].text || ''
-        )}</p></div>`
-      );
-    }
-    layer.innerHTML = `${GAP_PROBE}${parts.join('')}`;
-    // 空行探针：量一次 `.vp-gap` 的真实高度，按这个值填满所有空行段落
-    const gapNode = layer.firstElementChild;
-    const gapHeight = gapNode ? gapNode.offsetHeight : 0;
-    if (gapHeight > 0 && gapHeight !== gapHeightRef.current) {
-      gapHeightRef.current = gapHeight;
-      for (let i = 0; i < store.length; i += 1) {
-        if (paragraphs[i].blank) store[i] = gapHeight;
-      }
-    }
-    const nodes = layer.children;
-    // 分块测量：一次把上万段塞进 DOM 会卡住主线程，所以每批只测量 measureChunk 段。
-    // 批大小随书的大小放大（见 measureChunkSize），空行段落不渲染、直接用固定高度填。
-    for (let i = 0; i < nodes.length; i += 1) {
-      const node = nodes[i];
-      const index = Number(node.dataset.index);
-      if (Number.isFinite(index) && index >= 0 && index < store.length) {
-        store[index] = node.offsetHeight;
-      }
-    }
-    // 缓存只用来省时间，不能盲信：先量一批跟缓存比对，对不上（字体/宽度变了）就整本重测
-    if (measureFrom === 0) {
-      const cached = loadHeights(cacheKey, width);
-      if (cached && cached.length === paragraphs.length) {
-        let diff = 0;
-        let counted = 0;
-        for (let i = 0; i < nodes.length; i += 1) {
-          const index = Number(nodes[i].dataset.index);
-          if (Number.isFinite(index) && index >= 0 && cached[index] > 0) {
-            diff += Math.abs(cached[index] - store[index]) / cached[index];
-            counted += 1;
-          }
-        }
-        if (counted === 0 || diff / counted <= 0.02) {
-          const merged = Float64Array.from(cached);
-          // 空行是固定高度，直接用这次探针量到的值，免得旧缓存里的空行高度过期
-          const gap = gapHeightRef.current;
-          if (gap > 0) {
-            for (let i = 0; i < merged.length; i += 1) {
-              if (paragraphs[i].blank) merged[i] = gap;
-            }
-          }
-          for (let i = 0; i < nodes.length; i += 1) {
-            const index = Number(nodes[i].dataset.index);
-            if (Number.isFinite(index) && index >= 0 && index < merged.length) merged[index] = store[index];
-          }
-          measureItems(merged);
-          measureHeightsRef.current = merged;
-          setMeasuring(false);
-          // 测量刚结束：只把目标段落记进状态机，真正的落位在 settled 后统一做。
-          // resume 关闭时首次打开不恢复位置（与旧行为一致），重测才需要保位。
-          if (resume || restoreRef.current.settledOnce) requestRestore(lastIndexRef.current);
-          return;
-        }
-      }
-    }
-    if (to < total) {
-      // 用 rAF 推进游标：layout effect 里直接 setState 会让 React 在同一帧内同步重渲染，
-      // 所有批次全挤进一个长任务里、首屏迟迟不出现；rAF 让浏览器先把这批画出来。
-      measureRafRef.current = requestAnimationFrame(() => {
-        measureRafRef.current = 0;
-        setMeasureFrom(to);
-      });
-      return;
-    }
-    measureItems(store);
-    saveHeights(cacheKey, width, store);
-    setMeasuring(false);
-    // 排版编辑后保持在原段落：同样只记账，落位交给状态机。
-    if (resume || restoreRef.current.settledOnce) requestRestore(lastIndexRef.current);
-  }, [measuring, measureFrom, measureItems, paragraphs.length, requestRestore, resume, textIndexes.length]);
 
   /* --------------------------- navigation --------------------------- */
 
@@ -1658,9 +1468,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         <div className="reader-measuring">
           <span className="reader-measuring-dot" />
           正在排版
-          <span className="reader-measuring-pct">
-            {Math.min(99, Math.round((measureFrom / Math.max(1, textIndexes.length)) * 100))}%
-          </span>
+          <span className="reader-measuring-pct">{measurePercent}%</span>
         </div>
       )}
 
