@@ -1494,6 +1494,11 @@ export async function fetchPage(source, rawUrl, vars = {}, { timeout = 15000, pr
     'accept-language': 'zh-CN,zh;q=0.9,en;q=0.6',
     ...(source.headers || {}),
   };
+  // 不少站对章节页做防盗链：带上书页作为来路，避免被当成外链直接返回 403/登录页
+  if (!headers.referer && !headers.Referer) {
+    const referer = vars.bookUrl || source.baseUrl;
+    if (referer) headers.referer = String(referer);
+  }
   let body;
   if (request.method === 'POST') {
     headers['content-type'] = headers['content-type'] || 'application/x-www-form-urlencoded';
@@ -2738,6 +2743,12 @@ export function extractImages(html, rule, pageUrl, extra = {}) {
   return out;
 }
 
+/**
+ * 登录/验证页的典型字样。200 的页面也可能是「请先登录」「登录后阅读」，
+ * 正文规则往往还能从中挤出几句提示语，看起来像「抓到了」。
+ */
+const LOGIN_PAGE_RE = /请先登录|请登录后|登录后(?:查看|阅读|继续)|注册后(?:查看|阅读)|验证码|captcha|sign\s*in\s+to\s+(?:read|continue)/i;
+
 export async function fetchChapter(source, chapterUrl, bookUrl, chapter = null, options = {}) {
   const cacheRoot = options.cacheRoot;
   const proxy = options.proxy || '';
@@ -2868,6 +2879,18 @@ export async function fetchChapter(source, chapterUrl, bookUrl, chapter = null, 
       text = guess;
       fallback = 'auto';
     }
+  }
+
+  // 正文极短 + 页面里有登录字样：多半是登录/验证页混进来了，直接判失败，
+  // 让上层提示「可能需要登录」，不要把几句提示语当正文显示并落盘。
+  if (text.replace(/\s+/g, '').length < 40 && LOGIN_PAGE_RE.test(html || '')) {
+    logLine('warn', 'content', `${source.name} → 疑似登录页，放弃解析`, {
+      chapterUrl,
+      htmlLength: (html || '').length,
+    });
+    const err = new Error('抓到的可能是登录/验证页，该书源可能需要登录，或换一个书源');
+    err.friendly = true;
+    throw err;
   }
 
   logLine('info', 'content', `${source.name} → ${text.replace(/\s+/g, '').length} 字${fallback ? `（${fallback}）` : ''}`, {
