@@ -22,6 +22,7 @@ import { useReaderUiVisibility } from '../hooks/useReaderUiVisibility.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   chapterIndexForPara,
+  mapCloudChapters,
   parseBookCached,
 } from '../utils/chapters.js';
 import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
@@ -87,24 +88,11 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   // 云端书的章节由书源目录决定：CloudBook 把「标题 + 正文」拼进 content，
   // 这里按顺序找到每个标题所在的段落，得到 paraIndex 映射。
-  const chapters = useMemo(() => {
-    if (!book.cloudChapters?.length) return parsedChapters;
-    const norm = (value) => String(value || '').replace(/\s+/g, '');
-    const out = [];
-    let cursor = 0;
-    book.cloudChapters.forEach((item, k) => {
-      const target = norm(item.title);
-      for (let i = cursor; i < paragraphs.length; i += 1) {
-        if (!paragraphs[i].blank && norm(paragraphs[i].text) === target) {
-          out.push({ title: item.title, paraIndex: i, cloudIndex: k });
-          cursor = i + 1;
-          return;
-        }
-      }
-    });
-    if (out.length) return out;
-    return [{ title: '正文', paraIndex: 0, cloudIndex: 0 }];
-  }, [book.cloudChapters, paragraphs, parsedChapters]);
+  // 映射保证章数与目录一致（全等 → 前缀 → 顺序补齐），细节见 mapCloudChapters。
+  const chapters = useMemo(
+    () => (book.cloudChapters?.length ? mapCloudChapters(book.cloudChapters, paragraphs) : parsedChapters),
+    [book.cloudChapters, paragraphs, parsedChapters]
+  );
 
   const hasHeadings = book.cloudChapters?.length ? true : parsedHasHeadings;
 

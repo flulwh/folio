@@ -7,11 +7,56 @@ import {
   isHeading,
   buildChapters,
   chapterIndexForPara,
+  mapCloudChapters,
   parseBook,
   parseBookCached,
 } from '../src/utils/chapters.js';
 
 const autoRegex = compileRegex(AUTO_CHAPTER_REGEX);
+
+/** 把纯文本按「非空行 = 一段」摊平，够用来测云端章节映射。 */
+function paras(...lines) {
+  return lines.map((text) => ({ text, blank: text === '' }));
+}
+
+describe('mapCloudChapters', () => {
+  it('标题与正文完全一致时逐章对上', () => {
+    const list = [{ title: '第一章 雪' }, { title: '第二章 灯' }];
+    const body = paras('第一章 雪', '雪落了。', '第二章 灯', '灯亮着。');
+    expect(mapCloudChapters(list, body)).toEqual([
+      { title: '第一章 雪', paraIndex: 0, cloudIndex: 0 },
+      { title: '第二章 灯', paraIndex: 2, cloudIndex: 1 },
+    ]);
+  });
+
+  it('标题带副标题、正文只有前半截时按前缀匹配', () => {
+    const list = [{ title: '第一章 雪（上）' }, { title: '第二章 灯' }];
+    const body = paras('第一章 雪', '雪落了。', '第二章 灯', '灯亮着。');
+    expect(mapCloudChapters(list, body).map((c) => c.paraIndex)).toEqual([0, 2]);
+  });
+
+  it('映射不上的章按顺序补齐，章数始终等于目录长度', () => {
+    const list = [{ title: '第一章 雪' }, { title: '第二章 找不到' }, { title: '第三章 灯' }];
+    const body = paras('第一章 雪', '雪落了。', '灯亮着。', '第三章 灯');
+    const out = mapCloudChapters(list, body);
+    expect(out).toHaveLength(3);
+    expect(out.map((c) => c.paraIndex)).toEqual([0, 1, 3]);
+    expect(out.every((c, k) => c.cloudIndex === k && c.title === list[k].title)).toBe(true);
+  });
+
+  it('段落号严格递增，不会因为重复标题挤在同一段', () => {
+    const list = [{ title: '第一章' }, { title: '第一章' }];
+    const body = paras('第一章', '正文');
+    const out = mapCloudChapters(list, body);
+    expect(out[0].paraIndex).toBe(0);
+    expect(out[1].paraIndex).toBeGreaterThan(out[0].paraIndex);
+  });
+
+  it('段落为空时也不越界', () => {
+    const out = mapCloudChapters([{ title: '第一章' }], []);
+    expect(out).toEqual([{ title: '第一章', paraIndex: 0, cloudIndex: 0 }]);
+  });
+});
 
 describe('normalizeText', () => {
   it('把 CRLF / CR 统一成 LF', () => {

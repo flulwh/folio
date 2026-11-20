@@ -24,6 +24,9 @@ export function useProgressSave({
   const saveTimer = useRef(null);
 
   const flushSave = useCallback(() => {
+    // 已经卸载的阅读器不能再写：云端书换窗口会 remount，迟到的存档会把新窗口
+    // 刚写的「第 N 章」盖回旧窗口的位置。
+    if (!mountedRef.current) return;
     // 测量期只有 600 段挂在 DOM 上、滚动高度被夹小，此时取到的 index 是假的。
     // 恢复位置还没落位（pending/measuring）时同理：scrollTop 只是走到一半的中间值。
     // 宁可不存，也不能把错误位置写进 progress（下次打开会跳到前面）。

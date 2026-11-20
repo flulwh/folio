@@ -182,6 +182,67 @@ export function chapterIndexForPara(chapters, paraIndex) {
   return upper > 0 ? upper - 1 : 0;
 }
 
+/**
+ * 云端书一个窗口内的章节映射：目录标题 → 正文段落号。
+ *
+ * 输出长度永远等于目录长度——章数一少，`windowBase + 章号` 的整体换算就会错位。
+ * 匹配分三档：
+ *   1. 去空白后完全相等；
+ *   2. 相邻两个已定位章之间做前缀匹配（标题多/少副标题、标点差异的常见情况）；
+ *   3. 仍找不到就补在上一章之后，宁可少切一段，也不丢章。
+ */
+export function mapCloudChapters(cloudChapters, paragraphs) {
+  const norm = (value) => String(value || '').replace(/\s+/g, '');
+  const find = (from, to, target, loose) => {
+    for (let i = from; i < to; i += 1) {
+      if (paragraphs[i]?.blank) continue;
+      const text = norm(paragraphs[i].text);
+      if (!text) continue;
+      if (text === target) return i;
+      if (loose && (text.startsWith(target) || target.startsWith(text))) return i;
+    }
+    return -1;
+  };
+
+  const targets = cloudChapters.map((item) => norm(item.title));
+  const located = [];
+  let cursor = 0;
+  targets.forEach((target) => {
+    const index = target ? find(cursor, paragraphs.length, target, false) : -1;
+    located.push(index);
+    if (index >= 0) cursor = index + 1;
+  });
+
+  // 没完全对上的章：只在相邻两个已定位章之间做前缀匹配，避免匹配到正文里的提及
+  let floor = 0;
+  for (let k = 0; k < located.length; k += 1) {
+    if (located[k] >= 0) {
+      floor = located[k] + 1;
+      continue;
+    }
+    let next = paragraphs.length;
+    for (let j = k + 1; j < located.length; j += 1) {
+      if (located[j] >= 0) {
+        next = located[j];
+        break;
+      }
+    }
+    const found = targets[k] ? find(floor, next, targets[k], true) : -1;
+    located[k] = found;
+    if (found >= 0) floor = found + 1;
+  }
+
+  const out = [];
+  const limit = Math.max(0, paragraphs.length - 1);
+  cloudChapters.forEach((item, k) => {
+    const last = out.length ? out[out.length - 1].paraIndex : -1;
+    let index = located[k];
+    if (index < 0 || index <= last) index = Math.min(last + 1, limit);
+    out.push({ title: item.title, paraIndex: index, cloudIndex: k });
+  });
+  return out;
+}
+
 /** Full parse used by the reader. */
 export function parseBook(content, customRegex = '') {
   const text = normalizeText(content);
