@@ -172,8 +172,9 @@ JDK 17+、Android SDK（`compileSdk 35`、`build-tools 35`）。
 cd android && ./gradlew assembleDebug testDebugUnitTest
 ```
 
-调试包包名带 `.debug` 后缀，可与正式包共存。正式签名走 `FOLIO_KEYSTORE` / `FOLIO_KEYSTORE_PASSWORD` / `FOLIO_KEY_ALIAS` / `FOLIO_KEY_PASSWORD`
-四个环境变量，默认用 debug 签名。产物在 `android/app/build/outputs/apk/`。
+调试包包名带 `.debug` 后缀，可与正式包共存。正式签名由 `FOLIO_KEYSTORE` / `FOLIO_KEYSTORE_PASSWORD` / `FOLIO_KEY_ALIAS` / `FOLIO_KEY_PASSWORD`
+四个环境变量提供，**缺任一变量时 release 构建直接失败**，不再回落到 debug 签名（否则用户装了 debug 包就无法升级，只能卸载重装丢书库）。
+keystore 与口令不入库：CI 从仓库 secrets 的 `FOLIO_KEYSTORE_BASE64` 还原到 `$RUNNER_TEMP`，再注入上面四个变量。产物在 `android/app/build/outputs/apk/`。
 
 ## 测试
 

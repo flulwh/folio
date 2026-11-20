@@ -44,6 +44,29 @@ jobs:
       - name: 单元测试
         run: ./gradlew testDebugUnitTest --console=plain
 
+      # 签名材料只在仓库 secrets 里，构建前还原成临时文件再注入环境变量：
+      # build.gradle.kts 缺任一变量会直接失败，不会悄悄回落到 debug 签名。
+      - name: 还原 Release 签名
+        env:
+          KEYSTORE_BASE64: ${{ secrets.FOLIO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.FOLIO_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.FOLIO_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.FOLIO_KEY_PASSWORD }}
+        run: |
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::缺少签名 secret：FOLIO_$name"
+              exit 1
+            fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/folio-release.jks"
+          {
+            echo "FOLIO_KEYSTORE=$RUNNER_TEMP/folio-release.jks"
+            echo "FOLIO_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "FOLIO_KEY_ALIAS=$KEY_ALIAS"
+            echo "FOLIO_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
       - name: 构建 Release APK
         run: ./gradlew assembleRelease --console=plain
 
