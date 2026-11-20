@@ -35,6 +35,8 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
   偏差超过 2 段自动修正并留一条 `恢复位置修正` 日志，不会再「打开停在 7% 又把错位写回存档」
 - 仓库补上工程护栏：新增 Vitest 单测（176 例）、ESLint（react-hooks）、`npm run check` 现在
   会校验 JSX 能否编译并跑单测；发布产物附带 `SHA256SUMS.txt`，安卓 Release 增加签名断言
+- Windows 打包的 NSIS 补丁加了版本断言：electron-builder 升级到未验证的大版本、或内部接口改名时
+  构建会直接失败并说明原因，不再 warn 之后悄悄退回「执行安装包」的老路
 - `npm run check` 增加文档事实校验：README、AGENTS、docs 索引与代码不一致会直接失败
 
 ## [2.11.1] — 2026-11-15

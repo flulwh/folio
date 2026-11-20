@@ -21,6 +21,16 @@
 const fs = require('fs/promises');
 const path = require('path');
 
+// 本补丁靠 electron-builder 内部 API（NsisTarget / nsisUtil / wine）实现，
+// 这些不是公开接口：升级 electron-builder 后签名一变补丁就会失效。失效时必须让构建
+// 直接失败，而不是 warn 之后悄悄回落到「执行安装包」那条在部分 Windows 上必挂的路径。
+const TESTED_BUILDER_MAJOR = '25';
+
+function fail(message) {
+  console.error(`[nsis-static-uninstaller] ${message}`);
+  process.exit(1);
+}
+
 function install() {
   let NsisTarget;
   let nsisUtil;
@@ -36,19 +46,26 @@ function install() {
     ({ execWine } = require('app-builder-lib/out/wine'));
     ({ log } = require('builder-util'));
   } catch (error) {
-    // 不在 electron-builder 的运行环境里（比如被别的工具 require），静默跳过
-    return;
+    fail(`加载 electron-builder 内部模块失败，补丁未生效：${error.message}`);
+  }
+
+  const builderVersion = require('electron-builder/package.json').version;
+  if (!builderVersion.startsWith(`${TESTED_BUILDER_MAJOR}.`)) {
+    fail(
+      `electron-builder 已是 ${builderVersion}，补丁只验证过 ${TESTED_BUILDER_MAJOR}.x；` +
+        '请先复核 NsisTarget / UninstallerReader / execWine 的签名再放宽这个断言。',
+    );
   }
 
   const { nsisTemplatesDir, UninstallerReader } = nsisUtil;
   if (!NsisTarget || !UninstallerReader || typeof execWine !== 'function') {
-    console.warn('[nsis-static-uninstaller] 跳过：找不到需要打补丁的模块');
-    return;
+    fail('electron-builder 内部结构变了：找不到 NsisTarget / UninstallerReader / execWine');
   }
 
   const original = NsisTarget.prototype.computeScriptAndSignUninstaller;
-  if (typeof original !== 'function' || original.__folioStaticUninstaller) {
-    return;
+  if (original && original.__folioStaticUninstaller) return;
+  if (typeof original !== 'function') {
+    fail('electron-builder 内部结构变了：computeScriptAndSignUninstaller 不存在');
   }
 
   async function computeScriptAndSignUninstaller(defines, commands, installerPath, sharedHeader, archs) {
