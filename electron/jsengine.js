@@ -116,6 +116,48 @@ function encodeUnsafeUrl(url) {
   return text.replace(/[^\x21-\x7E]|[{}|^`"<>\\]/g, (ch) => encodeURIComponent(ch));
 }
 
+/**
+ * 宿主对象守卫。
+ *
+ * vm 模块不是安全边界：只要沙箱里还留着一个宿主函数的引用，
+ * `java.ajax.constructor('return process')()` 就能拿到主进程的全局对象。
+ * 这里把 java / cookie / cache / source / book 这些宿主绑定包一层代理：
+ *  - `.constructor` / `__proto__` / `prototype` / `caller` / `arguments` 一律读不到；
+ *  - 原型链对外表现为 null，挡住 `Object.getPrototypeOf(fn).constructor` 这条路。
+ * 这不是完整沙箱（脚本仍能通过返回值里的宿主对象继续找），但把「一行 constructor
+ * 逃逸」抬高成需要构造更深的对象链，配合 codeGeneration:false 能挡住绝大多数脏脚本。
+ */
+const HOST_FORBIDDEN = new Set(['constructor', '__proto__', 'prototype', 'caller', 'arguments']);
+const hostGuards = new WeakMap();
+
+function guardHost(value) {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
+  const cached = hostGuards.get(value);
+  if (cached) return cached;
+
+  const traps = {
+    get(target, prop) {
+      if (typeof prop === 'string' && HOST_FORBIDDEN.has(prop)) return undefined;
+      const out = Reflect.get(target, prop, target);
+      return typeof out === 'function' ? guardHost(out) : out;
+    },
+    getOwnPropertyDescriptor(target, prop) {
+      if (typeof prop === 'string' && HOST_FORBIDDEN.has(prop)) return undefined;
+      const desc = Reflect.getOwnPropertyDescriptor(target, prop);
+      if (desc && desc.configurable && typeof desc.value === 'function') {
+        desc.value = guardHost(desc.value);
+      }
+      return desc;
+    },
+  };
+  // 只有可扩展对象才能让 [[GetPrototypeOf]] 返回 null，否则会违反代理不变量
+  if (Object.isExtensible(value)) traps.getPrototypeOf = () => null;
+
+  const proxy = new Proxy(value, traps);
+  hostGuards.set(value, proxy);
+  return proxy;
+}
+
 /** Legado 的「url,{...}」写法：拆出 URL 与内联选项。 */
 function splitInlineOptions(raw) {
   const text = String(raw || '').trim();
@@ -1256,12 +1298,12 @@ export function getRuntime(source, { cacheRoot, proxy } = {}) {
   }
 
   const sandbox = {
-    java,
-    cookie,
-    cache,
-    org,
-    Packages,
-    source: {
+    java: guardHost(java),
+    cookie: guardHost(cookie),
+    cache: guardHost(cache),
+    org: guardHost(org),
+    Packages: guardHost(Packages),
+    source: guardHost({
       bookSourceUrl: source.bookSourceUrl || source.baseUrl,
       bookSourceName: source.name,
       getKey: () => source.id,
@@ -1282,46 +1324,37 @@ export function getRuntime(source, { cacheRoot, proxy } = {}) {
         const raw = String(source.bookSourceUrl || source.baseUrl || '').trim();
         return raw && !/\/$/.test(raw) ? `${raw.replace(/\/+$/, '')}/` : raw;
       },
-    },
+    }),
     baseUrl: source.baseUrl,
     key: '',
     page: 1,
     result: '',
-    book: bookStub,
+    book: guardHost(bookStub),
     chapter: null,
     title: '',
     src: '',
-    sleepToast: () => '',
-    isLogin: () => true,
-    console: {
+    sleepToast: guardHost(() => ''),
+    isLogin: guardHost(() => true),
+    console: guardHost({
       log: (...args) => {
         if (process.env.FOLIO_JS_LOG) console.log('[源JS]', ...args.map(String));
       },
       error: () => {},
       warn: () => {},
-    },
-    JSON,
-    Math,
-    Date,
-    String,
-    Number,
-    Boolean,
-    Array,
-    Object,
-    RegExp,
-    Error,
-    parseInt,
-    parseFloat,
-    isNaN,
-    encodeURIComponent,
-    decodeURIComponent,
-    encodeURI,
-    decodeURI,
+    }),
+    // JSON / Math / Object 等内建对象不要从宿主传进来：宿主内建会把主进程的
+    // Function 原型一起带进沙箱（JSON.parse('{}').constructor.constructor 即可逃逸）。
+    // vm 上下文自带一整套干净的内建对象，这里显式置空即可。
     setTimeout: undefined,
     fetch: undefined,
   };
 
-  const context = vm.createContext(sandbox, { name: `source:${source.id}` });
+  // codeGeneration:false 断掉脚本里的 eval / new Function / WebAssembly 编译；
+  // 配合上面的 guardHost 挡住「从宿主函数身上摸 constructor」这条逃逸路径。
+  const context = vm.createContext(sandbox, {
+    name: `source:${source.id}`,
+    codeGeneration: { strings: false, wasm: false },
+  });
 
   const runtime = {
     id: source.id,
@@ -1334,13 +1367,15 @@ export function getRuntime(source, { cacheRoot, proxy } = {}) {
       const body = String(code || '')
         .replace(/^@js:\s*/i, '')
         .replace(/^\s*<js>([\s\S]*?)<\/js>\s*$/i, '$1')
-        .trim();      for (const [k, v] of Object.entries(bindings)) {
+        .trim();
+
+      for (const [k, v] of Object.entries(bindings)) {
         // book 传 null 时保留默认变量句柄（源脚本会调 book.putVariable）
         if (k === 'book' && (v == null || typeof v !== 'object')) {
           if (v != null) sandbox.book = v;
           continue;
         }
-        sandbox[k] = k === 'book' && typeof v.putVariable !== 'function' ? withBookApi(v) : v;
+        sandbox[k] = guardHost(k === 'book' && typeof v.putVariable !== 'function' ? withBookApi(v) : v);
       }
       if ('__dom' in bindings) domBridge = bindings.__dom || null;
       if ('__jsoup' in bindings) jsoupFactory = bindings.__jsoup || null;

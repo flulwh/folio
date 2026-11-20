@@ -18,8 +18,44 @@ const pkg = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
 //   - react + react-dom 几乎不变，长期命中缓存
 //   - framer-motion 单独成块，动效相关的改动不会牵连 react
 //   - 其余第三方库归入 vendor，业务代码改动只让主 chunk 失效
+// 生产构建注入的 CSP。
+// 只加在 build 产物上：开发模式下 Vite 会内联 react-refresh 预置脚本，
+// 严格的 script-src 会把 HMR 打断，所以 dev 不注入。
+// file: 是生产页面的加载方式（loadFile），Chromium 对 file:// 的 'self'
+// 判定不可靠，必须显式列出；folio-cover / folio-font 是本地封面与字体协议，
+// 对应 registerSchemesAsPrivileged 里已经去掉的 bypassCSP。
+const CSP = [
+  "default-src 'self' file:",
+  "script-src 'self' file:",
+  "style-src 'self' 'unsafe-inline' file: https://fonts.googleapis.com",
+  "font-src 'self' file: data: https://fonts.gstatic.com folio-font:",
+  "img-src 'self' file: data: blob: https: folio-cover:",
+  "media-src 'self' file: data: blob:",
+  "connect-src 'self' file:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
+].join('; ');
+
+function cspPlugin() {
+  return {
+    name: 'folio-csp',
+    apply: 'build',
+    transformIndexHtml() {
+      return [
+        {
+          tag: 'meta',
+          attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP },
+          injectTo: 'head-prepend',
+        },
+      ];
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cspPlugin()],
   base: './',
   root: '.',
   define: {

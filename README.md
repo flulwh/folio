@@ -1,4 +1,4 @@
-# Folio · 沉浸式阅读器
+﻿# Folio · 沉浸式阅读器
 
 一个用 **Electron + React** 打造的极简电子书阅读器。主页就是书架，一切交互都为「读进去」服务：
 克制的排版、干净的界面、随滚动淡出的工具栏、可调的中文排版。
@@ -16,9 +16,9 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.11.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.11.1) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.11.1.exe`](https://github.com/flulwh/folio/releases/tag/v2.11.1) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.11.1-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.11.1) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-Setup-2.12.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.12.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.12.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.12.0) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.12.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.12.0) | 免安装压缩包，解压后运行 `Folio.exe` |
 | [`Folio-3.6.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-3.6.0/Folio-3.6.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
@@ -102,7 +102,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 - **双端同步**：手机上读一段，桌面端书架立刻更新；桌面端读一段，手机上轻提示「桌面端已同步到 xx%」。合并规则统一为 `updatedAt` 新的赢，两边都不打断手上的滚动
 - **断网不丢进度**：顶部提示条明说「有一处进度还没同步」，联网后自动补写
 - **只读可关**：设置里关掉「允许写入阅读进度」，面板退化成纯看板
-- 访问码 6 位、可一键更换；服务只监听内网，数据不经过任何第三方服务器
+- 访问码 6 位、可一键更换；服务监听本机所有网卡（含局域网地址），数据不经过任何第三方服务器，建议只在可信网络里开启并设置访问码
 
 > Windows 首次开启会弹防火墙提示，必须允许「**专用网络**」，否则手机连不上。
 
@@ -122,7 +122,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 - **进度不会打结**：合并规则仍是 `updatedAt` 新的赢，字段浅合并 —— 手机读一段，桌面端书架跟着变，反之亦然
 - **书签 / 划线 / 笔记双端对齐**：按段落锚点合并，`updatedAt` 新者胜；桌面端删掉的痕迹不会在手机上复活，反之亦然
 - **翻页顺手**：点正文两侧或按音量键翻页，到章节末尾自动接下一章；不需要把手挪到屏幕底部
-- **省电**：没有前台服务、没有常驻通知、不轮询；后台同步交给系统的 WorkManager（15 分钟一次、要网络、电量不低），阅读页只组合可见段落
+- **省电**：没有前台服务、没有常驻通知、不轮询；3.0 起不再做后台定时同步，双端同步只在打开「双端同步」面板时按需触发，阅读页只组合可见段落
 - **原生 Kotlin + Compose**，不是套壳 WebView；APK 约 11 MB
 
 实现、同步细节与构建方式见 [docs/android.md](docs/android.md)。
@@ -225,7 +225,7 @@ cd android
 > 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
 > push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
-> 版本号只写在 `package.json`（当前 `2.11.1`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.12.0`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)

@@ -12,7 +12,7 @@ Folio 是**本地优先的双端阅读器**，两端各自独立、只走局域�
 
 | 端 | 技术栈 | 版本真相（唯一的改法） |
 | --- | --- | --- |
-| 桌面端（Electron + React） | Vite + Electron 28，入口 `electron/main.js`、`src/main.jsx` | `package.json` 的 `version` |
+| 桌面端（Electron + React） | Vite + Electron 30（`devDependencies.electron`），入口 `electron/main.js`、`src/main.jsx` | `package.json` 的 `version` |
 | 安卓端（原生客户端） | Kotlin + Jetpack Compose + Miuix | `android/app/build.gradle.kts` 的 `versionCode` / `versionName` |
 
 两端**版本线不同步**：桌面端 `2.x`，安卓端 `3.x`。这是有意为之，不要「对齐」。
@@ -31,7 +31,7 @@ npm run dev            # Vite 热更新 + Electron 窗口
 npm run dev:vite       # 只跑浏览器 UI，不启 Electron
 npm run dev:electron   # 等 5173 就绪后单独启 Electron
 npm start              # 直接启 Electron（不跑 Vite）
-npm run check          # 发版门禁：版本一致性 / 语法 / 打包配置（12 项）
+npm run check          # 发版门禁：版本一致性 / 语法 / 打包配置（12 项）+ 文档事实校验
 npm run check:theme    # 校验 tokens.css 与 src/themes.js 同源
 npm run check:lan-edge # 局域网面板边界用例
 npm run check:lan-sync # 局域网双向同步用例
@@ -120,7 +120,7 @@ npm run preview        # 预览 dist/
 | `FOLIO_JS_LOG` | 打印书源脚本的 `console` 输出 | 关闭 |
 | `FOLIO_NO_SANDBOX` | 置 `1` 等价于 `--no-sandbox`（受限环境兜底） | 关闭 |
 | `FOLIO_STRICT_SANDBOX` | 置 `1` 时不自动加 `--no-sandbox` | 关闭 |
-| `FOLIO_KEYSTORE` / `FOLIO_KEYSTORE_PASSWORD` / `FOLIO_KEY_ALIAS` / `FOLIO_KEY_PASSWORD` | 安卓 Release 签名；缺省时回落到 debug 签名 | 无 |
+| `FOLIO_KEYSTORE` / `FOLIO_KEYSTORE_PASSWORD` / `FOLIO_KEY_ALIAS` / `FOLIO_KEY_PASSWORD` | 安卓 Release 签名（缺任一项时 release 构建直接失败，不再回落到 debug 签名） | 无 |
 | `EDGE_PATH` | 截图/字体校验用的 Edge 路径 | 系统默认安装位置 |
 
 ---
@@ -129,7 +129,7 @@ npm run preview        # 预览 dist/
 
 - 不引入需要常驻后台的依赖（WorkManager、WebSocket 服务、常驻定时器）。
 - 不自建服务器、不代理内容、不上传用户数据。
-- 不改 `package.json` 的 `appId`（`com.folio.reader` 与桌面端 `appId`），改了两端升级会丢数据。
+- 不改两端 `applicationId`：桌面端是 `package.json` 的 `build.appId`（当前 `com.example.folio-reader`），安卓端是 `android/app/build.gradle.kts` 的 `namespace` / `applicationId`。改了 Android 包名等于换应用，用户的书库与进度会丢。
 - 不在仓库里放截图二进制，图片走 `flulwh/folio-assets`。
 - 不为了「顺手」重构与本任务无关的文件。
 

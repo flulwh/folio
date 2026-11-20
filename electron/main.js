@@ -209,17 +209,32 @@ ipcMain.handle = (channel, listener) => {
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'folio-cover',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
   // 用户安装的字体：渲染进程用 folio-font://font/<文件名> 引用，
   // 这样 @font-face 就能直接吃到本地字体文件，不用转 base64。
   {
     scheme: 'folio-font',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true },
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ]);
 
 /* ---------- helpers ---------- */
+
+// 渲染层里出现的 http(s) 链接才交给系统浏览器；file: / javascript: / 自定义协议
+// 一律忽略，避免书源正文或日志里的脏链接被当成命令执行。
+const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+function openSafeExternal(rawUrl) {
+  try {
+    const { protocol } = new URL(String(rawUrl));
+    if (!EXTERNAL_PROTOCOLS.has(protocol)) return false;
+    shell.openExternal(String(rawUrl));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -756,8 +771,24 @@ function createWindow(options = {}) {
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    openSafeExternal(url);
     return { action: 'deny' };
+  });
+
+  // 页面内的整页跳转只允许同源（dev 的 Vite、生产环境的 file: 资源）；
+  // 其余一律拦下交给系统浏览器，防止书源内容把阅读器整页替换成任意站点。
+  win.webContents.on('will-navigate', (event, url) => {
+    const current = win.webContents.getURL();
+    try {
+      const next = new URL(url);
+      const origin = current ? new URL(current).origin : null;
+      if (origin && next.origin === origin) return;
+    } catch {
+      /* 非法 URL 走下面的拦截 */
+    }
+    logCrash(`拦截页面跳转 ${url}`, 'info');
+    event.preventDefault();
+    openSafeExternal(url);
   });
 
   return win;

@@ -405,6 +405,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const rootRef = useRef(null);
   const bottomRef = useRef(null);
   const scrubRef = useRef(false);
+  const seekRatioRef = useRef(0);
   const autoScrollRef = useRef(false);
   const overlaysOpenRef = useRef(false);
   const lastIndexRef = useRef(progress[book.id]?.paraIndex ?? 0);
@@ -1332,8 +1333,18 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   useEffect(() => {
     const onKey = (e) => {
       const tag = e.target?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
+      const inField = tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable;
       const h = handlersRef.current;
+
+      // Esc 优先于「在输入框里」的判断：搜索框里按 Esc 应该先关面板，
+      // 而不是被输入框吞掉（否则只能去点关闭按钮）。
+      if (e.key === 'Escape' && h.isPanel()) {
+        e.preventDefault();
+        h.closePanels();
+        return;
+      }
+
+      if (inField) return;
 
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
@@ -1442,17 +1453,31 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const currentChapter = chapters[chapterIndex] || chapters[0];
   const totalChapters = cloud?.chapters?.length || chapters.length;
   const globalChapter = windowBase + chapterIndex;
+
+  // 顶部百分比、进度条、剩余时间、「读完」判定都只看这一个值。
+  // 本地书滚动百分比本来就是全书口径；云端书只装了一个章节窗口，
+  // 必须按「窗口起点 + 章内位置」折算，否则第 200 章也显示 0%。
+  const globalPercent = useMemo(() => {
+    if (!cloud?.chapters?.length) return scrollPercent;
+    const total = cloud.chapters.length;
+    const ci = chapterIndexForPara(chapters, currentPara);
+    const start = chapters[ci]?.paraIndex ?? currentPara;
+    const end = ci + 1 < chapters.length ? chapters[ci + 1].paraIndex : paragraphs.length;
+    const frac = clamp((currentPara - start) / Math.max(1, end - start), 0, 1);
+    return clamp(((cloud.windowBase + ci + frac) / total) * 100, 0, 100);
+  }, [chapters, cloud, currentPara, paragraphs.length, scrollPercent]);
+
   const remainingText = useMemo(() => {
     // 云端书只装了当前窗口：窗口内剩余 + 按窗口均章长估算的后续章节
     if (cloud?.chapters?.length) {
-      const inWindow = charCount * (1 - clamp(scrollPercent, 0, 100) / 100);
+      const inWindow = charCount * (1 - clamp(globalPercent, 0, 100) / 100);
       const chaptersLeft = Math.max(0, cloud.chapters.length - windowBase - cloud.windowCount);
       const avgPerChapter = cloud.windowCount ? charCount / cloud.windowCount : 0;
       return estimateRemainingMinutes(inWindow + chaptersLeft * avgPerChapter);
     }
-    const left = charCount * (1 - clamp(scrollPercent, 0, 100) / 100);
+    const left = charCount * (1 - clamp(globalPercent, 0, 100) / 100);
     return estimateRemainingMinutes(left);
-  }, [charCount, cloud, scrollPercent, windowBase]);
+  }, [charCount, cloud, globalPercent, windowBase]);
 
   /* 正文装饰只改变「墨色/背景」和绝对定位的伪元素，绝不动行高：
      段落高度表是精确测量出来的，任何影响布局的装饰都会让虚拟滚动错位。 */
@@ -1539,6 +1564,19 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     if (!el || !track) return 0;
     const rect = track.getBoundingClientRect();
     const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    seekRatioRef.current = ratio;
+    if (cloud?.chapters?.length) {
+      // 云端书：轨道是全书口径，先换算到「当前窗口内的章内位置」做即时预览；
+      // 落在窗口外的部分要等松手再交给 onJump 换窗口（拖动过程中不反复拉章节）。
+      const localPos = ratio * cloud.chapters.length - windowBase;
+      if (localPos >= 0 && localPos < chapters.length) {
+        const target = Math.min(chapters.length - 1, Math.floor(localPos));
+        const start = chapters[target]?.paraIndex ?? 0;
+        const next = chapters[target + 1]?.paraIndex ?? paragraphs.length;
+        scrollToIndex(start + Math.round((next - start) * (localPos - target)));
+      }
+      return ratio * 100;
+    }
     const max = Math.max(0, getTotal() - el.clientHeight);
     scrollToOffset(ratio * max);
     return ratio * 100;
@@ -1565,10 +1603,18 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     setScrub(null);
     playSettle();
+    if (cloud?.chapters?.length) {
+      const target = Math.min(
+        cloud.chapters.length - 1,
+        Math.max(0, Math.floor(seekRatioRef.current * cloud.chapters.length))
+      );
+      const local = target - windowBase;
+      if (local < 0 || local >= chapters.length) cloud.onJump?.(target);
+    }
   };
 
   // 云端书读完全书（没有更多章且当前窗口滚到底）才算读完
-  const finished = cloud ? !cloud.hasMore && scrollPercent >= 99.6 : scrollPercent >= 99.6;
+  const finished = cloud ? !cloud.hasMore && globalPercent >= 99.6 : globalPercent >= 99.6;
   const noteInitial = noteTarget?.markId
     ? bookMarks.find((mark) => mark.id === noteTarget.markId)?.note || ''
     : '';
@@ -1616,7 +1662,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         </div>
 
         <div className="reader-head-right">
-          <span className="reader-percent">{formatPercent(scrollPercent)}</span>
+          <span className="reader-percent">{formatPercent(globalPercent)}</span>
           <button
             className={`icon-btn${autoScroll ? ' active' : ''}`}
             onClick={() => setAutoScroll((v) => !v)}
@@ -1654,7 +1700,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         </div>
       </motion.header>
 
-      <div className={`reader-hairline${hairline ? ' active' : ''}`} style={{ width: `${scrollPercent}%` }} />
+      <div className={`reader-hairline${hairline ? ' active' : ''}`} style={{ width: `${globalPercent}%` }} />
 
       <div
         className="reader-scroll"
@@ -1735,9 +1781,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           >
             <span
               className={`reader-progress-fill${finished ? ' finished' : ''}`}
-              style={{ width: `${scrub ?? scrollPercent}%` }}
+              style={{ width: `${scrub ?? globalPercent}%` }}
             />
-            <i className="reader-progress-knob" style={{ left: `${scrub ?? scrollPercent}%` }} />
+            <i className="reader-progress-knob" style={{ left: `${scrub ?? globalPercent}%` }} />
             <AnimatePresence>
               {scrub !== null && (
                 <motion.span

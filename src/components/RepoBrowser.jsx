@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useAppActions, useRules, useSources } from '../store/AppStore.jsx';
 import { IconBook, IconCloud, IconSearch, IconSparkle } from './Icons.jsx';
@@ -49,13 +49,18 @@ export default function RepoBrowser({ onImported }) {
   const [busy, setBusy] = useState('');
   const [flash, setFlash] = useState('');
   const [installed, setInstalled] = useState({});
+  // 快速切换「书源 / 订阅源」或连续搜索时，慢的旧请求可能后到并把新结果盖掉。
+  // 用自增序号只认最后一次请求的结果。
+  const reqSeq = useRef(0);
 
   const load = useCallback(
     async (nextPage = 1, nextKeyword = '', nextKind = kind) => {
+      const seq = ++reqSeq.current;
       setLoading(true);
       setError('');
       try {
         const res = await listRepo({ type: nextKind, keyword: nextKeyword, page: nextPage, pageSize: PAGE_SIZE });
+        if (seq !== reqSeq.current) return;
         if (res?.ok === false) {
           setError(res.message || '仓库读取失败');
           setData(null);
@@ -64,9 +69,10 @@ export default function RepoBrowser({ onImported }) {
           setPage(res?.page || nextPage);
         }
       } catch (err) {
+        if (seq !== reqSeq.current) return;
         setError(err?.message || '仓库读取失败');
       } finally {
-        setLoading(false);
+        if (seq === reqSeq.current) setLoading(false);
       }
     },
     [kind, listRepo]

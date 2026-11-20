@@ -969,11 +969,10 @@ export function AppProvider({ children }) {
   );
 
   const removeBook = useCallback((id) => {
-    let removed = null;
-    setBooks((prev) => {
-      removed = prev.find((b) => b.id === id);
-      return prev.filter((b) => b.id !== id);
-    });
+    // 副作用不能写在 setBooks 的 updater 里：StrictMode 下 updater 会被调用两次，
+    // 并发渲染也可能延后执行，而下面要拿被删的那本书去排清理定时器。
+    const removed = booksRef.current.find((b) => b.id === id) || null;
+    setBooks((prev) => prev.filter((b) => b.id !== id));
     // 延迟 10 秒再真正删掉正文 / 云端缓存；撤销时取消这次清理
     if (removed) {
       const timer = setTimeout(() => {

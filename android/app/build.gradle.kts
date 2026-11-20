@@ -12,14 +12,17 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
         // 3.6.0：设备页「刷新快照」改为下发 refresh-snapshot 指令（versionCode 20）。
-        versionCode = 20
-        versionName = "3.6.0"
+        versionCode = 21
+        versionName = "3.6.1"
         vectorDrawables.useSupportLibrary = true
     }
 
     signingConfigs {
-        // 用 debug 签名，方便直接安装测试；正式签名走环境变量。
+        // 正式签名只走环境变量。缺密钥时不再回落到 debug 签名：
+        // debug 包与正式包签名不同，用户装过一次再换正式包只能卸载重装（本地书库会丢）。
+        // 没有密钥的 release 构建会在下面的 taskGraph 校验里直接失败。
         create("release") {
             val storePath = System.getenv("FOLIO_KEYSTORE")
             if (storePath != null) {
@@ -40,11 +43,7 @@ android {
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = if (System.getenv("FOLIO_KEYSTORE") != null) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -71,6 +70,18 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
+}
+
+// Release 包不带签名就不发：debug 签名的 APK 和正式版签名不同，
+// 用户装上后无法直接升级，只能卸载重装（本地书库、进度全丢）。
+// 本地只想装测试包时请用 assembleDebug（包名带 .debug 后缀，可与正式版共存）。
+gradle.taskGraph.whenReady {
+  if (System.getenv("FOLIO_KEYSTORE") == null && allTasks.any { it.name.contains("Release") }) {
+    throw GradleException(
+      "缺少 Release 签名：请设置 FOLIO_KEYSTORE / FOLIO_KEYSTORE_PASSWORD / FOLIO_KEY_ALIAS / FOLIO_KEY_PASSWORD；" +
+        "只想本机测试请改用 assembleDebug。"
+    )
+  }
 }
 
 dependencies {

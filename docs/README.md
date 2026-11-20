@@ -20,7 +20,7 @@
 | [performance.md](performance.md) | 实测基线、虚拟滚动、高度缓存、书源引擎优化、回归工具 | 2026-11-14 |
 | [troubleshooting.md](troubleshooting.md) | 启动白屏、沙箱、npm 11、书源导入报错、代理等常见坑 | 2026-11-13 |
 | [themes.md](themes.md) | 主题扩展：自定义主题与主题 JSON 格式 | 2026-11-13 |
-| [motion.md](motion.md) | 动效系统：Apple / MIUI 两套语言与参数 | 2026-11-13 |
+| [motion.md](motion.md) | 动效系统：Apple / MIUI / 黑曜三套语言与参数 | 2026-11-13 |
 | [design-brief.md](design-brief.md) | 「纸本 / Editorial」重构简报 | 2026-11-13 |
 
 ## 过程记录
@@ -34,7 +34,7 @@ README 保持精简，只放「怎么用起来」的部分；实现细节都在�
 
 ## 截图不在这里
 
-README 用到的截图（46 张 PNG）已迁到独立仓库 **[flulwh/folio-assets](https://github.com/flulwh/folio-assets)**，
+README 用到的截图（21 处引用、14 个 PNG 文件）已迁到独立仓库 **[flulwh/folio-assets](https://github.com/flulwh/folio-assets)**，
 这样 clone 本仓库时不必为十几张图片多拉 22 MB。
 
 新增截图请上传到那个仓库的 `docs/` 目录，再在 Markdown 里用：
