@@ -33,6 +33,22 @@ export function measureChunkSize(count) {
   return Math.max(MEASURE_CHUNK, Math.min(MEASURE_CHUNK_MAX, Math.ceil(count / MEASURE_FRAMES)));
 }
 
+/**
+ * 正文内容指纹：同一本书被书源重新抓取后，段落数可能没变、内容却变了。
+ * 只按段落数做缓存键会把旧高度表套到新正文上（换了几段、多截了一章都中招），
+ * 所以把「总字数 + 逐段字数的滚动哈希」并进键里。四十万段也只多花几毫秒。
+ */
+export function contentFingerprint(paragraphs) {
+  let total = 0;
+  let mix = 0;
+  for (let i = 0; i < paragraphs.length; i += 1) {
+    const len = (paragraphs[i]?.text || '').length;
+    total += len;
+    mix = (mix * 31 + len) % 2147483647;
+  }
+  return `${total.toString(36)}-${mix.toString(36)}`;
+}
+
 export function heightStorageKey(key, width) {
   return `${HEIGHT_CACHE_PREFIX}${key}|${width}`;
 }

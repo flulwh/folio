@@ -43,6 +43,15 @@ export function useCachedCover(book, tick = 0) {
   return src;
 }
 
+/**
+ * 「清理封面缓存」之后调用：本地文件已经删了，内存里记的 folio-cover:// 地址
+ * 全部作废，否则书架会一直拿着指向空文件的地址，直到重启才恢复。
+ */
+export function resetCoverMemo() {
+  memo.clear();
+  window.dispatchEvent(new CustomEvent('folio:cover-ready'));
+}
+
 /** 书架挂载时把整架云端书的封面批量拉一次，省掉每张卡一次 IPC。 */
 export function usePrimeShelfCovers(books) {
   const { cacheCovers } = useAppActions();

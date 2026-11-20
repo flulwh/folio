@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
+  contentFingerprint,
   encodeHeights,
   decodeHeights,
   heightStorageKey,
@@ -85,5 +86,31 @@ describe('measureChunkSize', () => {
     expect(measureChunkSize(9600)).toBe(600);
     expect(measureChunkSize(160000)).toBe(10000);
     expect(measureChunkSize(4000000)).toBe(24000);
+  });
+});
+
+describe('contentFingerprint', () => {
+  const para = (text, blank = false) => ({ text, blank });
+
+  it('同样的正文得到同样的指纹', () => {
+    const a = [para('第一章'), para('', true), para('正文一')];
+    const b = [para('第一章'), para('', true), para('正文一')];
+    expect(contentFingerprint(a)).toBe(contentFingerprint(b));
+  });
+
+  it('段落数不变但内容变了，指纹跟着变', () => {
+    const before = [para('第一章'), para('旧的正文')];
+    const after = [para('第一章'), para('重新抓取后的正文')];
+    expect(contentFingerprint(before)).not.toBe(contentFingerprint(after));
+  });
+
+  it('字数相同但分布不同也能区分', () => {
+    expect(contentFingerprint([para('ab'), para('c')])).not.toBe(
+      contentFingerprint([para('a'), para('bc')])
+    );
+  });
+
+  it('空行与缺失 text 不抛错', () => {
+    expect(() => contentFingerprint([para(''), {}, para('x')])).not.toThrow();
   });
 });

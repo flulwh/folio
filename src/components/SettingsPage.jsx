@@ -18,6 +18,7 @@ import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
 import DevicesPanel, { IconPhone } from './DevicesPanel.jsx';
 import { fontStackFor } from '../hooks/useFontLoader.js';
+import { resetCoverMemo } from '../hooks/useCachedCover.js';
 import {
   IconArrowLeft,
   IconBook,
@@ -320,6 +321,7 @@ export default function SettingsPage({ onClose }) {
     setCacheBusy(true);
     try {
       await window.readerAPI?.clearCoverCache?.();
+      resetCoverMemo();
       notify('封面缓存已清理，下次打开会重新下载');
     } finally {
       setCacheBusy(false);

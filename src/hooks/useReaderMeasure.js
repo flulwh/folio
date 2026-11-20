@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  contentFingerprint,
   hasHeights,
   loadHeights,
   measureChunkSize,
@@ -102,8 +103,12 @@ export function useReaderMeasure({
     []
   );
 
-  // 高度缓存键：排版 + 段落数（栏宽在读写时会再校验一次）
-  const cacheKey = `${typographyKey}|${paragraphs.length}`;
+  // 高度缓存键：排版 + 段落数 + 正文指纹（栏宽在读写时会再校验一次）。
+  // 书源重新抓取后段落数常常不变、内容却变了，必须让旧高度表失效。
+  const cacheKey = useMemo(
+    () => `${typographyKey}|${paragraphs.length}|${contentFingerprint(paragraphs)}`,
+    [typographyKey, paragraphs]
+  );
   // 有没有现成的高度缓存：有的话首批只渲染一小撮做校验，不必把整批塞进 DOM 再丢弃。
   const hasCachedHeights = useMemo(() => hasHeights(cacheKey), [cacheKey]);
 

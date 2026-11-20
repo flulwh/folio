@@ -56,6 +56,9 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
   const rebuildRaf = useRef(0);
   const scrollRaf = useRef(0);
   const animRaf = useRef(0);
+  // scrollToIndex 的落位修正链：上次没跑完就要被新的一次、或卸载打断，
+  // 否则它会继续按旧的段落号改 scrollTop，和新的跳转抢位置。
+  const settleRaf = useRef(0);
   const [range, setRange] = useState({ start: 0, end: 0 });
   const [layoutVersion, setLayoutVersion] = useState(0);
   const prevCount = useRef(count);
@@ -253,6 +256,13 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
     animRaf.current = 0;
   }, []);
 
+  const stopSettle = useCallback(() => {
+    if (settleRaf.current) cancelAnimationFrame(settleRaf.current);
+    settleRaf.current = 0;
+  }, []);
+
+  useEffect(() => stopSettle, [stopSettle]);
+
   useEffect(() => stopAnimation, [stopAnimation]);
 
   /** 滚到某个逻辑偏移（不做动画）。跨越窗口时会先换窗再落位。 */
@@ -308,6 +318,7 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
       const physicalMax = Math.max(0, spanAt(origin) - el.clientHeight);
       const from = Math.max(0, Math.min(fromLogical - origin, physicalMax));
       const to = Math.max(0, Math.min(target - origin, physicalMax));
+      stopSettle();
       stopAnimation();
       if (from !== el.scrollTop) el.scrollTop = from;
       if (rebased) flushSync(() => computeVisible());
@@ -331,7 +342,7 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
       };
       animRaf.current = requestAnimationFrame(step);
     },
-    [clampOrigin, commitOrigin, computeVisible, stopAnimation]
+    [clampOrigin, commitOrigin, computeVisible, stopAnimation, stopSettle]
   );
 
   /**
@@ -359,6 +370,8 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
         scrollTo(Math.max(0, top), { behavior });
       };
 
+      // 新的跳转作废上一次的修正链，避免两条链各按各的段落号改 scrollTop
+      stopSettle();
       apply();
 
       let frames = 0;
@@ -369,15 +382,16 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
           rebuild();
           apply();
         }
-        if (frames < settleFrames) requestAnimationFrame(settle);
+        if (frames < settleFrames) settleRaf.current = requestAnimationFrame(settle);
         else {
+          settleRaf.current = 0;
           computeVisible();
           setLayoutVersion((v) => v + 1);
         }
       };
-      requestAnimationFrame(settle);
+      settleRaf.current = requestAnimationFrame(settle);
     },
-    [count, estimate, measureAll, rebuild, computeVisible, scrollTo]
+    [count, estimate, measureAll, rebuild, computeVisible, scrollTo, stopSettle]
   );
 
   const getScrollState = useCallback(() => {
