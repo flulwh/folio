@@ -1,23 +1,26 @@
 package com.folio.reader.ui.book
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,31 +89,40 @@ fun EpubReaderScreen(model: EpubModel, onBack: () -> Unit) {
             }
         }
 
-        // 顶栏常驻：Readium 的 WebView 没有原生返回键，返回入口必须一直可见
-        Row(
+        // 顶栏常驻：Readium 的 WebView 没有原生返回键，返回入口必须一直可见。
+        // 形态是 iOS 紧凑导航栏：44dp 高、居中 17sp 标题、底部发丝线。
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(palette.bg.copy(alpha = 0.86f))
-                .statusBarsPadding()
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .background(palette.bg.copy(alpha = 0.94f))
+                .statusBarsPadding(),
         ) {
-            CupertinoIconButton(onClick = onBack) {
-                CupertinoIcon(
-                    imageVector = CupertinoIcons.Outlined.ChevronBackward,
-                    contentDescription = "返回",
-                    tint = palette.ink,
+            Box(Modifier.fillMaxWidth().height(44.dp)) {
+                val source = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .align(Alignment.CenterStart)
+                        .size(44.dp)
+                        .clickable(interactionSource = source, indication = null, onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CupertinoIcon(
+                        imageVector = CupertinoIcons.Outlined.ChevronBackward,
+                        contentDescription = "返回",
+                        tint = palette.accent,
+                    )
+                }
+                CupertinoText(
+                    text = state.book?.title ?: "EPUB",
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 52.dp),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = palette.ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Spacer(Modifier.width(4.dp))
-            CupertinoText(
-                text = state.book?.title ?: "EPUB",
-                modifier = Modifier.weight(1f),
-                fontSize = 15.sp,
-                color = palette.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Box(Modifier.fillMaxWidth().height(0.5.dp).background(palette.line))
         }
     }
 }

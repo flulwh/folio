@@ -80,7 +80,10 @@ import io.github.alexzhirkevich.cupertino.CupertinoDropdownMenu
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
 import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
+import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
+import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
 import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ArrowClockwise
 import io.github.alexzhirkevich.cupertino.icons.outlined.Book
@@ -166,7 +169,7 @@ fun ShelfScreen(
 
     val importAction = { importLauncher.launch(IMPORT_MIME_TYPES) }
 
-    Box(Modifier.fillMaxSize().background(scheme.systemBackground)) {
+    Box(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
         Column(Modifier.fillMaxSize()) {
             ShelfHeader(
                 state = state,
@@ -175,7 +178,6 @@ fun ShelfScreen(
                 onQuery = vm::setQuery,
                 onImport = importAction,
                 onSync = { vm.syncNow() },
-                onOpenSettings = onOpenSettings,
                 onOpenSyncStatus = onOpenSyncStatus,
             )
 
@@ -202,17 +204,17 @@ fun ShelfScreen(
                     )
                 } else {
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(88.dp),
+                        columns = GridCells.Fixed(3),
                         state = gridState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(
                             start = PageMargin,
                             end = PageMargin,
-                            top = 6.dp,
-                            bottom = 40.dp,
+                            top = 2.dp,
+                            bottom = 28.dp,
                         ),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                        verticalArrangement = Arrangement.spacedBy(22.dp),
                     ) {
                         sections.forEach { section ->
                             if (section.key == "continue") {
@@ -315,6 +317,12 @@ fun ShelfScreen(
 
 /* ---------------- 顶栏 ---------------- */
 
+/**
+ * 首页顶栏（iOS 大标题导航栏）。
+ *
+ * 左侧 34sp 大标题 + 一行状态副标题，右侧是导航栏动作按钮——不是胶囊，
+ * 就是 iOS 那种没有底色的 tinted 图标。设置与同步改由底部 Tab Bar 承担。
+ */
 @Composable
 private fun ShelfHeader(
     state: ShelfUiState,
@@ -323,32 +331,31 @@ private fun ShelfHeader(
     onQuery: (String) -> Unit,
     onImport: () -> Unit,
     onSync: () -> Unit,
-    onOpenSettings: () -> Unit,
     onOpenSyncStatus: () -> Unit,
 ) {
     val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(scheme.systemBackground)
+            .background(scheme.systemGroupedBackground)
             .statusBarsPadding(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = PageMargin, end = PageMargin, top = 16.dp, bottom = 4.dp),
+                .padding(start = PageMargin, end = 6.dp, top = 8.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 CupertinoText(
                     text = "书架",
-                    fontSize = 28.sp,
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.6).sp,
+                    letterSpacing = (-0.4).sp,
                     color = scheme.label,
                     maxLines = 1,
                 )
-                Spacer(Modifier.height(5.dp))
+                Spacer(Modifier.height(3.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -358,30 +365,30 @@ private fun ShelfHeader(
                 ) {
                     Box(
                         Modifier
-                            .size(6.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (state.online) BrandGreen else scheme.accent)
+                            .background(if (state.online) BrandPositive else scheme.secondaryLabel)
                     )
                     Spacer(Modifier.width(6.dp))
                     CupertinoText(
                         text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
                             connectionTextOf(state),
-                        fontSize = 11.sp,
-                        letterSpacing = 0.3.sp,
+                        fontSize = 13.sp,
                         color = scheme.secondaryLabel,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-            ToolbarPill(
-                syncing = state.syncing,
-                searchActive = searchOpen || state.query.isNotEmpty(),
-                onSearch = onToggleSearch,
-                onImport = onImport,
-                onSync = onSync,
-                onSettings = onOpenSettings,
-            )
+            NavIcon(CupertinoIcons.Outlined.MagnifyingGlass, "搜索", onToggleSearch)
+            NavIcon(CupertinoIcons.Outlined.Plus, "导入书籍", onImport)
+            if (state.syncing) {
+                Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                    CupertinoActivityIndicator(size = 16.dp)
+                }
+            } else {
+                NavIcon(CupertinoIcons.Outlined.ArrowClockwise, "同步", onSync)
+            }
         }
 
         AnimatedVisibility(
@@ -389,7 +396,7 @@ private fun ShelfHeader(
             enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
             exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
         ) {
-            Column(Modifier.padding(horizontal = PageMargin, vertical = 4.dp)) {
+            Column(Modifier.padding(horizontal = PageMargin, vertical = 6.dp)) {
                 CupertinoSearchTextField(
                     value = state.query,
                     onValueChange = onQuery,
@@ -397,61 +404,30 @@ private fun ShelfHeader(
                     placeholder = {
                         CupertinoText(
                             text = "搜书名或作者",
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             color = scheme.placeholderText,
                         )
                     },
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
     }
 }
 
-/** 顶栏右侧的四格工具胶囊：搜索 / 导入 / 同步 / 设置。 */
+/** 导航栏动作按钮：44dp 触控区、21dp 图标、systemBlue 着色。 */
 @Composable
-private fun ToolbarPill(
-    syncing: Boolean,
-    searchActive: Boolean,
-    onSearch: () -> Unit,
-    onImport: () -> Unit,
-    onSync: () -> Unit,
-    onSettings: () -> Unit,
-) {
-    val scheme = CupertinoTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(scheme.secondarySystemFill)
-            .padding(2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        PillIcon(CupertinoIcons.Outlined.MagnifyingGlass, "搜索", onSearch, active = searchActive)
-        PillIcon(CupertinoIcons.Outlined.Plus, "导入书籍", onImport)
-        if (syncing) {
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                CupertinoActivityIndicator(size = 15.dp)
-            }
-        } else {
-            PillIcon(CupertinoIcons.Outlined.ArrowClockwise, "同步", onSync)
-        }
-        PillIcon(CupertinoIcons.Outlined.Gear, "设置", onSettings)
-    }
-}
-
-@Composable
-private fun PillIcon(
+private fun NavIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
-    active: Boolean = false,
 ) {
     val scheme = CupertinoTheme.colorScheme
     val source = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
-            .pressScale(source, pressedScale = 0.92f)
-            .size(36.dp)
+            .pressScale(source, pressedScale = 0.88f)
+            .size(42.dp)
             .clip(CircleShape)
             .clickable(
                 interactionSource = source,
@@ -463,8 +439,8 @@ private fun PillIcon(
         CupertinoIcon(
             imageVector = icon,
             contentDescription = description,
-            modifier = Modifier.size(18.dp),
-            tint = if (active) scheme.accent else scheme.label,
+            modifier = Modifier.size(21.dp),
+            tint = scheme.accent,
         )
     }
 }
@@ -489,23 +465,23 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .padding(horizontal = PageMargin, vertical = 6.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(scheme.accent.copy(alpha = 0.12f))
+            .clip(RoundedCornerShape(GroupRadius))
+            .background(BrandWarning.copy(alpha = 0.14f))
             .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             CupertinoText(
                 text = "未连接桌面端",
-                fontSize = 12.5.sp,
-                fontWeight = FontWeight.Medium,
-                color = scheme.accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.label,
                 maxLines = 1,
             )
             Spacer(Modifier.height(2.dp))
             CupertinoText(
                 text = "同步与下载暂停；本机书照常可读。",
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 color = scheme.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -539,45 +515,25 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
 
 /* ---------------- 筛选 ---------------- */
 
+/** 筛选：iOS 分段控件，一段一个筛选，不做胶囊横滑。 */
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
-    val scheme = CupertinoTheme.colorScheme
-    Row(
+    val index = ShelfUiState.FILTERS
+        .indexOfFirst { it.first == selected }
+        .coerceAtLeast(0)
+    CupertinoSegmentedControl(
+        selectedTabIndex = index,
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = PageMargin, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(horizontal = PageMargin, vertical = 6.dp),
     ) {
-        ShelfUiState.FILTERS.forEach { (key, label) ->
-            val active = selected == key
-            val bg by animateColorAsState(
-                targetValue = if (active) scheme.accent else scheme.secondarySystemFill,
-                animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
-                label = "chip-bg",
-            )
-            val fg by animateColorAsState(
-                targetValue = if (active) Color.White else scheme.secondaryLabel,
-                animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
-                label = "chip-fg",
-            )
-            Box(
-                modifier = Modifier
-                    .height(32.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(bg)
-                    .clickable { onSelect(key) }
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.Center,
+        ShelfUiState.FILTERS.forEachIndexed { i, (key, label) ->
+            CupertinoSegmentedControlTab(
+                onClick = { onSelect(key) },
+                isSelected = i == index,
             ) {
-                CupertinoText(
-                    text = label,
-                    fontSize = 12.5.sp,
-                    fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                    color = fg,
-                    maxLines = 1,
-                )
+                CupertinoText(text = label, fontSize = 12.sp, maxLines = 1)
             }
         }
     }
@@ -606,30 +562,28 @@ private fun ImportStrip(label: String) {
 
 /* ---------------- 分区标题 ---------------- */
 
+/** 分组标题：iOS 分组头，13sp 次要灰，没有分隔线。 */
 @Composable
 private fun SectionLabel(title: String, count: Int) {
     val scheme = CupertinoTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            CupertinoText(
-                text = title,
-                modifier = Modifier.weight(1f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.3.sp,
-                color = scheme.label,
-                maxLines = 1,
-            )
-            CupertinoText(
-                text = "$count 本",
-                fontSize = 10.5.sp,
-                letterSpacing = 0.6.sp,
-                color = scheme.secondaryLabel,
-                maxLines = 1,
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        CupertinoHorizontalDivider(color = scheme.separator)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CupertinoText(
+            text = title,
+            modifier = Modifier.weight(1f),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = scheme.secondaryLabel,
+            maxLines = 1,
+        )
+        CupertinoText(
+            text = "$count 本",
+            fontSize = 13.sp,
+            color = scheme.secondaryLabel,
+            maxLines = 1,
+        )
     }
 }
 
@@ -713,9 +667,8 @@ private fun ContinueCard(
             .fillMaxWidth()
             .padding(top = 6.dp)
             .pressScale(source, pressedScale = 0.985f)
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(scheme.secondarySystemGroupedBackground)
-            .border(0.5.dp, scheme.separator, RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = source,
                 indication = null,
@@ -733,23 +686,13 @@ private fun ContinueCard(
         )
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(scheme.accent)
-                )
-                Spacer(Modifier.width(6.dp))
-                CupertinoText(
-                    text = "继续阅读",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.4.sp,
-                    color = scheme.accent,
-                    maxLines = 1,
-                )
-            }
+            CupertinoText(
+                text = "继续阅读",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = scheme.accent,
+                maxLines = 1,
+            )
             Spacer(Modifier.height(6.dp))
             CupertinoText(
                 text = book.title,
@@ -791,21 +734,13 @@ private fun ContinueCard(
                 )
             }
         }
-        Spacer(Modifier.width(12.dp))
-        Box(
-            Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(scheme.accent),
-            contentAlignment = Alignment.Center,
-        ) {
-            CupertinoIcon(
-                CupertinoIcons.Outlined.ChevronForward,
-                "继续阅读",
-                Modifier.size(17.dp),
-                tint = Color.White,
-            )
-        }
+        Spacer(Modifier.width(10.dp))
+        CupertinoIcon(
+            CupertinoIcons.Outlined.ChevronForward,
+            "继续阅读",
+            Modifier.size(14.dp),
+            tint = scheme.tertiaryLabel,
+        )
     }
 }
 
@@ -992,8 +927,8 @@ private fun badgeLabel(badge: BookBadge, percent: Int): String =
 private fun badgeColor(badge: BookBadge): Color {
     val scheme = CupertinoTheme.colorScheme
     return when (badge) {
-        BookBadge.MISMATCH, BookBadge.FAILED -> scheme.accent
-        BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> BrandBlue
+        BookBadge.MISMATCH, BookBadge.FAILED -> BrandNegative
+        BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> scheme.accent
         BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.secondaryLabel
         BookBadge.NONE -> scheme.secondaryLabel
     }
@@ -1010,7 +945,7 @@ private fun CoverArt(
     book: Book,
     dimmed: Boolean,
     modifier: Modifier = Modifier,
-    radius: Dp = 10.dp,
+    radius: Dp = 6.dp,
     initialSize: TextUnit = 22.sp,
 ) {
     val hue = (book.title.hashCode().absoluteValue % 360).toFloat()
@@ -1020,7 +955,7 @@ private fun CoverArt(
     val shape = RoundedCornerShape(radius)
     Box(
         modifier
-            .shadow(elevation = if (dimmed) 0.dp else 7.dp, shape = shape, clip = false)
+            .shadow(elevation = if (dimmed) 0.dp else 3.dp, shape = shape, clip = false)
             .clip(shape)
             .background(Brush.verticalGradient(listOf(paperTop, paperBottom)))
             .border(0.5.dp, Color.Black.copy(alpha = 0.06f), shape)
@@ -1063,16 +998,14 @@ private fun Snack(text: String, onDismiss: () -> Unit) {
     }
     val scheme = CupertinoTheme.colorScheme
     Box(
-        Modifier
-            .fillMaxSize()
-            .navigationBarsPadding(),
+        Modifier.fillMaxSize(),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Reveal {
             CupertinoText(
                 text = text,
                 modifier = Modifier
-                    .padding(bottom = 26.dp, start = 24.dp, end = 24.dp)
+                    .padding(bottom = 24.dp, start = 24.dp, end = 24.dp)
                     .shadow(10.dp, RoundedCornerShape(14.dp))
                     .clip(RoundedCornerShape(14.dp))
                     .background(scheme.label.copy(alpha = 0.94f))

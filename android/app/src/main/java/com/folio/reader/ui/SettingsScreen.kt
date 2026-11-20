@@ -87,7 +87,7 @@ private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 @Composable
 fun SettingsScreen(
     model: SettingsModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpenSyncStatus: () -> Unit,
     onOpenFontStore: () -> Unit,
 ) {
@@ -95,6 +95,7 @@ fun SettingsScreen(
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
     val scheme = CupertinoTheme.colorScheme
+    val tabbed = LocalTabBarPresent.current
     var showDiagnostics by remember { mutableStateOf(false) }
 
     var urlText by remember { mutableStateOf(state.serverUrl) }
@@ -114,8 +115,11 @@ fun SettingsScreen(
         )
 
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
-            contentPadding = PaddingValues(bottom = 40.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .then(if (tabbed) Modifier else Modifier.navigationBarsPadding()),
+            contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             /* ---------------- 连接 ---------------- */
             item("connect") {
@@ -133,7 +137,7 @@ fun SettingsScreen(
                                 placeholder = {
                                     CupertinoText(
                                         text = "http://192.168.1.20:7788",
-                                        fontSize = 14.sp,
+                                        fontSize = 16.sp,
                                         color = scheme.placeholderText,
                                     )
                                 },
@@ -151,7 +155,7 @@ fun SettingsScreen(
                                 placeholder = {
                                     CupertinoText(
                                         text = "访问码（桌面端「设置 → 网络」）",
-                                        fontSize = 14.sp,
+                                        fontSize = 16.sp,
                                         color = scheme.placeholderText,
                                     )
                                 },
@@ -200,7 +204,7 @@ fun SettingsScreen(
                                 Spacer(Modifier.height(10.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     val dotColor by animateColorAsState(
-                                        targetValue = if (state.connection.healthy) BrandGreen else scheme.accent,
+                                        targetValue = if (state.connection.healthy) BrandPositive else BrandNegative,
                                         animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
                                         label = "connection-dot",
                                     )
@@ -266,7 +270,7 @@ fun SettingsScreen(
                                 onClick = onOpenSyncStatus,
                                 caption = { CupertinoText(text = "逐本查看", fontSize = 12.sp) },
                             ) {
-                                CupertinoText(text = "同步状态", fontSize = 15.sp, color = scheme.label)
+                                CupertinoText(text = "同步状态", fontSize = 17.sp, color = scheme.label)
                             }
                         }
                     }
@@ -309,7 +313,7 @@ fun SettingsScreen(
                             ) {
                                 CupertinoText(
                                     text = if (shelf.syncing) "同步中…" else "立即同步",
-                                    fontSize = 15.sp,
+                                    fontSize = 17.sp,
                                     color = scheme.label,
                                 )
                             }
@@ -322,7 +326,7 @@ fun SettingsScreen(
                                 ) {
                                     CupertinoText(
                                         text = "${state.conflictCount} 处冲突",
-                                        fontSize = 15.sp,
+                                        fontSize = 17.sp,
                                         color = scheme.accent,
                                     )
                                 }
@@ -407,7 +411,7 @@ fun SettingsScreen(
                                 onClick = onOpenFontStore,
                                 caption = { CupertinoText(text = "开源中文字体，与桌面端同一份目录", fontSize = 12.sp) },
                             ) {
-                                CupertinoText(text = "字体商店", fontSize = 15.sp, color = scheme.label)
+                                CupertinoText(text = "字体商店", fontSize = 17.sp, color = scheme.label)
                             }
                         }
                         Item(key = "auto-scroll") {
@@ -470,7 +474,7 @@ fun SettingsScreen(
                                 onClick = { vm.clearMemoryCache() },
                                 caption = { CupertinoText(text = "3.0 起正文不留磁盘副本", fontSize = 12.sp) },
                             ) {
-                                CupertinoText(text = "清空内存缓存", fontSize = 15.sp, color = scheme.label)
+                                CupertinoText(text = "清空内存缓存", fontSize = 17.sp, color = scheme.label)
                             }
                         }
                         Item(key = "version") { ValueRow(title = "本机版本", value = state.appVersion) }
@@ -492,7 +496,7 @@ fun SettingsScreen(
                             ) {
                                 CupertinoText(
                                     text = if (showDiagnostics) "诊断信息 · 收起" else "诊断信息 · 展开",
-                                    fontSize = 15.sp,
+                                    fontSize = 17.sp,
                                     color = scheme.label,
                                 )
                             }
@@ -537,51 +541,52 @@ fun SettingsScreen(
 /* ---------------- 页头 ---------------- */
 
 @Composable
-private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: () -> Unit) {
+private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
             .background(scheme.systemBackground)
             .statusBarsPadding()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = PageMargin),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val source = remember { MutableInteractionSource() }
-            Box(
-                Modifier
-                    .pressScale(source, pressedScale = 0.92f)
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(scheme.secondarySystemFill)
-                    .clickable(interactionSource = source, indication = null, onClick = onBack),
-                contentAlignment = Alignment.Center,
+        // Tab 根页没有上一级，不画返回键
+        if (onBack != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CupertinoIcon(
-                    imageVector = CupertinoIcons.Outlined.ChevronBackward,
-                    contentDescription = "返回",
-                    modifier = Modifier.size(18.dp),
-                    tint = scheme.label,
-                )
+                val source = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .pressScale(source, pressedScale = 0.92f)
+                        .size(34.dp)
+                        .clickable(interactionSource = source, indication = null, onClick = onBack),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    CupertinoIcon(
+                        imageVector = CupertinoIcons.Outlined.ChevronBackward,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(22.dp),
+                        tint = scheme.accent,
+                    )
+                }
             }
+        } else {
+            Spacer(Modifier.height(10.dp))
         }
         CupertinoText(
             text = "设置",
-            modifier = Modifier.padding(start = 8.dp, top = 14.dp),
-            fontSize = 28.sp,
+            modifier = Modifier.padding(top = if (onBack == null) 2.dp else 6.dp),
+            fontSize = 34.sp,
             fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.6).sp,
+            letterSpacing = (-0.4).sp,
             color = scheme.label,
         )
         CupertinoText(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(start = 8.dp, top = 5.dp, bottom = 10.dp),
-            fontSize = 11.sp,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = 0.3.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+            fontSize = 13.sp,
             color = scheme.secondaryLabel,
         )
     }
@@ -599,7 +604,7 @@ private fun SectionScope.Item(key: String, content: @Composable () -> Unit) {
 private fun sectionTitle(text: String): @Composable () -> Unit = {
     CupertinoText(
         text = text,
-        fontSize = 12.sp,
+        fontSize = 13.sp,
         color = CupertinoTheme.colorScheme.secondaryLabel,
     )
 }
@@ -619,9 +624,9 @@ private fun SectionScope.SwitchItem(
         },
         title = {
             Column {
-                CupertinoText(text = title, fontSize = 15.sp, color = scheme.label)
+                CupertinoText(text = title, fontSize = 17.sp, color = scheme.label)
                 Spacer(Modifier.height(2.dp))
-                CupertinoText(text = summary, fontSize = 12.sp, color = scheme.secondaryLabel)
+                CupertinoText(text = summary, fontSize = 13.sp, color = scheme.secondaryLabel)
             }
         },
     )
@@ -644,13 +649,12 @@ private fun SectionScope.SliderItem(
                 CupertinoText(
                     text = title,
                     modifier = Modifier.weight(1f),
-                    fontSize = 15.sp,
+                    fontSize = 17.sp,
                     color = scheme.label,
                 )
                 CupertinoText(
                     text = valueLabel,
-                    fontSize = 12.5.sp,
-                    fontFamily = FontFamily.Monospace,
+                    fontSize = 15.sp,
                     color = scheme.secondaryLabel,
                 )
             }
@@ -674,7 +678,7 @@ private fun SegmentedRow(
 ) {
     val scheme = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
-        CupertinoText(text = title, fontSize = 15.sp, color = scheme.label)
+        CupertinoText(text = title, fontSize = 17.sp, color = scheme.label)
         Spacer(Modifier.height(8.dp))
         CupertinoSegmentedControl(
             selectedTabIndex = selectedIndex,
@@ -700,13 +704,12 @@ private fun ValueRow(title: String, value: String, valueColor: Color? = null) {
         CupertinoText(
             text = title,
             modifier = Modifier.weight(1f),
-            fontSize = 15.sp,
+            fontSize = 17.sp,
             color = scheme.label,
         )
         CupertinoText(
             text = value,
-            fontSize = 13.sp,
-            fontFamily = FontFamily.Monospace,
+            fontSize = 17.sp,
             color = valueColor ?: scheme.secondaryLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

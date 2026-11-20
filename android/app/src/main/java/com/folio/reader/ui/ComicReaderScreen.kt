@@ -541,7 +541,7 @@ private fun ComicPageBox(
     }
 
     Box(
-        modifier = modifier.background(Color(0xFF1F1E1C)),
+        modifier = modifier.background(BrandInk),
         contentAlignment = Alignment.Center,
     ) {
         if (error != null) {

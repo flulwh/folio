@@ -109,7 +109,7 @@ fun FolioSheet(
                             (maxH.toPx() * progress.value + drag).toInt().toFloat()
                         }
                     },
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                 color = scheme.secondarySystemGroupedBackground,
                 contentColor = scheme.label,
                 shadowElevation = 16.dp,
@@ -158,7 +158,7 @@ fun FolioSheet(
                             Column(Modifier.weight(1f)) {
                                 CupertinoText(
                                     text = title,
-                                    fontSize = 21.sp,
+                                    fontSize = 17.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = scheme.label,
                                     maxLines = 1,
@@ -168,7 +168,7 @@ fun FolioSheet(
                                     Spacer(Modifier.height(2.dp))
                                     CupertinoText(
                                         text = subtitle,
-                                        fontSize = 12.5.sp,
+                                        fontSize = 13.sp,
                                         color = scheme.secondaryLabel,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,

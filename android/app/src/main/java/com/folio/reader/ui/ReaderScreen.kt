@@ -352,10 +352,10 @@ fun ReaderScreen(
                     .statusBarsPadding()
                     .padding(horizontal = 14.dp)
                     .padding(top = 4.dp)
-                    .shadow(10.dp, RoundedCornerShape(20.dp))
-                    .clip(RoundedCornerShape(20.dp))
+                    .shadow(10.dp, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.96f))
-                    .border(0.5.dp, palette.separator, RoundedCornerShape(20.dp))
+                    .border(0.5.dp, palette.separator, RoundedCornerShape(14.dp))
                     .height(50.dp)
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -447,10 +447,10 @@ fun ReaderScreen(
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp)
                     .padding(bottom = 10.dp)
-                    .shadow(12.dp, RoundedCornerShape(24.dp))
-                    .clip(RoundedCornerShape(24.dp))
+                    .shadow(12.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.97f))
-                    .border(0.5.dp, palette.separator, RoundedCornerShape(24.dp))
+                    .border(0.5.dp, palette.separator, RoundedCornerShape(16.dp))
                     .padding(horizontal = 14.dp)
                     .padding(top = 10.dp, bottom = 4.dp),
             ) {
@@ -561,7 +561,7 @@ fun ReaderScreen(
                 modifier = Modifier
                     .navigationBarsPadding()
                     .padding(end = 16.dp, bottom = 20.dp)
-                    .clip(RoundedCornerShape(20.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.92f))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,

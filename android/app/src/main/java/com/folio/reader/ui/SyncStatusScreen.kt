@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,7 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,47 +49,57 @@ import java.util.Locale
 /**
  * 同步报告。
  *
- * 三个数字横排当表头，下面一条发丝线；逐本状态就是普通列表行，
- * 传输中在行下补一条 2dp 进度线，失败行直接给「重试」。没有卡片。
+ * 排版是 iOS 设置页的分组卡片：概览三格一张卡、操作一张卡、逐本状态一张卡、
+ * 诊断一张卡；卡片之间用 22dp 留白分隔，卡片内部用 16dp 缩进的发丝线。
  */
 @Composable
 fun SyncStatusScreen(
     model: SyncModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val vm = model.session
     val state by vm.shelf.collectAsState()
     val books = state.books.distinctBy { it.id }
     val scheme = CupertinoTheme.colorScheme
+    val tabbed = LocalTabBarPresent.current
 
-    Column(Modifier.fillMaxSize().background(scheme.systemBackground)) {
+    Column(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
         SyncHeader(onBack = onBack)
 
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f).navigationBarsPadding(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .then(if (tabbed) Modifier else Modifier.navigationBarsPadding()),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             item("stats") {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Stat(value = if (state.online) "在线" else "离线", label = "连接", Modifier.weight(1f))
-                    StatDivider()
-                    Stat(
-                        value = state.serverVersion.ifBlank { "—" },
-                        label = "桌面端",
-                        modifier = Modifier.weight(1f),
-                    )
-                    StatDivider()
-                    Stat(value = lastSyncText(state.lastSyncAt), label = "上次同步", Modifier.weight(1f))
+                IosCard {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = RowInset),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Stat(
+                            value = if (state.online) "在线" else "离线",
+                            label = "连接",
+                            modifier = Modifier.weight(1f),
+                            tint = if (state.online) BrandPositive else scheme.secondaryLabel,
+                        )
+                        StatDivider()
+                        Stat(
+                            value = state.serverVersion.ifBlank { "—" },
+                            label = "桌面端",
+                            modifier = Modifier.weight(1f),
+                        )
+                        StatDivider()
+                        Stat(value = lastSyncText(state.lastSyncAt), label = "上次同步", Modifier.weight(1f))
+                    }
                 }
-                CupertinoHorizontalDivider(
-                    modifier = Modifier.fillMaxWidth().padding(start = PageMargin),
-                    color = scheme.separator,
-                )
+
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = PageMargin, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     CupertinoButton(
@@ -99,7 +110,8 @@ fun SyncStatusScreen(
                     ) {
                         CupertinoText(
                             text = if (state.syncing) "同步中…" else "立即同步",
-                            fontSize = 13.5.sp,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                     CupertinoButton(
@@ -107,7 +119,7 @@ fun SyncStatusScreen(
                         modifier = Modifier.weight(1f),
                         colors = CupertinoButtonDefaults.grayButtonColors(),
                     ) {
-                        CupertinoText(text = "重新检测", fontSize = 13.5.sp)
+                        CupertinoText(text = "重新检测", fontSize = 15.sp)
                     }
                 }
             }
@@ -115,15 +127,26 @@ fun SyncStatusScreen(
             if (state.conflictCount > 0) {
                 item("conflicts") {
                     Row(
-                        Modifier.fillMaxWidth().background(scheme.accent.copy(alpha = 0.12f)),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = PageMargin)
+                            .clip(RoundedCornerShape(GroupRadius))
+                            .background(BrandWarning.copy(alpha = 0.14f))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Box(Modifier.width(2.dp).height(34.dp).background(scheme.accent))
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(BrandWarning),
+                        )
+                        Spacer(Modifier.width(10.dp))
                         CupertinoText(
                             text = "${state.conflictCount} 本内容不一致，请选择保留哪一版",
-                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-                            fontSize = 12.5.sp,
-                            color = scheme.accent,
+                            modifier = Modifier.weight(1f),
+                            fontSize = 13.sp,
+                            color = scheme.label,
                             maxLines = 2,
                         )
                     }
@@ -136,20 +159,18 @@ fun SyncStatusScreen(
                     trailing = if (books.isEmpty()) "0" else "${books.size}",
                     inset = PageMargin,
                 )
-                CupertinoHorizontalDivider(
-                    modifier = Modifier.fillMaxWidth().padding(start = PageMargin),
-                    color = scheme.separator,
-                )
             }
 
             if (books.isEmpty()) {
                 item("books-empty") {
-                    CupertinoText(
-                        text = "导入一本 txt，或连上桌面端同步一次。",
-                        modifier = Modifier.padding(horizontal = PageMargin, vertical = 16.dp),
-                        fontSize = 12.5.sp,
-                        color = scheme.secondaryLabel,
-                    )
+                    IosCard {
+                        CupertinoText(
+                            text = "导入一本 txt，或连上桌面端同步一次。",
+                            modifier = Modifier.padding(horizontal = RowInset, vertical = 16.dp),
+                            fontSize = 15.sp,
+                            color = scheme.secondaryLabel,
+                        )
+                    }
                 }
             } else {
                 items(count = books.size, key = { books[it].id }) { index ->
@@ -157,6 +178,7 @@ fun SyncStatusScreen(
                         SyncBookRow(
                             book = books[index],
                             state = state,
+                            isLast = index == books.lastIndex,
                             onRetry = { vm.retrySync(books[index]) },
                         )
                     }
@@ -165,99 +187,112 @@ fun SyncStatusScreen(
 
             item("diagnostics") {
                 GroupLabel(text = "诊断", inset = PageMargin)
-                CupertinoHorizontalDivider(
-                    modifier = Modifier.fillMaxWidth().padding(start = PageMargin),
-                    color = scheme.separator,
-                )
-                CupertinoText(
-                    text = diagnosticsOf(state),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = PageMargin, vertical = 14.dp),
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    color = scheme.secondaryLabel,
-                )
-                CupertinoHorizontalDivider(
-                    modifier = Modifier.fillMaxWidth().padding(start = PageMargin),
-                    color = scheme.separator,
-                )
+                IosCard {
+                    CupertinoText(
+                        text = diagnosticsOf(state),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = RowInset, vertical = 14.dp),
+                        fontSize = 11.sp,
+                        lineHeight = 17.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = scheme.secondaryLabel,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SyncHeader(onBack: () -> Unit) {
+private fun SyncHeader(onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(scheme.systemBackground)
+            .background(scheme.systemGroupedBackground)
             .statusBarsPadding()
             .padding(horizontal = PageMargin),
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val source = remember { MutableInteractionSource() }
-            Box(
-                Modifier
-                    .pressScale(source)
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .clickable(interactionSource = source, indication = null, onClick = onBack),
-                contentAlignment = Alignment.Center,
+        if (onBack != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                CupertinoIcon(
-                    imageVector = CupertinoIcons.Outlined.ChevronBackward,
-                    contentDescription = "返回",
-                    modifier = Modifier.size(19.dp),
-                    tint = scheme.label,
-                )
+                val source = remember { MutableInteractionSource() }
+                Box(
+                    Modifier
+                        .pressScale(source)
+                        .size(34.dp)
+                        .clickable(interactionSource = source, indication = null, onClick = onBack),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    CupertinoIcon(
+                        imageVector = CupertinoIcons.Outlined.ChevronBackward,
+                        contentDescription = "返回",
+                        modifier = Modifier.size(22.dp),
+                        tint = scheme.accent,
+                    )
+                }
             }
+        } else {
+            Spacer(Modifier.height(10.dp))
         }
         CupertinoText(
             text = "同步",
-            modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = if (onBack == null) 2.dp else 6.dp, bottom = 6.dp),
+            fontSize = 34.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.4).sp,
             color = scheme.label,
             maxLines = 1,
         )
     }
 }
 
-/** 分组标题：小字号、拉字距、灰。 */
+/** iOS inset grouped 卡片：白底、10dp 圆角、页面 16dp 缩进。 */
+@Composable
+private fun IosCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val scheme = CupertinoTheme.colorScheme
+    Column(modifier.fillMaxWidth().padding(horizontal = PageMargin)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(GroupRadius))
+                .background(scheme.secondarySystemGroupedBackground),
+            content = content,
+        )
+    }
+}
+
+/** 分组标题：13sp 次要灰，iOS 分组头。 */
 @Composable
 fun GroupLabel(
     text: String,
     modifier: Modifier = Modifier,
     trailing: String? = null,
     inset: androidx.compose.ui.unit.Dp = PageMargin,
-    topGap: androidx.compose.ui.unit.Dp = 24.dp,
+    topGap: androidx.compose.ui.unit.Dp = 22.dp,
 ) {
     val scheme = CupertinoTheme.colorScheme
     Row(
         modifier
             .fillMaxWidth()
-            .padding(start = inset, end = inset, top = topGap, bottom = 8.dp),
+            .padding(start = inset, end = inset, top = topGap, bottom = LabelGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CupertinoText(
             text = text,
             modifier = Modifier.weight(1f),
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
-            letterSpacing = 1.2.sp,
             color = scheme.secondaryLabel,
             maxLines = 1,
         )
         if (trailing != null) {
             CupertinoText(
                 text = trailing,
-                fontSize = 10.5.sp,
+                fontSize = 13.sp,
                 color = scheme.secondaryLabel,
                 maxLines = 1,
             )
@@ -266,20 +301,24 @@ fun GroupLabel(
 }
 
 @Composable
-private fun Stat(value: String, label: String, modifier: Modifier = Modifier) {
+private fun Stat(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    tint: androidx.compose.ui.graphics.Color? = null,
+) {
     val scheme = CupertinoTheme.colorScheme
-    Column(modifier = modifier.padding(vertical = 12.dp)) {
+    Column(modifier = modifier.padding(vertical = 13.dp)) {
         CupertinoText(
             text = value,
-            fontSize = 16.sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Medium,
-            color = scheme.label,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = tint ?: scheme.label,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(3.dp))
-        CupertinoText(text = label, fontSize = 10.sp, color = scheme.secondaryLabel, maxLines = 1)
+        CupertinoText(text = label, fontSize = 12.sp, color = scheme.secondaryLabel, maxLines = 1)
     }
 }
 
@@ -289,96 +328,107 @@ private fun StatDivider() {
 }
 
 @Composable
-private fun SyncBookRow(book: Book, state: ShelfUiState, onRetry: () -> Unit) {
+private fun SyncBookRow(book: Book, state: ShelfUiState, isLast: Boolean, onRetry: () -> Unit) {
     val scheme = CupertinoTheme.colorScheme
     val syncState = state.stateOf(book)
     val reason = state.reasonOf(book)
     val percent = state.transferPercent(book)
     val retryable = syncState == SyncState.FAILED || syncState == SyncState.NOT_SYNCED
 
-    Column(Modifier.fillMaxWidth()) {
-        Row(
+    Column(Modifier.fillMaxWidth().padding(horizontal = PageMargin)) {
+        Column(
             Modifier
                 .fillMaxWidth()
-                .then(if (retryable) Modifier.clickable(onClick = onRetry) else Modifier)
-                .padding(horizontal = PageMargin)
-                .padding(vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .clip(RoundedCornerShape(GroupRadius))
+                .background(scheme.secondarySystemGroupedBackground),
         ) {
-            Column(Modifier.weight(1f)) {
-                CupertinoText(
-                    text = book.title,
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = scheme.label,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(3.dp))
-                CupertinoText(
-                    text = buildString {
-                        append(state.sourceLabelOf(book))
-                        append(" · ")
-                        append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
-                        if (!reason.isNullOrBlank()) append(" · ").append(reason)
-                    },
-                    fontSize = 11.sp,
-                    color = scheme.secondaryLabel,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            CupertinoText(
-                text = labelOf(syncState),
-                fontSize = 11.sp,
-                color = when (syncState) {
-                    SyncState.FAILED, SyncState.CONTENT_MISMATCH -> scheme.accent
-                    else -> scheme.secondaryLabel
-                },
-                maxLines = 1,
-            )
-            if (retryable) {
-                Spacer(Modifier.width(10.dp))
-                CupertinoText(
-                    text = "重试",
-                    modifier = Modifier
-                        .clickable(onClick = onRetry)
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    fontSize = 11.sp,
-                    color = scheme.accent,
-                    maxLines = 1,
-                )
-            }
-        }
-        if (syncState == SyncState.TRANSFERRING) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = PageMargin, end = PageMargin, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
+            Column(Modifier.fillMaxWidth()) {
+                Row(
                     Modifier
-                        .weight(1f)
-                        .height(2.dp)
-                        .background(scheme.separator),
+                        .fillMaxWidth()
+                        .then(if (retryable) Modifier.clickable(onClick = onRetry) else Modifier)
+                        .padding(horizontal = RowInset)
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
+                    Column(Modifier.weight(1f)) {
+                        CupertinoText(
+                            text = book.title,
+                            fontSize = 17.sp,
+                            color = scheme.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        CupertinoText(
+                            text = buildString {
+                                append(state.sourceLabelOf(book))
+                                append(" · ")
+                                append(if (book.hasLocalFile) sizeLabel(book.size) else "未下载")
+                                if (!reason.isNullOrBlank()) append(" · ").append(reason)
+                            },
+                            fontSize = 13.sp,
+                            color = scheme.secondaryLabel,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    CupertinoText(
+                        text = labelOf(syncState),
+                        fontSize = 15.sp,
+                        color = when (syncState) {
+                            SyncState.FAILED, SyncState.CONTENT_MISMATCH -> BrandNegative
+                            SyncState.SYNCED -> BrandPositive
+                            else -> scheme.secondaryLabel
+                        },
+                        maxLines = 1,
+                    )
+                    if (retryable) {
+                        Spacer(Modifier.width(8.dp))
+                        CupertinoText(
+                            text = "重试",
+                            modifier = Modifier
+                                .clickable(onClick = onRetry)
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            fontSize = 15.sp,
+                            color = scheme.accent,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                if (syncState == SyncState.TRANSFERRING) {
+                    Row(
                         Modifier
-                            .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
-                            .height(2.dp)
-                            .background(scheme.accent)
+                            .fillMaxWidth()
+                            .padding(start = RowInset, end = RowInset, bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .height(2.dp)
+                                .background(scheme.separator),
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth((percent / 100f).coerceIn(0f, 1f))
+                                    .height(2.dp)
+                                    .background(scheme.accent)
+                            )
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        CupertinoText(text = "$percent%", fontSize = 12.sp, color = scheme.secondaryLabel)
+                    }
+                }
+                if (!isLast) {
+                    CupertinoHorizontalDivider(
+                        modifier = Modifier.fillMaxWidth().padding(start = RowInset),
+                        color = scheme.separator,
                     )
                 }
-                Spacer(Modifier.width(10.dp))
-                CupertinoText(text = "$percent%", fontSize = 10.sp, color = scheme.secondaryLabel)
             }
         }
-        CupertinoHorizontalDivider(
-            modifier = Modifier.fillMaxWidth().padding(start = PageMargin),
-            color = scheme.separator,
-        )
     }
 }
 

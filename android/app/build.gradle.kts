@@ -12,11 +12,12 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.1.0：整体换 iOS 配色与排版，首页改大标题 + 分段控件 + 三列封面墙，
+        //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        // 3.6.0：设备页「刷新快照」改为下发 refresh-snapshot 指令（versionCode 20）。
-        versionCode = 22
-        versionName = "4.0.0"
+        versionCode = 23
+        versionName = "4.1.0"
         vectorDrawables.useSupportLibrary = true
     }
 
