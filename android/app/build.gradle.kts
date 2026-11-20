@@ -90,7 +90,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
 
     implementation(platform("androidx.compose:compose-bom:2025.06.01"))
     implementation("androidx.compose.ui:ui")
@@ -102,15 +102,15 @@ dependencies {
 
     // Miuix：HyperOS 风格的 Compose 组件库（卡片 / 抽屉 / 开关 / 滑杆 / 顶栏）。
     // 0.4.9 对齐 Compose 1.8.2，本项目的 BOM 是 1.8.3，兼容。
-    implementation("top.yukonga.miuix.kmp:miuix:0.4.9")
+    implementation("top.yukonga.miuix.kmp:miuix:0.8.8")
 
     // 后台周期同步在 3.0 下线：只在「连接成功 / 回前台 / 手动点按」时同步，
     // 不再引 WorkManager（省一个常驻依赖，也省掉系统调度带来的不可控时机）。
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
