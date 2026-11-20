@@ -11,13 +11,14 @@ import { useAppActions, useFonts, useMarks, useProgress, useSettings } from '../
 import { useVirtualScroll } from '../hooks/useVirtualScroll.js';
 import { useReaderMeasure } from '../hooks/useReaderMeasure.js';
 import { useReaderMarks } from '../hooks/useReaderMarks.js';
+import { useAutoScroll, AUTO_SCROLL_SPEEDS } from '../hooks/useAutoScroll.js';
+import { useReaderSearch } from '../hooks/useReaderSearch.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   chapterIndexForPara,
   parseBookCached,
 } from '../utils/chapters.js';
 import { clamp, compactText, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
-import { findMatchRange, searchBook } from '../utils/search.js';
 import { clampIndex } from '../utils/virtual.js';
 import TocPanel from './TocPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -38,8 +39,6 @@ import {
   IconType,
 } from './Icons.jsx';
 
-const AUTO_SCROLL_SPEEDS = [15, 25, 40, 60]; // px per second
-const DEFAULT_AUTO_SPEED = 1; // index into AUTO_SCROLL_SPEEDS
 const UI_IDLE_MS = 2500;
 
 export default function Reader({ book, onClose, cloud = null, resume = true }) {
@@ -186,15 +185,15 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [marksOpen, setMarksOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchHits, setSearchHits] = useState([]);
-  const [searchCursor, setSearchCursor] = useState(-1);
-  const [searching, setSearching] = useState(false);
-  const [activeHit, setActiveHit] = useState(null);
   const [selection, setSelection] = useState(null);
   const [uiVisible, setUiVisible] = useState(true);
-  const [autoScroll, setAutoScroll] = useState(false);
-  const [autoSpeed, setAutoSpeed] = useState(DEFAULT_AUTO_SPEED);
+  const { autoScroll, autoSpeed, setAutoScroll, setAutoSpeed, autoScrollRef } = useAutoScroll({
+    scrollRef,
+    getTotal,
+    getLogicalTop,
+    scrollToOffset,
+    notify,
+  });
   const [jump, setJump] = useState(null);
   const [resumeChip, setResumeChip] = useState(null);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -212,7 +211,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const bottomRef = useRef(null);
   const scrubRef = useRef(false);
   const seekRatioRef = useRef(0);
-  const autoScrollRef = useRef(false);
   const overlaysOpenRef = useRef(false);
   const lastIndexRef = useRef(progress[book.id]?.paraIndex ?? 0);
   const mountedRef = useRef(true);
@@ -233,7 +231,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   // 落位逻辑随排版/高度表更新，但测量 layout effect 不能被它的新引用触发重跑，
   // 所以只通过 ref 调用最新版本。
   const locateRestoreRef = useRef(null);
-  const searchTimer = useRef(null);
 
   // 恢复定位请求：测量未结束只记录目标段落，绝不立即滚动。
   // 引用保持稳定，避免测量用的 layout effect 被新引用反复触发。
@@ -375,8 +372,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (resumeTimer.current) clearTimeout(resumeTimer.current);
       if (hairTimer.current) clearTimeout(hairTimer.current);
-      if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current);
-      if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, []);
 
@@ -615,6 +610,29 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     onClose();
   }, [flushSave, onClose]);
 
+  /* --------------------------- full-text search --------------------- */
+
+  const {
+    query: searchQuery,
+    setQuery: setSearchQuery,
+    hits: searchHits,
+    cursor: searchCursor,
+    searching,
+    activeHit,
+    setActiveHit,
+    jumpToHit,
+    stepHit,
+  } = useReaderSearch({
+    open: searchOpen,
+    paragraphs,
+    chapters,
+    setAutoScroll,
+    playSettle,
+    animateScroll,
+    getOffset,
+    setCurrentPara,
+  });
+
   /* ------------------- bookmarks / highlights / notes --------------- */
 
   const {
@@ -682,111 +700,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     });
   }, []);
 
-  /* --------------------------- full-text search --------------------- */
-
-  useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (!searchOpen || !searchQuery.trim()) {
-      setSearchHits([]);
-      setSearchCursor(-1);
-      setSearching(false);
-      setActiveHit(null);
-      return undefined;
-    }
-    setSearching(true);
-    setActiveHit(null);
-    const keyword = searchQuery.trim();
-    searchTimer.current = setTimeout(() => {
-      const hits = searchBook(paragraphs, chapters, keyword);
-      setSearchHits(hits);
-      setSearchCursor(hits.length ? 0 : -1);
-      setSearching(false);
-    }, 260);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
-  }, [searchOpen, searchQuery, paragraphs, chapters]);
-
-  const jumpToHit = useCallback(
-    (hit, index) => {
-      if (!hit) return;
-      const text = paragraphs[hit.paraIndex]?.text || '';
-      const range = findMatchRange(text, searchQuery) || {
-        start: Math.max(0, hit.start),
-        end: Math.max(1, hit.end),
-      };
-      setActiveHit({ paraIndex: hit.paraIndex, start: range.start, end: range.end });
-      setSearchCursor(index);
-      setAutoScroll(false);
-      playSettle();
-      animateScroll(getOffset(hit.paraIndex), 420);
-      setCurrentPara(hit.paraIndex);
-    },
-    [animateScroll, getOffset, paragraphs, playSettle, searchQuery]
-  );
-
-  const stepHit = useCallback(
-    (direction) => {
-      if (!searchHits.length) return;
-      const base = searchCursor < 0 ? (direction > 0 ? -1 : 0) : searchCursor;
-      const next = (base + direction + searchHits.length) % searchHits.length;
-      jumpToHit(searchHits[next], next);
-    },
-    [jumpToHit, searchCursor, searchHits]
-  );
-
   /* --------------------------- auto scroll -------------------------- */
-
-  // 自动滚动跑在 rAF 里，回调每次都取最新实现（getTotal 会随排版变化换引用，
-  // 直接写进 deps 会让自动滚动在测量结束时被重启）。
-  const scrollApiRef = useRef(null);
-  scrollApiRef.current = { getTotal, getLogicalTop, scrollToOffset };
-
-  useEffect(() => {
-    autoScrollRef.current = autoScroll;
-    if (!autoScroll) return undefined;
-    const api = scrollApiRef.current;
-    const speed = AUTO_SCROLL_SPEEDS[autoSpeed] / 1000; // px per ms
-    let raf = 0;
-    let last = performance.now();
-    // NOTE: Chromium drops sub-pixel scrollTop increments, so accumulating with
-    // `el.scrollTop += speed * dt` never moves the page. Keep a float cursor and
-    // assign it absolutely instead — the rounding then happens once per frame
-    // against an ever-growing value, so motion survives.
-    // 这里用「逻辑偏移」当游标：滚动容器只是书里的一扇窗，滚到窗底会自动换窗。
-    let cursor = api.getLogicalTop();
-    const step = (now) => {
-      if (!autoScrollRef.current) return;
-      const el = scrollRef.current;
-      if (!el) {
-        raf = requestAnimationFrame(step);
-        return;
-      }
-      const dt = Math.max(0, Math.min(96, now - last));
-      last = now;
-      const max = api.getTotal() - el.clientHeight;
-      if (max <= 0) {
-        raf = requestAnimationFrame(step);
-        return;
-      }
-      // the reader scrolled by itself (chapter jump / seek): follow it
-      const logicalTop = api.getLogicalTop();
-      if (Math.abs(logicalTop - cursor) > 3) cursor = logicalTop;
-      cursor = Math.min(max, cursor + speed * dt);
-      api.scrollToOffset(cursor);
-      if (cursor >= max - 0.5) {
-        setAutoScroll(false);
-        notify('已经滚动到书末');
-        return;
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(raf);
-      autoScrollRef.current = false;
-    };
-  }, [autoScroll, autoSpeed, scrollRef, notify]);
 
   const handleWheel = useCallback(() => {
     if (autoScrollRef.current) {
@@ -795,7 +709,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     }
     // A wheel gesture always wins over an in-flight glide.
     stopSmooth();
-  }, [notify, stopSmooth]);
+  }, [autoScrollRef, notify, setAutoScroll, stopSmooth]);
 
   /* --------------------------- fullscreen --------------------------- */
 

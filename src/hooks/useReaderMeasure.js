@@ -94,6 +94,14 @@ export function useReaderMeasure({
     setMeasuring(true);
   }, []);
 
+  // 卸载时取消排队中的测量帧，避免对已卸载组件 setState。
+  useEffect(
+    () => () => {
+      if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current);
+    },
+    []
+  );
+
   // 高度缓存键：排版 + 段落数（栏宽在读写时会再校验一次）
   const cacheKey = `${typographyKey}|${paragraphs.length}`;
   // 有没有现成的高度缓存：有的话首批只渲染一小撮做校验，不必把整批塞进 DOM 再丢弃。
