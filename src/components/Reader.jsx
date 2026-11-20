@@ -15,12 +15,14 @@ import { useAutoScroll, AUTO_SCROLL_SPEEDS } from '../hooks/useAutoScroll.js';
 import { useReaderSearch } from '../hooks/useReaderSearch.js';
 import { useReaderScrollTracking } from '../hooks/useReaderScrollTracking.js';
 import { useReaderShortcuts } from '../hooks/useReaderShortcuts.js';
+import { useReaderInteraction } from '../hooks/useReaderInteraction.js';
+import { useReaderScrubber } from '../hooks/useReaderScrubber.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   chapterIndexForPara,
   parseBookCached,
 } from '../utils/chapters.js';
-import { clamp, compactText, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
+import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
 import { clampIndex } from '../utils/virtual.js';
 import TocPanel from './TocPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -199,7 +201,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const [jump, setJump] = useState(null);
   const [resumeChip, setResumeChip] = useState(null);
   const [savedFlash, setSavedFlash] = useState(false);
-  const [scrub, setScrub] = useState(null);
   const [hairline, setHairline] = useState(false);
 
   const idleTimer = useRef(null);
@@ -211,12 +212,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const innerRef = useRef(null);
   const rootRef = useRef(null);
   const bottomRef = useRef(null);
-  const scrubRef = useRef(false);
-  const seekRatioRef = useRef(0);
   const overlaysOpenRef = useRef(false);
   const lastIndexRef = useRef(progress[book.id]?.paraIndex ?? 0);
   const mountedRef = useRef(true);
-  const downScrollRef = useRef(0);
   // 恢复位置状态机：pending → measuring → settled。
   // 高度表是分帧写回的，测量期间前缀偏移一直在变；这时定位只能拿到「估计高度」，
   // 长篇（paraIndex 3000）会被算到 7.6% 之类完全错误的位置。所以测量期只记录
@@ -629,35 +627,13 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   /* ------------------------ selection bubble ------------------------ */
 
-  const handleReaderMouseUp = useCallback((event) => {
-    if (event.target.closest?.('.selection-bubble')) return;
-    const selection = window.getSelection();
-    const text = selection && !selection.isCollapsed ? compactText(selection.toString()) : '';
-    if (!text) {
-      setSelection(null);
-      return;
-    }
-    const anchor = selection.anchorNode;
-    const element = anchor?.nodeType === 3 ? anchor.parentElement : anchor;
-    const node = element?.closest?.('.vp-item');
-    const paraIndex = Number(node?.dataset.index);
-    if (!node || !Number.isFinite(paraIndex)) {
-      setSelection(null);
-      return;
-    }
-    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
-    const rect = range?.getBoundingClientRect();
-    if (!rect) {
-      setSelection(null);
-      return;
-    }
-    setSelection({
-      x: clamp(rect.left + rect.width / 2, 96, window.innerWidth - 96),
-      y: clamp(rect.top - 10, 64, window.innerHeight - 72),
-      paraIndex,
-      excerpt: text.slice(0, 120),
-    });
-  }, []);
+  const { handleReaderMouseUp, handlePointerDown, handleContentClick } = useReaderInteraction({
+    scrollRef,
+    setSelection,
+    uiVisible,
+    setUiVisible,
+    wakeUI,
+  });
 
   /* --------------------------- auto scroll -------------------------- */
 
@@ -681,6 +657,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   }, []);
 
   /* --------------------------- shortcuts ---------------------------- */
+
+  // 快捷键要立即拿到全书章号（云端书要加窗口起点），所以先算出来。
+  const globalChapter = windowBase + chapterIndex;
 
   const handlersRef = useReaderShortcuts({
     selection,
@@ -715,7 +694,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   const currentChapter = chapters[chapterIndex] || chapters[0];
   const totalChapters = cloud?.chapters?.length || chapters.length;
-  const globalChapter = windowBase + chapterIndex;
 
   // 顶部百分比、进度条、剩余时间、「读完」判定都只看这一个值。
   // 本地书滚动百分比本来就是全书口径；云端书只装了一个章节窗口，
@@ -805,76 +783,23 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     );
   }
 
-  const handlePointerDown = () => {
-    const el = scrollRef.current;
-    if (el) downScrollRef.current = el.scrollTop;
-  };
+  /* ---------------------------- scrubber ---------------------------- */
 
-  const handleContentClick = (e) => {
-    if (e.target.closest('.edge-nav') || e.target.closest('.selection-bubble')) return;
-    const selection = window.getSelection();
-    if (selection && selection.toString()) return;
-    // 滚动/拖动后的点击不切换工具栏（防止松手时误触）
-    const el = scrollRef.current;
-    if (el && Math.abs(el.scrollTop - downScrollRef.current) > 4) return;
-    if (uiVisible) setUiVisible(false);
-    else wakeUI();
-  };
-
-  const seekTo = (clientX) => {
-    const el = scrollRef.current;
-    const track = trackRef.current;
-    if (!el || !track) return 0;
-    const rect = track.getBoundingClientRect();
-    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
-    seekRatioRef.current = ratio;
-    if (cloud?.chapters?.length) {
-      // 云端书：轨道是全书口径，先换算到「当前窗口内的章内位置」做即时预览；
-      // 落在窗口外的部分要等松手再交给 onJump 换窗口（拖动过程中不反复拉章节）。
-      const localPos = ratio * cloud.chapters.length - windowBase;
-      if (localPos >= 0 && localPos < chapters.length) {
-        const target = Math.min(chapters.length - 1, Math.floor(localPos));
-        const start = chapters[target]?.paraIndex ?? 0;
-        const next = chapters[target + 1]?.paraIndex ?? paragraphs.length;
-        scrollToIndex(start + Math.round((next - start) * (localPos - target)));
-      }
-      return ratio * 100;
-    }
-    const max = Math.max(0, getTotal() - el.clientHeight);
-    scrollToOffset(ratio * max);
-    return ratio * 100;
-  };
-
-  const onTrackDown = (e) => {
-    e.preventDefault();
-    stopSmooth();
-    setAutoScroll(false);
-    scrubRef.current = true;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    setScrub(seekTo(e.clientX));
-    wakeUI();
-  };
-
-  const onTrackMove = (e) => {
-    if (!scrubRef.current) return;
-    setScrub(seekTo(e.clientX));
-  };
-
-  const onTrackUp = (e) => {
-    if (!scrubRef.current) return;
-    scrubRef.current = false;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    setScrub(null);
-    playSettle();
-    if (cloud?.chapters?.length) {
-      const target = Math.min(
-        cloud.chapters.length - 1,
-        Math.max(0, Math.floor(seekRatioRef.current * cloud.chapters.length))
-      );
-      const local = target - windowBase;
-      if (local < 0 || local >= chapters.length) cloud.onJump?.(target);
-    }
-  };
+  const { scrub, onTrackDown, onTrackMove, onTrackUp } = useReaderScrubber({
+    scrollRef,
+    trackRef,
+    cloud,
+    windowBase,
+    chapters,
+    paragraphCount: paragraphs.length,
+    getTotal,
+    scrollToIndex,
+    scrollToOffset,
+    stopSmooth,
+    setAutoScroll,
+    playSettle,
+    wakeUI,
+  });
 
   // 云端书读完全书（没有更多章且当前窗口滚到底）才算读完
   const finished = cloud ? !cloud.hasMore && globalPercent >= 99.6 : globalPercent >= 99.6;
