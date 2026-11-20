@@ -2912,7 +2912,10 @@ async function loadCloudChapter({ sourceId, bookUrl, index, url, chapter, book, 
   if (!chapterUrl) return { error: '缺少章节地址' };
 
   const cached = cloudStore.readChapter(sourceId, bookUrl, index, chapterUrl);
-  if (cached) return { text: await cleanText(cached, 'content'), index, fromCache: true };
+  // 旧版本可能把「登录页/提示语」当正文落过盘：过短的缓存直接当未命中，重新抓一次
+  if (cached && (cached.match(/[\u4e00-\u9fa5]/g) || []).length >= 30) {
+    return { text: await cleanText(cached, 'content'), index, fromCache: true };
+  }
 
   try {
     const { text, fallback, htmlLength } = await sourceHost.chapter(source, chapterUrl, bookUrl, chapter || entry || null, {
@@ -2922,6 +2925,21 @@ async function loadCloudChapter({ sourceId, bookUrl, index, url, chapter, book, 
     if (!text) {
       const kb = Math.max(1, Math.round((htmlLength || 0) / 1024));
       return { error: `正文为空（抓取了 ${chapterUrl} 共 ${kb} KB，规则与兜底都没取到）` };
+    }
+    // 登录页 / 验证页常常也是 200，只抓到几句提示语。这种短正文照常显示，
+    // 但不写磁盘缓存——否则一次失败会被永久命中，以后怎么重试都是那几句话。
+    const cjk = (String(text).match(/[\u4e00-\u9fa5]/g) || []).length;
+    if (cjk < 30) {
+      logLine('warn', 'cloud', `正文过短，不写缓存：${source.name} 第 ${index} 章 ${cjk} 字`, {
+        chapterUrl,
+        htmlLength,
+      });
+      return {
+        text: await cleanText(text, 'content'),
+        index,
+        fromCache: false,
+        warning: '这一章正文很短，书源可能需要登录，下次打开会重新抓取',
+      };
     }
     cloudStore.writeChapter(sourceId, bookUrl, index, text, chapterUrl);
     return { text: await cleanText(text, 'content'), index, fromCache: false, fallback: fallback || null };

@@ -37,6 +37,8 @@ export default function CloudBook({ book, onClose }) {
   const inflightRef = useRef(new Map());
   // index -> { text, error }：预取已完成、等待续接消费的结果
   const readyRef = useRef(new Map());
+  // 「正文过短，可能需要登录」只提示一次，别每翻一章弹一遍
+  const warnedRef = useRef(false);
 
   tocRef.current = toc;
   baseRef.current = base;
@@ -67,9 +69,13 @@ export default function CloudBook({ book, onClose }) {
         },
       });
       if (res?.error) throw new Error(res.error);
+      if (res?.warning && !warnedRef.current) {
+        warnedRef.current = true;
+        notify(res.warning, 'error');
+      }
       return res.text || '';
     },
-    [book.bookUrl, book.sourceId, book.name, book.author, book.cover, book.raw, settings.proxy]
+    [book.bookUrl, book.sourceId, book.name, book.author, book.cover, book.raw, settings.proxy, notify]
   );
 
   /**
