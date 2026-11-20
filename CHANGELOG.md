@@ -6,6 +6,8 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
 ## [Unreleased]
 
+## [2.12.1] — 2026-11-21
+
 **皮肤样式改为分层排序，不再靠 `!important` 互相压制。**
 
 - 样式表分成 `base → skin → motion` 三层（`@layer`）：通用排版、皮肤长相、皮肤手感各占一层，
