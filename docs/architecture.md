@@ -11,8 +11,12 @@ Folio 的代码量不大，但每一层都有明确的边界。本文说明分�
 │ 主进程（electron/，Node 环境）              │
 │                                             │
 │  文件 IO · 编码转换 · JSON 持久化            │
-│  书源引擎 · 脚本运行时 · 抓取与缓存          │
-│  局域网 HTTP 服务（Node 内置 http）          │
+│  IPC 路由 · 局域网 HTTP 服务（Node http）    │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │ utilityProcess：书源引擎               │  │
+│  │ 抓取（curl）· HTML/XPath · @js: 脚本   │  │
+│  └───────────────────────────────────────┘  │
 │                                             │
 │  ┌──────────┐  IPC   ┌──────────────────┐  │
 │  │ 渲染进程 │◀──────▶│ preload (cjs)    │  │
@@ -22,6 +26,10 @@ Folio 的代码量不大，但每一层都有明确的边界。本文说明分�
 ```
 
 渲染进程**不碰文件系统**。所有落盘、编码转换、抓取都走 IPC 到主进程；渲染层只拿到已解析好的数据。
+
+书源抓取与 `@js:` 解析跑在独立的 `utilityProcess` 里（`source-worker.js`）：`java.ajax` 是同步语义，
+只能用同步 curl，留在主进程会把 IPC、局域网心跳和进度写盘一起卡住十几秒。主进程通过
+`source-host.js` 转发调用，子进程崩溃或超时会自动重启，不影响界面。
 
 `preload` 用 `.cjs`：`package.json` 是 `type: module`，而 Electron 的 sandbox preload 仍按 CommonJS 加载。
 
@@ -35,7 +43,10 @@ electron/          主进程
 ├── preload.cjs      contextBridge 暴露 window.readerAPI
 ├── html.js          容错 HTML 解析 + 轻量 CSS 选择器（编译缓存）
 ├── xpath.js         轻量 XPath 求值（预编译路径/谓词、迭代后代轴）
-├── sources.js       书源规则解析 / 搜索 / 目录 / 正文
+├── sources.js       书源规则解析 / 搜索 / 目录 / 正文（在子进程里执行）
+├── source-host.js   主进程侧的书源引擎客户端：转发调用、限时、崩溃重启
+├── source-worker.js 书源引擎子进程：抓取 + 解析 + @js: 脚本
+├── source-protocol.js 主进程 ⇄ 子进程的消息协议（纯函数，可单测）
 ├── replace.js       净化规则（Legado 替换规则）：正则改写 + @js 替换
 ├── repo.js          书源仓库客户端（yiove 接口 + 区间导入）
 ├── jsengine.js      Legado @js: 脚本运行时（java.ajax / cookie / cache）
@@ -96,7 +107,7 @@ tools/               回归与验证脚本（见 performance.md）
 | **段落间距用 `padding`** | 虚拟滚动是绝对定位的，`margin` 不计入 `offsetHeight`，会让相邻段落重叠 |
 | **自动滚动用浮点游标 + 绝对赋值** | Chromium 会丢弃 `scrollTop += 0.02` 这类亚像素增量，逐帧累加只会原地不动；内部维护浮点游标，每帧把 `cursor + speed × dt` 直接赋给 `scrollTop` |
 | **滚动动画自研 rAF，不用 `scroll-behavior: smooth`** | 原生平滑滚动时长不可控、也无法在滚轮介入时干净地被打断；自研缓动可按距离给 240–640ms、末帧精确对齐偏移表、随时 `cancelAnimationFrame` 交还控制权 |
-| **书源不做自建后端** | 内容只在你的机器与源站之间流动，Folio 不托管、不中转、不缓存到云端；抓取与缓存都在主进程本地完成 |
+| **书源不做自建后端** | 内容只在你的机器与源站之间流动，Folio 不托管、不中转、不缓存到云端；抓取与缓存都在本机完成，引擎跑在本地子进程 |
 | **`@js:` 用 `vm` + `curl`** | Legado 脚本的 `java.ajax` 是同步调用，只有子进程方案能同时满足「同步」和「带 cookie/代理」，且不必引入重量级依赖 |
 | **云端阅读按窗口（3 章）加载** | 整本抓下来既慢又不礼貌；按窗口加载能让目录跳转、进度恢复、追加章节三者都不破坏段落索引 |
 | **局域网面板零依赖** | 只用 Node 内置 `http`，不引 WebSocket、不引任何 npm 包；面板不参与 vite 构建，打包体积不变 |

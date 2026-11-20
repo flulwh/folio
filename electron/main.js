@@ -8,6 +8,7 @@ import { domainToUnicode } from 'url';
 import { createCloudStore } from './cloudstore.js';
 import { createLogger, redactSecrets } from './logger.js';
 import { createDegrade } from './degrade.js';
+import { createSourceHost } from './source-host.js';
 import { createLanService, lanAddresses } from './lan.js';
 import { createBooksStore } from './lan-books.js';
 import { createDeviceStore } from './devicestore.js';
@@ -23,8 +24,9 @@ const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net, clipboa
 /*  重模块懒加载                                                       */
 /*  ------------------------------------------------------------------ */
 /*  sources.js(111KB) + html.js(15KB) + xpath.js(12KB) + jsengine.js(47KB) */
-/*  + replace.js + repo.js 合计约 300KB，只在用户真的去用「书源 / 云端书 / */
-/*  净化规则」时才需要。                                                 */
+/*  + replace.js + repo.js 合计约 300KB。主进程只保留纯函数部分            */
+/*  （书源规范化、类型识别）；真正抓取/解析的引擎在 source-worker.js 里，    */
+/*  跑在独立 utilityProcess。                                            */
 /*                                                                      */
 /*  之前是顶层静态 import：应用一启动就得把这 300KB 全部解析执行，        */
 /*  白白拖慢开机。现在改成用到时才动态 import —— 启动只付 main.js 自身     */
@@ -48,25 +50,10 @@ function lazyModule(loader) {
   };
 }
 
-const loadSources = lazyModule(() => import('./sources.js').then(async (mod) => {
-  mod.setLogger?.(log);
-  // sources.js 也静态依赖 jsengine.js，同理补上它的 logger
-  const engine = await loadEngine();
-  engine.setLogger?.(log);
-  return mod;
-}));
-// replace.js 静态依赖 jsengine.js（要用 runSourceScript），
-// 所以加载 replace 时顺手把 jsengine 的 logger 也注上 ——
-// 否则「导入净化规则」那条路上的 JS 规则日志会全部丢��。
-const loadReplace = lazyModule(() => import('./replace.js').then(async (mod) => {
-  const engine = await loadEngine();
-  engine.setLogger?.(log);
-  return mod;
-}));
-const loadEngine = lazyModule(() => import('./jsengine.js').then((mod) => {
-  mod.setLogger?.(log);
-  return mod;
-}));
+const loadSources = lazyModule(() => import('./sources.js'));
+// replace.js 只用 normalizeRule / detectPayloadKind 这两个纯函数；
+// applyRules（可能含 @js:）已经交给书源子进程执行。
+const loadReplace = lazyModule(() => import('./replace.js'));
 const loadRepo = lazyModule(() => import('./repo.js'));
 
 
@@ -139,6 +126,9 @@ const cloudStore = createCloudStore(path.join(dataDir, 'cloud'));
 const log = createLogger({ dir: dataDir, level: process.env.FOLIO_LOG_LEVEL || 'info' });
 // 降级留痕：空 catch 的默认值仍在调用点给，这里只负责按 scope+code 每分钟采样记一条 debug。
 const degrade = createDegrade((scope, message, meta) => log.debug(scope, message, meta));
+// 书源引擎跑在独立 utilityProcess 里：同步 curl、HTML/XPath 解析与 @js: 规则都在那边，
+// 主进程只转发调用。抓一章书最多要等十几秒，留在主进程会把 IPC 和局域网一起卡住。
+const sourceHost = createSourceHost({ workerPath: path.join(__dirname, 'source-worker.js'), log });
 // 字体商店：目录缓存 + 流式下载。走 Electron 的 net.fetch，能吃到系统代理。
 const fontStore = createFontStore({
   dataDir,
@@ -146,8 +136,7 @@ const fontStore = createFontStore({
   log,
   fetchImpl: (url, init) => net.fetch(url, init),
 });
-// 重模块里的 logger 在模块首次加载时注入（见 loadSources / loadEngine 的包装），
-// 这样启动阶段不必为了设置 logger 而提前解析那 300KB。
+// 书源子进程的日志通过 source-host.js 转成主进程的 logger 落盘（见上面的 createSourceHost）。
 
 function broadcast(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -2269,10 +2258,15 @@ async function cleanText(text, scope) {
   const raw = String(text ?? '');
   if (!raw) return raw;
   const enabled = readRules().filter((rule) => rule.enabled !== false);
-  // 没有启用任何规则时不必加载 replace.js（它连着 jsengine 一整条链）
-  const cleaned = enabled.length
-    ? (await loadReplace()).applyRules(raw, enabled, { scope, cacheRoot: dataDir })
-    : raw;
+  let cleaned = raw;
+  if (enabled.length) {
+    // 规则里的 @js: 和书源脚本同源，一并交给书源子进程执行；子进程挂了也不能把正文弄丢
+    try {
+      cleaned = await sourceHost.clean(raw, enabled, { scope, cacheRoot: dataDir });
+    } catch (err) {
+      log.warn('rules', `净化规则执行失败，按原文显示：${err?.message || err}`);
+    }
+  }
   if (scope !== 'title') return cleaned;
   // 目录标题里常混着「免费」之类的角标和换行，压平成一行
   return String(cleaned).replace(/\s*\n+\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
@@ -2359,10 +2353,7 @@ async function importSources(items) {
   const merged = [...byId.values()];
   writeSources(merged);
   // 覆盖导入的源要把旧运行时丢掉，否则改好的 jsLib/headers 不生效
-  if (touchIds.size) {
-    const { disposeRuntime } = await loadEngine();
-    for (const id of touchIds) disposeRuntime(id);
-  }
+  if (touchIds.size) await sourceHost.disposeRuntimes([...touchIds]);
   return { sources: merged, errors, added, updated };
 }
 
@@ -2460,10 +2451,7 @@ ipcMain.handle('source:remove', async (_e, ids) => {
   const list = readSources().filter((item) => !wanted.has(item.id));
   writeSources(list);
   // 删掉的源不必再留着 JS 运行时和它的 vars/cache
-  if (wanted.size) {
-    const { disposeRuntime } = await loadEngine();
-    for (const id of wanted) disposeRuntime(id);
-  }
+  if (wanted.size) await sourceHost.disposeRuntimes([...wanted]);
   return slimSources();
 });
 
@@ -2664,8 +2652,7 @@ function recordSourceStat(sourceId, patch) {
 
 async function runSourceTest(source, keyword, proxy) {
   try {
-    const { searchSource } = await loadSources();
-    const results = await searchSource(source, keyword || '的', 1, { cacheRoot: dataDir, proxy });
+    const results = await sourceHost.search(source, keyword || '的', 1, { cacheRoot: dataDir, proxy });
     return {
       ok: true,
       count: results.length,
@@ -2798,8 +2785,7 @@ ipcMain.handle('cloud:search', async (_e, { keyword, sourceIds, page, proxy, lim
       const source = queue.shift();
       if (!source) break;
       try {
-        const { searchSource } = await loadSources();
-        const results = await searchSource(source, keyword, page || 1, { cacheRoot: dataDir, proxy });
+        const results = await sourceHost.search(source, keyword, page || 1, { cacheRoot: dataDir, proxy });
         settled.push({ status: 'fulfilled', source, results });
       } catch (error) {
         settled.push({ status: 'rejected', source, reason: error });
@@ -2859,17 +2845,16 @@ async function loadCloudToc({ sourceId, bookUrl, book, refresh, proxy } = {}) {
   }
 
   try {
-    const { fetchBookInfo, fetchToc } = await loadSources();
     // Legado 的书籍详情脚本（Pixiv 靠它拿 catalogUrl）
     let bookInfo = null;
     if (source.info?.init) {
       try {
-        bookInfo = await fetchBookInfo(source, bookUrl, { cacheRoot: dataDir, proxy });
+        bookInfo = await sourceHost.bookInfo(source, bookUrl, { cacheRoot: dataDir, proxy });
       } catch {
         bookInfo = null;
       }
     }
-    const toc = await fetchToc(source, bookUrl, book || null, {
+    const toc = await sourceHost.toc(source, bookUrl, book || null, {
       cacheRoot: dataDir,
       proxy,
       bookInfo,
@@ -2914,8 +2899,7 @@ async function loadCloudChapter({ sourceId, bookUrl, index, url, chapter, book, 
   if (cached) return { text: await cleanText(cached, 'content'), index, fromCache: true };
 
   try {
-    const { fetchChapter } = await loadSources();
-    const { text, fallback, htmlLength } = await fetchChapter(source, chapterUrl, bookUrl, chapter || entry || null, {
+    const { text, fallback, htmlLength } = await sourceHost.chapter(source, chapterUrl, bookUrl, chapter || entry || null, {
       cacheRoot: dataDir,
       proxy,
     });
@@ -2977,17 +2961,15 @@ async function loadCloudChapterImages({ sourceId, bookUrl, index, url, chapter, 
   }
 
   try {
-    const { fetchPage, extractImages } = await loadSources();
-    const { url: finalUrl, html } = await fetchPage(source, chapterUrl, { bookUrl }, { proxy });
     const item = chapter || entry || null;
     // 番茄等源的章节地址是 https://…/page/<bid>#<itemId>，HTTP 请求会丢掉 # 片段，
-    // 但正文/图片脚本要靠它取 itemId，所以规则里的 baseUrl 保留原始章节地址。
-    const ruleBaseUrl = String(chapterUrl || '').includes('#') ? chapterUrl : finalUrl;
-    const urls = extractImages(html, source.content?.rule || '', finalUrl, {
-      source,
+    // 但正文/图片脚本要靠它取 itemId，所以规则里的 baseUrl 保留原始章节地址
+    // （这段逻辑跟着解析一起放在书源子进程里，见 source-worker.js）。
+    const { urls, referer: finalUrl } = await sourceHost.chapterImages(source, chapterUrl, { bookUrl }, {
       cacheRoot: dataDir,
       proxy,
-      bindings: { chapter: item, title: item?.title || '', bookUrl, baseUrl: ruleBaseUrl },
+      bookUrl,
+      chapter: item,
     });
     if (!urls.length) return { error: '这一章没解析到图片（正文页可能不是图片，或规则取的是文字）', referer: finalUrl };
     const payload = { urls: urls.slice(0, 400), referer: finalUrl, index, total: urls.length };
