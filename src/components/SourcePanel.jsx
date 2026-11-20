@@ -390,9 +390,14 @@ export default function SourcePanel({ open, onClose }) {
     }
   };
 
-  const handleRemove = (source) => {
-    removeSource(source.id);
-    notify(`已删除书源「${source.name}」`);
+  const handleRemove = async (source) => {
+    try {
+      await removeSource(source.id);
+      notify(`已删除书源「${source.name}」`);
+    } catch (err) {
+      // 删除失败时列表会被后端返回的列表覆盖回来，别再提示「已删除」
+      notify(err.message || '删除失败', 'error');
+    }
   };
 
   const handleRemoveRule = (rule) => {
@@ -493,7 +498,12 @@ export default function SourcePanel({ open, onClose }) {
               <input
                 id="source-proxy-input"
                 value={settings.proxy || ''}
-                onChange={(e) => patchSettings({ proxy: e.target.value.trim() })}
+                onChange={(e) => patchSettings({ proxy: e.target.value })}
+                onBlur={(e) => {
+                  // 输入过程中不 trim，否则空格/中间态会被吃掉；失焦时再收尾
+                  const next = e.target.value.trim();
+                  if (next !== e.target.value) patchSettings({ proxy: next });
+                }}
                 placeholder="http://127.0.0.1:7890（留空表示直连）"
                 spellCheck={false}
               />
