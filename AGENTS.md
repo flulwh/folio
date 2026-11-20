@@ -67,7 +67,7 @@ npm run preview        # 预览 dist/
 | `android/app/src/main/java/com/folio/reader/` | 安卓端：`ui/` Compose 页面与状态、`data/` 落盘与同步、`net/` 局域网客户端、`core/` 模型与解析 |
 | `docs/` | 设计与协议文档，索引见 [docs/README.md](docs/README.md) |
 | `scripts/` | 构建与发版脚本（`build-win.mjs`、`verify-release.mjs`） |
-| `tools/` | 一次性校验工具，`_` 前缀表示手动运行 |
+| `tools/` | 一次性校验工具，`_` 前缀表示手动运行；分类与用途见 [tools/README.md](tools/README.md) |
 | `.github/workflows/` | `build.yml`（桌面端）、`android.yml`（安卓 CI）、`android-release.yml`（打 `android-*` tag 自动发版） |
 
 ---

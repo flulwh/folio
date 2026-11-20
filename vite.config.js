@@ -27,8 +27,8 @@ const pkg = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
 const CSP = [
   "default-src 'self' file:",
   "script-src 'self' file:",
-  "style-src 'self' 'unsafe-inline' file: https://fonts.googleapis.com",
-  "font-src 'self' file: data: https://fonts.gstatic.com folio-font:",
+  "style-src 'self' 'unsafe-inline' file:",
+  "font-src 'self' file: data: folio-font:",
   "img-src 'self' file: data: blob: https: folio-cover:",
   "media-src 'self' file: data: blob:",
   "connect-src 'self' file:",

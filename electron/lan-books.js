@@ -27,6 +27,93 @@ import { isInside } from './paths.js';
 /** 清单一次最多回这么多本，剩下的靠 truncated 让客户端提示用户用桌面端筛。 */
 export const LIBRARY_LIMIT = 2000;
 
+/**
+ * books.json 的唯一写者：主进程 IPC（渲染层整份保存）与局域网服务（手机上传增书）
+ * 都通过这一份内存副本落盘，避免两边各读一份 json 后互相覆盖。
+ *
+ * revision 只在真正写盘成功后 +1。渲染层把自己读到的 revision 当基版本回传，
+ * 主进程发现基版本过期就拒绝整份写入，让渲染层基于最新列表重放意图。
+ */
+export function createBooksStore(opts = {}) {
+  const { files, readJson, writeJson } = opts;
+
+  let loaded = false;
+  let revision = 0;
+  let books = [];
+
+  // 书目是扁平元数据对象；逐条浅拷一份，避免调用方改到内存里的权威副本。
+  function clone(list) {
+    return Array.isArray(list)
+      ? list.map((book) => (book && typeof book === 'object' ? { ...book } : book))
+      : [];
+  }
+
+  function ensure() {
+    if (loaded) return;
+    const raw = readJson(files.books, []);
+    books = clone(Array.isArray(raw) ? raw : []);
+    loaded = true;
+  }
+
+  /** 当前权威副本 + revision（两个字段都是拷贝，调用方随便改）。 */
+  function state() {
+    ensure();
+    return { books: clone(books), revision };
+  }
+
+  function list() {
+    ensure();
+    return clone(books);
+  }
+
+  /**
+   * 内部写者（局域网上传 / contentHash 补齐）用：无条件落盘并递增 revision。
+   * 写失败时不改内存副本，返回 {ok:false} —— 调用方仍能用旧的权威副本服务请求。
+   */
+  function commit(next, reason = 'update') {
+    ensure();
+    const target = Array.isArray(next) ? next : [];
+    let result;
+    try {
+      result = writeJson(files.books, target);
+    } catch (err) {
+      return { ok: false, error: err?.message || String(err), revision };
+    }
+    if (result && result.ok === false) {
+      return { ok: false, error: result.error || '写入 books.json 失败', revision };
+    }
+    books = clone(target);
+    revision += 1;
+    return { ok: true, revision, books: clone(books), reason };
+  }
+
+  /**
+   * 渲染层整份保存。传了基版本就必须等于当前 revision，否则不写盘，
+   * 把最新列表与 revision 一起返回，让渲染层重放自己的改动。
+   * 不传基版本（旧渲染层 / 浏览器预览）保持原来的整份覆盖语义。
+   */
+  function set(next, baseRevision) {
+    ensure();
+    const base = Number(baseRevision);
+    const hasBase = baseRevision !== undefined && baseRevision !== null;
+    if (hasBase && Number.isFinite(base) && base !== revision) {
+      return { ok: false, stale: true, books: clone(books), revision };
+    }
+    return commit(next, 'renderer');
+  }
+
+  return {
+    state,
+    list,
+    commit,
+    set,
+    get revision() {
+      ensure();
+      return revision;
+    },
+  };
+}
+
 /** 30MB 的中文文案，双端逐字一致（架构文档 §8 的冻文案表）。 */
 function tooLargeText(size) {
   const mb = Math.max(1, Math.round((Number(size) || 0) / (1024 * 1024)));
@@ -43,7 +130,8 @@ function tooLargeText(size) {
  * @param {(file:string, data:any)=>any} opts.writeJson
  * @param {(level:string, msg:string, meta?:object)=>void} [opts.log]
  * @param {(event:string, payload:object)=>void} [opts.publish]  SSE 推送（网页面板）
- * @param {(id:string)=>void} [opts.onBooksChanged]              书架变更回推（渲染层）
+ * @param {(payload:object)=>void} [opts.onBooksChanged]          书架变更回推（渲染层）
+ * @param {object} [opts.booksStore]                              主进程共享的 books 权威副本；不传就自建一份
  */
 export function createBooksService(opts = {}) {
   const {
@@ -54,13 +142,16 @@ export function createBooksService(opts = {}) {
     log = () => {},
     publish = () => {},
     onBooksChanged = () => {},
+    booksStore = null,
   } = opts;
 
   const kit = createBookFileKit({ booksDir, files, readJson, writeJson, log });
+  // 与主进程 IPC 共用同一个实例时，局域网写盘不会绕过渲染层的基版本校验。
+  const store = booksStore || createBooksStore({ files, readJson, writeJson });
 
   /** 读整份书架；读不出来当空架处理（只影响清单，不影响写入门禁）。 */
   function list() {
-    return kit.readBooks() || [];
+    return store.list();
   }
 
   /** 正文副本是否可用（存在且是文件）。 */
@@ -77,8 +168,15 @@ export function createBooksService(opts = {}) {
   }
 
   /** 这本书的 contentHash，缺失就补（懒补齐 + 写回）。 */
-  function hashOf(book) {
-    return kit.ensureContentHash(book) || '';
+  function hashOf(book, all) {
+    const before = String(book?.contentHash || '');
+    const hash = kit.ensureContentHash(book, { persist: false }) || '';
+    // 补上的 hash 必须写回权威副本，否则下次清单还得重算一遍
+    if (hash && !isHash(before) && Array.isArray(all)) {
+      const saved = store.commit(all, 'hash-backfill');
+      if (!saved.ok) log('warn', `contentHash 写回失败：${saved.error}`);
+    }
+    return hash;
   }
 
   /* ---------------- GET /api/library ---------------- */
@@ -148,7 +246,7 @@ export function createBooksService(opts = {}) {
     }
 
     if (patched) {
-      const result = kit.saveBooks(all);
+      const result = store.commit(all, 'hash-backfill');
       // 写回失败不阻断：下次请求会再算一次，功能照旧
       if (!result.ok) log('warn', `清单 contentHash 写回失败：${result.error}`);
     }
@@ -169,7 +267,8 @@ export function createBooksService(opts = {}) {
    * @returns {{ok:true, file:string, size:number, start:number, end:number, partial:boolean, hash:string, title:string}|{ok:false, status:number, error:string, size?:number}}
    */
   function openDownload(id, start) {
-    const book = list().find((item) => item?.id === id);
+    const all = list();
+    const book = all.find((item) => item?.id === id);
     if (!book) return { ok: false, status: 404, error: '书架上没有这本书' };
     if (book.kind !== 'local') {
       return { ok: false, status: 409, error: '这本书在云端，只能按章读取' };
@@ -193,7 +292,7 @@ export function createBooksService(opts = {}) {
       end: size - 1,
       partial: from > 0,
       // 下载必须带 hash：手机靠它决定这本地副本算不算已同步
-      hash: hashOf(book),
+      hash: hashOf(book, all),
       title: String(book.title || book.name || '未命名'),
     };
   }
@@ -334,7 +433,7 @@ export function createBooksService(opts = {}) {
         changed = true;
       }
       if (changed) {
-        const saved = kit.saveBooks(all);
+        const saved = store.commit(all, 'lan-upload');
         if (!saved.ok) return { ok: false, status: 500, error: saved.error || '写入 books.json 失败' };
       }
       finish(existing.id);
@@ -364,7 +463,7 @@ export function createBooksService(opts = {}) {
       contentVersion: 1,
     };
     all.push(book);
-    const saved = kit.saveBooks(all);
+    const saved = store.commit(all, 'lan-upload');
     if (!saved.ok) {
       // 元数据写不进去就把刚落盘的副本删掉，避免留下「有文件没书」的孤儿
       try {
@@ -386,7 +485,9 @@ export function createBooksService(opts = {}) {
       log('warn', `上传完成推送失败：${err?.message || err}`);
     }
     try {
-      onBooksChanged(id);
+      // 带整份最新列表与 revision：渲染层据此合并刷新，不必再猜磁盘上是什么
+      const snapshot = store.state();
+      onBooksChanged({ id, reason: 'upload', books: snapshot.books, revision: snapshot.revision });
     } catch (err) {
       log('warn', `上传完成回推渲染层失败：${err?.message || err}`);
     }
@@ -408,6 +509,7 @@ export function createBooksService(opts = {}) {
 
   return {
     kit,
+    store,
     library,
     openDownload,
     uploadStatus,

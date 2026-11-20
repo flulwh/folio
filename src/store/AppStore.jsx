@@ -135,6 +135,21 @@ const NEED_ELECTRON = '书源与云端阅读需要桌面版（Electron）才能�
 
 const api = {
   getBooks: (...args) => (window.readerAPI?.getBooks ?? browserFallback.getBooks)(...args),
+  // 书架 + revision。旧主进程没有这个通道时退回 getBooks，revision 记 0。
+  getBooksState: async () => {
+    try {
+      if (window.readerAPI?.getBooksState) {
+        const state = await window.readerAPI.getBooksState();
+        if (state && Array.isArray(state.books)) {
+          return { books: state.books, revision: Number(state.revision) || 0 };
+        }
+      }
+    } catch {
+      /* 旧主进程 / 截图夹具没有这条通道，退回整份读取 */
+    }
+    const books = await api.getBooks();
+    return { books: Array.isArray(books) ? books : [], revision: 0 };
+  },
   setBooks: (...args) => (window.readerAPI?.setBooks ?? browserFallback.setBooks)(...args),
   getProgress: (...args) => (window.readerAPI?.getProgress ?? browserFallback.getProgress)(...args),
   setProgress: (...args) => (window.readerAPI?.setProgress ?? browserFallback.setProgress)(...args),
@@ -471,6 +486,67 @@ function debounce(fn, wait) {
   return wrapped;
 }
 
+/**
+ * 把渲染层的本地意图重放到主进程的最新书架上。
+ *
+ * base     = 上一次与主进程对齐过的快照（磁盘上确实是这一份）
+ * local    = 渲染层当前列表（base + 用户还没落盘的改动）
+ * incoming = 主进程现在的权威列表（可能刚被手机加过书）
+ *
+ * 规则：本地动过的书以本地为准（改标签不被远端旧值覆盖），本地没动过的书
+ * 以 incoming 为准（手机补的 contentHash / filePath 能落下来）；本地删掉的书
+ * 跟随删除，远端新增的书放到最前（书架本来就是新书在前）。
+ */
+function rebaseBooks(base, local, incoming) {
+  const baseList = Array.isArray(base) ? base : [];
+  const localList = Array.isArray(local) ? local : [];
+  const incomingList = Array.isArray(incoming) ? incoming : [];
+  const idOf = (book) => (book && book.id != null ? String(book.id) : '');
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+  const index = (list) => {
+    const map = new Map();
+    for (const book of list) {
+      const id = idOf(book);
+      if (id) map.set(id, book);
+    }
+    return map;
+  };
+  const baseById = index(baseList);
+  const localById = index(localList);
+  const incomingById = index(incomingList);
+
+  const result = [];
+  // 远端新增（本地既没有 base 记录、也没自己加过）：新书在前；没有 id 的脏条目原样保留
+  for (const book of incomingList) {
+    const id = idOf(book);
+    if (!id) {
+      result.push(book);
+      continue;
+    }
+    if (!baseById.has(id) && !localById.has(id)) result.push(book);
+  }
+
+  for (const book of localList) {
+    const id = idOf(book);
+    if (!id) {
+      result.push(book);
+      continue;
+    }
+    const inBase = baseById.has(id);
+    const localChanged = !inBase || !same(baseById.get(id), book);
+    if (!localChanged) {
+      // 本地没动过：以主进程为准；主进程删了它（incoming 没有）就跟随删除
+      if (incomingById.has(id)) result.push(incomingById.get(id));
+      continue;
+    }
+    // 本地新增 / 修改：保留本地版本；即便远端删了，也不让用户的改动凭空消失
+    result.push(book);
+  }
+
+  return result;
+}
+
 export function AppProvider({ children }) {
   const [books, setBooks] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -486,6 +562,11 @@ export function AppProvider({ children }) {
   const booksRef = useRef(books);
   const progressRef = useRef(progress);
   const settingsRef = useRef(settings);
+  // 与主进程对齐过的书架快照 + 当时的 revision：整份保存时回传，用来发现「手机刚改过」。
+  const booksBaseRef = useRef([]);
+  const booksRevisionRef = useRef(0);
+  // notify 在下面才定义，保存逻辑要提示「已刷新」时通过 ref 取最新实现
+  const notifyRef = useRef(() => {});
 
   booksRef.current = books;
   progressRef.current = progress;
@@ -507,7 +588,7 @@ export function AppProvider({ children }) {
       };
 
       const [
-        storedBooks,
+        storedBooksState,
         storedProgress,
         storedMarks,
         storedSettings,
@@ -515,7 +596,7 @@ export function AppProvider({ children }) {
         storedRules,
         storedFonts,
       ] = await Promise.all([
-        safe(api.getBooks, []),
+        safe(api.getBooksState, { books: [], revision: 0 }),
         safe(api.getProgress, {}),
         safe(api.getMarks, {}),
         safe(api.getSettings, null),
@@ -524,7 +605,14 @@ export function AppProvider({ children }) {
         safe(api.listFonts, []),
       ]);
       if (cancelled) return;
-      setBooks(Array.isArray(storedBooks) ? storedBooks : []);
+      const storedBooks = Array.isArray(storedBooksState?.books) ? storedBooksState.books : [];
+      // 读盘期间若已经收到更新的局域网广播，别用更旧的快照盖回去
+      const storedRevision = Number(storedBooksState?.revision) || 0;
+      if (storedRevision >= booksRevisionRef.current) {
+        booksBaseRef.current = storedBooks;
+        booksRevisionRef.current = storedRevision;
+        setBooks(storedBooks);
+      }
       setProgress(storedProgress && typeof storedProgress === 'object' ? storedProgress : {});
       setMarks(storedMarks && typeof storedMarks === 'object' ? storedMarks : {});
       setSettings({ ...DEFAULT_SETTINGS, ...(storedSettings || {}) });
@@ -538,10 +626,55 @@ export function AppProvider({ children }) {
     };
   }, []);
 
+  /**
+   * 整份保存书架。带上一次对齐的 revision：
+   * - 主进程接受 → 记住新 revision；
+   * - 主进程说过期 → 基于最新列表重放本地意图，再写一次（最多 3 轮）；
+   *   仍然失败就提示并刷新，绝不静默丢改动。
+   */
+  async function saveBooksSnapshot() {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const value = booksRef.current;
+      let result;
+      try {
+        result = await api.setBooks(value, booksRevisionRef.current);
+      } catch {
+        // 主进程正在退出 / 通道不可用：等下一次防抖再试
+        return;
+      }
+      if (!result || result.ok !== false) {
+        // 旧主进程返回 undefined 或 {ok:true}，没有 revision 就保持原值
+        const revision = Number(result?.revision);
+        if (Number.isFinite(revision)) {
+          if (revision < booksRevisionRef.current) return; // 已被更新的广播超越
+          booksRevisionRef.current = revision;
+        }
+        booksBaseRef.current = value;
+        return;
+      }
+      if (!result.stale || !Array.isArray(result.books)) {
+        notifyRef.current?.(result.error || '书架保存失败', 'error');
+        return;
+      }
+      const revision = Number(result.revision);
+      if (Number.isFinite(revision) && revision < booksRevisionRef.current) return;
+      // 主进程的最新列表 + 本地意图：本地改过的书以本地为准，远端新增的书保留
+      const merged = rebaseBooks(booksBaseRef.current, booksRef.current, result.books);
+      if (Number.isFinite(revision)) booksRevisionRef.current = revision;
+      booksBaseRef.current = result.books;
+      if (JSON.stringify(merged) === JSON.stringify(booksRef.current)) continue;
+      // 状态一变，下一轮防抖会带着刚拿到的 revision 再保存一次
+      setBooks(merged);
+      return;
+    }
+    notifyRef.current?.('书架刚被其他设备改过，已刷新', 'info');
+    setBooks(booksBaseRef.current);
+  }
+
   // Debounced persistence
   // 「移出书架」后保留 10 秒删除窗口，期间点「撤销」可以原样找回（含本地正文与云端缓存）
   const pendingDeletes = useRef(new Map());
-  const persistBooks = useRef(debounce((value) => api.setBooks(value), 400)).current;
+  const persistBooks = useRef(debounce(() => saveBooksSnapshot(), 400)).current;
   const persistProgress = useRef(debounce((value) => api.setProgress(value), 300)).current;
   const persistMarks = useRef(debounce((value) => api.setMarks(value), 300)).current;
   const persistSettings = useRef(debounce((value) => api.setSettings(value), 300)).current;
@@ -661,25 +794,36 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 手机上传落盘后主进程推 lan:books。books.json 已经由主进程写好，
-  // 这里重新读一遍并换进内存 —— 和首次加载走同一条 api.getBooks 路径，
-  // 不另造取数方式。内存里还没落盘的本地改动按 id 保留，避免和防抖写入打架。
+  // 主进程的 books 权威副本变了（手机上传增书）：事件带整份列表与 revision，
+  // 这里按「本地没落盘的改动优先」合并，手机刚加的书与桌面端刚改的标签都不会被抹掉。
+  // 旧主进程只会推 lan:books（只有 id），退回 api.getBooks() 读一遍再走同一套合并。
   useEffect(() => {
     let cancelled = false;
-    const off = window.readerAPI?.onLanBooks?.(() => {
-      Promise.resolve(api.getBooks())
-        .then((stored) => {
-          if (cancelled || !Array.isArray(stored)) return;
-          setBooks((prev) => {
-            const known = new Set(stored.map((item) => item?.id).filter(Boolean));
-            const pending = prev.filter((item) => item?.id && !known.has(item.id));
-            return pending.length ? [...pending, ...stored] : stored;
-          });
+    const apply = (payload) => {
+      const hasState =
+        payload && Array.isArray(payload.books) && Number.isFinite(Number(payload.revision));
+      if (hasState && Number(payload.revision) <= booksRevisionRef.current) return;
+      const load = hasState
+        ? Promise.resolve({ books: payload.books, revision: Number(payload.revision) })
+        : Promise.resolve(api.getBooks()).then((stored) => ({
+            books: Array.isArray(stored) ? stored : [],
+            revision: booksRevisionRef.current,
+          }));
+      load
+        .then((next) => {
+          if (cancelled || !next) return;
+          const current = booksRef.current;
+          const merged = rebaseBooks(booksBaseRef.current, current, next.books);
+          booksBaseRef.current = next.books;
+          if (hasState) booksRevisionRef.current = next.revision;
+          if (JSON.stringify(merged) !== JSON.stringify(current)) setBooks(merged);
         })
         .catch(() => {
           /* 读失败就等下一次事件，不打断正在进行的操作 */
         });
-    });
+    };
+    const subscribe = window.readerAPI?.onBooksChanged || window.readerAPI?.onLanBooks;
+    const off = subscribe?.((payload) => apply(payload));
     return () => {
       cancelled = true;
       try {
@@ -738,6 +882,8 @@ export function AppProvider({ children }) {
     setToast({ id, message: text, tone, action: options.action || null });
     setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), duration);
   }, []);
+  // 保存逻辑可能在 notify 定义前就挂上（防抖首次渲染），这里接上最新实现
+  notifyRef.current = notify;
 
   const addBook = useCallback(
     (book) => {

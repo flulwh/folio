@@ -37,6 +37,11 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
   会校验 JSX 能否编译并跑单测；发布产物附带 `SHA256SUMS.txt`，安卓 Release 增加签名断言
 - Windows 打包的 NSIS 补丁加了版本断言：electron-builder 升级到未验证的大版本、或内部接口改名时
   构建会直接失败并说明原因，不再 warn 之后悄悄退回「执行安装包」的老路
+- 书架保存改为带版本号：手机端刚加的书与桌面端刚改的标签不会互相覆盖，冲突时先合并再重试，
+  重试仍失败会明确提示并刷新，不再静默丢改动
+- 首屏不再请求 Google Fonts：Inter 拉丁子集随安装包内置（约 48KB），中文走系统字体
+  （PingFang / 微软雅黑 / Noto），弱网与断网都能正常排版
+- `tools/` 增加分类索引（tools/README.md）；新增 CI 任务在每次 push/PR 跑主题与局域网三套回归
 - `npm run check` 增加文档事实校验：README、AGENTS、docs 索引与代码不一致会直接失败
 
 ## [2.11.1] — 2026-11-15

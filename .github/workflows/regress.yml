@@ -1,0 +1,43 @@
+name: Regression
+
+# 三个回归脚本原先只有人记得才会跑；这里在 push / PR 到 main 时固定跑一遍。
+# windows-latest 与开发环境一致：脚本里有 Windows 路径假设（盘符大小写、反斜杠）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: folio-regress-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regress:
+    name: 回归自检（主题 / 局域网边界 / 双向同步）
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 主题令牌双源校验
+        run: npm run check:theme
+
+      - name: 局域网面板边界用例
+        run: npm run check:lan-edge
+
+      - name: 局域网双向同步用例
+        run: npm run check:lan-sync

@@ -21,7 +21,9 @@ contextBridge.exposeInMainWorld('readerAPI', {
   clearCoverCache: () => ipcRenderer.invoke('cover:clear'),
   showInFolder: (filePath) => ipcRenderer.invoke('book:show-in-folder', filePath),
   getBooks: () => ipcRenderer.invoke('store:get-books'),
-  setBooks: (books) => ipcRenderer.invoke('store:set-books', books),
+  // 书架 + 主进程的 revision：整份保存时把 revision 当基版本回传，过期会被拒绝而不是覆盖
+  getBooksState: () => ipcRenderer.invoke('store:get-books-state'),
+  setBooks: (books, revision) => ipcRenderer.invoke('store:set-books', books, revision),
   getProgress: () => ipcRenderer.invoke('store:get-progress'),
   setProgress: (progress) => ipcRenderer.invoke('store:set-progress', progress),
   getSettings: () => ipcRenderer.invoke('store:get-settings'),
@@ -69,6 +71,19 @@ contextBridge.exposeInMainWorld('readerAPI', {
     };
     ipcRenderer.on('lan:books', listener);
     return () => ipcRenderer.removeListener('lan:books', listener);
+  },
+  // 主进程的 books 权威副本变了（目前是手机上传增书）：带整份列表与 revision，
+  // 渲染层按「本地未保存改动优先」合并，不会把桌面端刚改的标签抹掉。
+  onBooksChanged: (callback) => {
+    const listener = (_event, payload) => {
+      try {
+        callback?.(payload);
+      } catch {
+        /* 渲染侧回调出错不影响主进程 */
+      }
+    };
+    ipcRenderer.on('store:books-changed', listener);
+    return () => ipcRenderer.removeListener('store:books-changed', listener);
   },
   // 老版本设置里没有访问码时，主进程会兜底生成一个；设置页负责写回 settings.json
   onLanToken: (callback) => {

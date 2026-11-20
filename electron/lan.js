@@ -453,6 +453,7 @@ function cleanMark(raw) {
  * @param {()=>string} [opts.getVersion]
  * @param {object|null} [opts.comic] 漫画取图代理（createComicService 的返回值）
  * @param {(id:string)=>void} [opts.onBooksChanged] 上传成功后的书架回推（渲染层刷新）
+ * @param {object} [opts.booksStore] 主进程共享的 books 权威副本（不传则局域网服务自建一份）
  * @param {object|null} [opts.devices] 设备存储（createDeviceStore 的返回值）
  * @param {(id:string, online:boolean)=>void} [opts.onDeviceChanged] 设备在线态变化回推（渲染层广播）
  */
@@ -475,6 +476,8 @@ export function createLanService(opts) {
     comic = null,
     // 上传落盘后要让桌面端书架立刻看到新书；由主进程注入 broadcast('lan:books')。
     onBooksChanged = () => {},
+    // 与渲染层 IPC 共用的 books 权威副本；共用一个实例才能靠 revision 发现过期写入。
+    booksStore = null,
     // 设备记录与指令队列；没注入时设备路由回 501，旧桌面行为不变。
     devices = null,
     // 设备在线/离线时通知主进程 broadcast('lan:device')。
@@ -494,6 +497,7 @@ export function createLanService(opts) {
     log,
     publish: (event, payload) => publish(event, payload),
     onBooksChanged,
+    booksStore,
   });
 
   const assetsDir = path.dirname(fileURLToPath(import.meta.url));

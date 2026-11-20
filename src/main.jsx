@@ -19,15 +19,6 @@ import './skin-obsidian.css';
    Apple 皮肤完全不受影响。见文件头注释。 */
 import './miui-motion.css';
 
-/* 外部字体以 media="print" 起步（见 index.html），加载完成后再切回 all：
-   这样首屏不用等 Google Fonts，也不需要在内联 onload 里切媒体
-   —— 生产 CSP 的 script-src 是 'self'，内联事件处理器会被直接拦掉。 */
-const fontLink = document.querySelector('link[data-fonts]');
-if (fontLink) {
-  if (fontLink.sheet) fontLink.media = 'all';
-  else fontLink.addEventListener('load', () => { fontLink.media = 'all'; }, { once: true });
-}
-
 /* 截图/回归用的确定性开关：?static=1 让 Motion 的补间一律瞬时完成。
    没有它，headless 下 AnimatePresence mode="wait" 的退场动画可能永远不结束，
    面板会截成空白（假 bug）。只影响带参数打开的窗口，正常启动无副作用。 */

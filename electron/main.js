@@ -9,6 +9,7 @@ import { createCloudStore } from './cloudstore.js';
 import { createLogger, redactSecrets } from './logger.js';
 import { createDegrade } from './degrade.js';
 import { createLanService, lanAddresses } from './lan.js';
+import { createBooksStore } from './lan-books.js';
 import { createDeviceStore } from './devicestore.js';
 import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
 import { configureBookFile } from './bookfile.js';
@@ -1312,6 +1313,19 @@ function lanLog(level, message, meta) {
 }
 
 /**
+ * books.json 的唯一写者与内存权威副本。
+ *
+ * 渲染层整份保存（store:set-books）与局域网上传增书都走这一份实例，
+ * 各自带着自己读到的 revision；对不上就不写盘，把最新列表退回去让对方重放，
+ * 避免「后写者把先写者的修改整份抹掉」。
+ */
+let booksStore = null;
+function ensureBooksStore() {
+  if (!booksStore) booksStore = createBooksStore({ files, readJson, writeJson });
+  return booksStore;
+}
+
+/**
  * 启动时后台补齐 books.json 里缺失的 contentHash。
  *
  * 为什么放在后台：老书架可能有几百本、每本几 MB，同步算完要几秒，
@@ -1322,8 +1336,22 @@ function backfillContentHashesLater() {
   setTimeout(() => {
     try {
       const kit = configureBookFile({ booksDir, files, readJson, writeJson, log: lanLog });
-      const result = kit.backfillContentHashes();
-      if (result.changed) lanLog('info', `已补齐 ${result.changed} 本书的 contentHash`);
+      // 走共享 store：这次补齐也要占用一个 revision，渲染层下一次保存才会发现基版本过期
+      const store = ensureBooksStore();
+      const all = store.list();
+      let changed = 0;
+      for (const book of all) {
+        if (!book || typeof book !== 'object') continue;
+        if (book.kind !== 'local') continue;
+        const before = String(book.contentHash || '');
+        const after = kit.ensureContentHash(book, { persist: false });
+        if (after && after !== before) changed += 1;
+      }
+      if (changed) {
+        const saved = store.commit(all, 'hash-backfill');
+        if (!saved.ok) lanLog('warn', `contentHash 批量写回失败：${saved.error}`);
+        else lanLog('info', `已补齐 ${changed} 本书的 contentHash`);
+      }
       // 没用完的上传残片（超过一天）顺手清掉，别让 books/.incoming 越攒越多
       const swept = kit.sweepIncoming();
       if (swept) lanLog('info', `已清理 ${swept} 个过期的上传残片`);
@@ -1352,6 +1380,9 @@ function ensureLanService() {
     writeJson,
     log: lanLog,
     getVersion: () => app.getVersion(),
+    // 与 IPC 共用同一份 books 权威副本：手机上传增书也会推进 revision，
+    // 渲染层下一次整份保存就会被基版本校验挡下并重放自己的改动。
+    booksStore: ensureBooksStore(),
     // 手机回退下载字体走这里：只开放桌面端已安装的字体，id 白名单 + 路径复核
     fonts: fontLibrary,
     // 封面：本地缓存里有就直接发文件，没有就 302 到源站 ——
@@ -1394,8 +1425,18 @@ function ensureLanService() {
       broadcast('lan:marks', { marks, bookId, at: Date.now() });
     },
     // 手机上传完一本：渲染层的书架要立刻出现这本新书，不用等用户手动刷新。
-    onBooksChanged: (id) => {
-      broadcast('lan:books', { id, reason: 'upload', at: Date.now() });
+    // 带整份列表与 revision，渲染层按「本地未保存改动优先」合并，不必再读一次磁盘。
+    onBooksChanged: (payload) => {
+      const state = payload && Array.isArray(payload.books) ? payload : ensureBooksStore().state();
+      broadcast('store:books-changed', {
+        books: state.books,
+        revision: state.revision,
+        id: payload?.id,
+        reason: payload?.reason || 'upload',
+        at: Date.now(),
+      });
+      // 旧通道保留：老渲染层只认 lan:books
+      broadcast('lan:books', { id: payload?.id, reason: 'upload', at: Date.now() });
     },
     // 漫画取图：清单复用 cloud:chapter-images 那条链路（书源规则 + 清单磁盘缓存），
     // 单页字节用 fetchCoverResponse 抓（带 Referer / 12s 超时 / 重试 1 次）。
@@ -1707,7 +1748,7 @@ ipcMain.handle('book:add-content', async (_e, payload) => {
 function isKnownBookPath(filePath) {
   const target = path.resolve(String(filePath || ''));
   if (isInside(booksDir, target)) return true;
-  const list = readJson(files.books, []);
+  const list = ensureBooksStore().list();
   return Array.isArray(list) && list.some((book) => {
     if (!book?.filePath) return false;
     // 同盘符比较要忽略大小写，Windows 上 C:\ 和 c:\ 是同一个目录
@@ -2007,17 +2048,22 @@ const fontLibrary = {
   },
 };
 
-ipcMain.handle('store:get-books', () => readJson(files.books, []));
-ipcMain.handle('store:set-books', (_e, books) => {
-  const safe = Array.isArray(books) ? books : [];
-  const result = writeJson(files.books, safe);
-  if (!safe.length) markExplicitlyCleared(files.books);
-  // 书架变了就通知局域网面板重拉一次（新增/移出书都会走到这里）
-  if (lanService?.running) {
-    try {
-      lanService.publish('books', { at: Date.now(), count: safe.length });
-    } catch {
-      /* 推送失败不影响落盘 */
+ipcMain.handle('store:get-books', () => ensureBooksStore().state().books);
+ipcMain.handle('store:get-books-state', () => ensureBooksStore().state());
+ipcMain.handle('store:set-books', (_e, books, baseRevision) => {
+  const store = ensureBooksStore();
+  const result = store.set(books, baseRevision);
+  // 基版本过期：不写盘，把最新列表交回去让渲染层重放自己的改动
+  if (result.stale) return result;
+  if (result.ok) {
+    if (!result.books.length) markExplicitlyCleared(files.books);
+    // 书架变了就通知局域网面板重拉一次（新增/移出书都会走到这里）
+    if (lanService?.running) {
+      try {
+        lanService.publish('books', { at: Date.now(), count: result.books.length });
+      } catch {
+        /* 推送失败不影响落盘 */
+      }
     }
   }
   return result;
