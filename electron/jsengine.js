@@ -300,14 +300,31 @@ function cookieDomain(url) {
 }
 
 /**
+ * jsLib 指纹：常驻上下文只在创建时跑一次 jsLib，覆盖导入后如果没被显式 dispose，
+ * 旧实现会一直生效。用「长度 + 滚动哈希」判断脚本有没有变，变了就重建上下文。
+ */
+function jsLibSignature(source) {
+  const lib = String(source?.jsLib || '');
+  if (!lib) return '0:0';
+  let hash = 0;
+  for (let i = 0; i < lib.length; i += 1) hash = (hash * 31 + lib.charCodeAt(i)) | 0;
+  return `${lib.length}:${hash}`;
+}
+
+/**
  * 一个书源一个常驻上下文：jsLib 只跑一次，之后每次规则求值复用其中的函数与 java.put 的缓存。
  */
 export function getRuntime(source, { cacheRoot, proxy } = {}) {
   if (!source?.id) throw new Error('书源缺少 id');
+  const signature = jsLibSignature(source);
   const existing = runtimes.get(source.id);
   if (existing) {
-    if (proxy !== undefined) existing.setProxy(proxy);
-    return existing;
+    if (existing.libSignature === signature) {
+      if (proxy !== undefined) existing.setProxy(proxy);
+      return existing;
+    }
+    // jsLib 换过：旧上下文里的全局函数不能再用，丢掉重建
+    runtimes.delete(source.id);
   }
 
   const dir = cacheRoot ? path.join(cacheRoot, 'js', source.id) : '';
@@ -1358,6 +1375,7 @@ export function getRuntime(source, { cacheRoot, proxy } = {}) {
 
   const runtime = {
     id: source.id,
+    libSignature: signature,
     context,
     sandbox,
     setProxy(value) {

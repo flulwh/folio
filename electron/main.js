@@ -2603,7 +2603,14 @@ ipcMain.handle('source:import-url', async (_e, rawUrl) => {
       break;
     } catch (err) {
       const reason = err?.name === 'AbortError' ? '请求超时' : err?.message || '网络错误';
-      failures.push(`${new URL(candidate).host}：${reason}`);
+      // 镜像地址来自字符串拼接，未必是合法 URL：解析失败就原样展示，别在错误分支里再抛一次
+      let host = candidate;
+      try {
+        host = new URL(candidate).host || candidate;
+      } catch {
+        /* 保留原始地址 */
+      }
+      failures.push(`${host}：${reason}`);
     }
   }
 
