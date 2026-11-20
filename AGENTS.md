@@ -131,7 +131,7 @@ npm run preview        # 预览 dist/
 
 - 不引入需要常驻后台的依赖（WorkManager、WebSocket 服务、常驻定时器）。
 - 不自建服务器、不代理内容、不上传用户数据。
-- 不改两端 `applicationId`：桌面端是 `package.json` 的 `build.appId`（当前 `com.example.folio-reader`），安卓端是 `android/app/build.gradle.kts` 的 `namespace` / `applicationId`。改了 Android 包名等于换应用，用户的书库与进度会丢。
+- 不改两端 `applicationId`：桌面端 `build.appId` 已定稿为 `com.flulwh.folio`（2026-11 从 `com.example` 占位符迁来，只此一次，之后永久冻结），安卓端是 `android/app/build.gradle.kts` 的 `namespace` / `applicationId`（`com.folio.reader`）。再改桌面 appId 等于换 Windows 应用身份（通知归类、NSIS 升级、控制面板条目全断）；改 Android 包名等于换应用，用户的书库与进度会丢。
 - 不在仓库里放截图二进制，图片走 `flulwh/folio-assets`。
 - 不为了「顺手」重构与本任务无关的文件。
 

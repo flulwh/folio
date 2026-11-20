@@ -42,6 +42,9 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 - 首屏不再请求 Google Fonts：Inter 拉丁子集随安装包内置（约 48KB），中文走系统字体
   （PingFang / 微软雅黑 / Noto），弱网与断网都能正常排版
 - `tools/` 增加分类索引（tools/README.md）；新增 CI 任务在每次 push/PR 跑主题与局域网三套回归
+- 桌面端应用标识从占位符 `com.example.folio-reader` 改为 `com.flulwh.folio`（Android 仍是
+  `com.folio.reader`）。Windows 会把它当成新的应用身份：已装 2.11.x 及更早版本的用户需要手动
+  卸载旧版再装新版，书库仍在 `%APPDATA%\Folio` 里，不会被删除
 - `npm run check` 增加文档事实校验：README、AGENTS、docs 索引与代码不一致会直接失败
 
 ## [2.11.1] — 2026-11-15

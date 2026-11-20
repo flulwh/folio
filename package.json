@@ -49,7 +49,7 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.example.folio-reader",
+    "appId": "com.flulwh.folio",
     "productName": "Folio",
     "copyright": "Copyright © 2026 Folio contributors",
     "artifactName": "Folio-${version}-${os}-${arch}.${ext}",
