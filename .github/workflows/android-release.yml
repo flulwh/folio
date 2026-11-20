@@ -94,7 +94,8 @@ jobs:
           echo "使用 $APKSIGNER"
           CERTS="$("$APKSIGNER" verify --print-certs "$APK")"
           echo "$CERTS"
-          if ! grep -q 'Signer #1 certificate DN:' <<< "$CERTS"; then
+          # apksigner 34 之前的输出是「Signer #1 certificate DN:」，35+ 变成「V2 Signer: certificate DN:」
+          if ! grep -q 'certificate DN:' <<< "$CERTS"; then
             echo "::error::apksigner 未输出签名证书信息"
             exit 1
           fi
