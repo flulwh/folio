@@ -8,6 +8,7 @@ import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
 import { SHORTCUT_GROUPS } from '../utils/shortcuts.js';
 import { usePresence } from '../hooks/usePresence.js';
+import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import { useThemeState } from '../store/AppStore.jsx';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 
@@ -85,6 +86,7 @@ export default function SettingsPanel({
   };
 
   const alive = usePresence(open);
+  const panelRef = useDialogFocus(open);
 
   return (
     <AnimatePresence>
@@ -102,7 +104,11 @@ export default function SettingsPanel({
           />
           <motion.aside
             key="settings-panel"
+            ref={panelRef}
             className="panel settings-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="设置"
             variants={kit.sheet('right')}
             initial="initial"
             animate="animate"

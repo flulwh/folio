@@ -19,8 +19,9 @@ on:
       - '.github/workflows/android*.yml'
   workflow_dispatch:
 
+# 默认最小权限：只有真正写 Release 的 package job 才提升到 contents: write
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: folio-${{ github.ref }}
@@ -31,6 +32,8 @@ jobs:
     name: 门禁与前端构建
     runs-on: windows-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
@@ -53,6 +56,10 @@ jobs:
 
       - name: 安装依赖
         run: npm ci
+
+      # 生产依赖里的高危/严重漏洞直接让门禁变红；devDependencies 不参与发行包，故省略
+      - name: 依赖漏洞扫描
+        run: npm audit --omit=dev --audit-level=high
 
       - name: 发版门禁（构建前）
         run: npm run check
@@ -77,6 +84,9 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 45
+    # 只有这个 job 会建 Release / 上传资产，写权限仅限它
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
@@ -101,6 +111,19 @@ jobs:
         env:
           ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
 
+      # 发布产物必须可校验：exe / zip 一起算 SHA256，随 Release 资产上传
+      - name: 生成 SHA256SUMS.txt
+        shell: bash
+        run: |
+          cd release
+          shopt -s nullglob
+          targets=(*.exe *.zip)
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "::error::release/ 下没有 exe / zip，无法生成校验和"
+            exit 1
+          fi
+          sha256sum "${targets[@]}" | tee SHA256SUMS.txt
+
       - name: 上传安装包产物
         uses: actions/upload-artifact@v7
         with:
@@ -109,6 +132,7 @@ jobs:
             release/*.exe
             release/*.zip
             release/*.blockmap
+            release/SHA256SUMS.txt
             release/latest.yml
           if-no-files-found: error
           retention-days: 30
@@ -136,3 +160,4 @@ jobs:
           files: |
             release/*.exe
             release/*.zip
+            release/SHA256SUMS.txt

@@ -6,7 +6,8 @@ import crypto from 'crypto';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { domainToUnicode } from 'url';
 import { createCloudStore } from './cloudstore.js';
-import { createLogger } from './logger.js';
+import { createLogger, redactSecrets } from './logger.js';
+import { createDegrade } from './degrade.js';
 import { createLanService, lanAddresses } from './lan.js';
 import { createDeviceStore } from './devicestore.js';
 import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
@@ -135,6 +136,8 @@ const cloudStore = createCloudStore(path.join(dataDir, 'cloud'));
 // 统一日志：写 dataDir/logs/<日期>.log，同时留在内存里给「日志」面板看。
 // 出问题时让用户点「导出日志」，比让他复述操作快得多。
 const log = createLogger({ dir: dataDir, level: process.env.FOLIO_LOG_LEVEL || 'info' });
+// 降级留痕：空 catch 的默认值仍在调用点给，这里只负责按 scope+code 每分钟采样记一条 debug。
+const degrade = createDegrade((scope, message, meta) => log.debug(scope, message, meta));
 // 字体商店：目录缓存 + 流式下载。走 Electron 的 net.fetch，能吃到系统代理。
 const fontStore = createFontStore({
   dataDir,
@@ -167,7 +170,9 @@ const SUMMARY_KEYS = [
 
 function clip(value) {
   if (typeof value !== 'string') return value;
-  return value.length > 120 ? `${value.slice(0, 120)}…(${value.length})` : value;
+  // 摘要会原样进日志：先把 key/token/sign/auth/password 这些查询参数的值换成 ***
+  const safe = redactSecrets(value);
+  return safe.length > 120 ? `${safe.slice(0, 120)}…(${safe.length})` : safe;
 }
 
 function summarizeArgs(args) {
@@ -242,13 +247,18 @@ function ensureDataDir() {
 
 function readJson(file, fallback) {
   ensureDataDir();
-  try {
-    if (!fs.existsSync(file)) return fallback;
-    const raw = fs.readFileSync(file, 'utf-8');
-    return raw.trim() ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
+  // books.json / progress.json 读坏时不能拦启动，但至少要留一条 debug 痕迹；
+  // 文件名用 basename，别把整条本机路径写进日志。
+  const value = degrade(
+    'readJson',
+    () => {
+      if (!fs.existsSync(file)) return fallback;
+      const raw = fs.readFileSync(file, 'utf-8');
+      return raw.trim() ? JSON.parse(raw) : fallback;
+    },
+    { file: path.basename(file) },
+  );
+  return value === undefined ? fallback : value;
 }
 
 function describeFsError(error, file) {
@@ -593,16 +603,15 @@ let appReady = false;
 // 默认值必须和渲染层 AppStore 的 DEFAULT_SETTINGS.macosFrame 一致（都是 true），
 // 否则两边默认值不同 → 渲染层一启动就要求切换 → 白白重建一次窗口。
 function readFramePref() {
-  try {
+  const pref = degrade('readFramePref', () => {
     const raw = fs.readFileSync(files.settings, 'utf-8');
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && 'macosFrame' in parsed) {
       return parsed.macosFrame !== false;
     }
-  } catch {
-    /* 读不到就按默认值 */
-  }
-  return true;
+    return undefined;
+  }, { file: 'settings.json' });
+  return pref === undefined ? true : pref;
 }
 
 let macosFrameEnabled = readFramePref();
@@ -723,11 +732,8 @@ function createWindow(options = {}) {
 
   // 恢复上一窗口的位置（切换边框重建时用）
   if (options.bounds) {
-    try {
-      win.setBounds(options.bounds);
-    } catch {
-      /* 屏幕分辨率变了之类的极端情况，忽略 */
-    }
+    // 屏幕分辨率变了之类的极端情况恢复失败：位置用默认值即可，但留一条 debug。
+    degrade('windowBounds', () => win.setBounds(options.bounds));
   }
 
   if (isDev) {
@@ -912,17 +918,15 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     }
   });
 
-  try {
-    restoreFromBackup();
-  } catch {
-    /* ignore */
-  }
-  try {
-    migrateInlineBookContent();
-  } catch {
-    /* 迁移失败不影响启动，下次再试 */
-  }
+  // 自愈与迁移失败都不影响启动，下次启动再试；失败原因走 debug 采样留痕。
+  degrade('restoreBackup', restoreFromBackup);
+  degrade('migrateInlineContent', migrateInlineBookContent);
   createWindow();
+
+  // 封面缓存清理放到启动之后：等首帧和书架的封面请求先跑完，再扫盘删旧文件。
+  setTimeout(() => {
+    sweepCovers().catch((err) => log.debug('covers', '封面缓存清理失败', { error: err?.message || String(err) }));
+  }, 8000);
 
   // 局域网面板：给冷启动让路，1.2 秒后再监听端口。
   // 服务起不来（端口被占、没权限）只记日志，不影响桌面端使用。
@@ -990,6 +994,9 @@ const COVER_EXT_BY_TYPE = {
 };
 const COVER_EXTS = ['jpg', 'png', 'webp', 'gif', 'avif', 'svg'];
 const COVER_MAX_BYTES = 8 * 1024 * 1024;
+// 封面缓存上限：covers/ 以前只增不减，用久了能吃掉几个 GB。超过就按 mtime 从旧到新删。
+const COVER_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+const COVER_CACHE_MAX_FILES = 2000;
 
 function coverKey(url) {
   return crypto.createHash('sha1').update(String(url)).digest('hex').slice(0, 16);
@@ -999,9 +1006,19 @@ function existingCoverFile(key) {
   for (const ext of COVER_EXTS) {
     const file = path.join(coversDir, `${key}.${ext}`);
     try {
-      if (fs.existsSync(file) && fs.statSync(file).size > 0) return file;
+      const stat = fs.statSync(file);
+      if (stat.size > 0) {
+        // 命中即 touch：sweepCovers 按 mtime 从旧到新删，常用封面不能被当冷数据清掉。
+        // 一小时内的重复命中不再写盘，避免书架加载时打一串 utimes。
+        const now = Date.now();
+        if (now - stat.mtimeMs > 60 * 60 * 1000) {
+          const when = new Date(now);
+          degrade('coverTouch', () => fs.utimesSync(file, when, when), { key });
+        }
+        return file;
+      }
     } catch {
-      /* 读不到就跳过 */
+      /* 不存在或读不到就跳过 */
     }
   }
   return null;
@@ -1009,6 +1026,58 @@ function existingCoverFile(key) {
 
 function coverUrlFor(fileName) {
   return `folio-cover://cover/${encodeURIComponent(fileName)}`;
+}
+
+/**
+ * 封面缓存治理：总量 ≤ 64MB 且文件数 ≤ 2000，超出部分按 mtime 从旧到新删。
+ * 用异步 fs，启动后 idle 跑一次，不在主线程上同步扫几千个文件。
+ * 顺带清掉 `*.tmp`：写封面是 tmp+rename，进程被强杀会留下半截残片。
+ */
+async function sweepCovers() {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(coversDir, { withFileTypes: true });
+  } catch {
+    return { removed: 0, freed: 0, count: 0, total: 0 }; // 还没缓存过封面，正常
+  }
+  const files = [];
+  let total = 0;
+  let removed = 0;
+  let freed = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const file = path.join(coversDir, entry.name);
+    const stat = await fs.promises.stat(file).catch(() => null);
+    if (!stat) continue;
+    if (entry.name.endsWith('.tmp')) {
+      const ok = await fs.promises.rm(file, { force: true }).then(() => true).catch(() => false);
+      if (ok) {
+        removed += 1;
+        freed += stat.size;
+      }
+      continue;
+    }
+    files.push({ file, size: stat.size, mtimeMs: stat.mtimeMs });
+    total += stat.size;
+  }
+
+  files.sort((a, b) => a.mtimeMs - b.mtimeMs);
+  let count = files.length;
+  for (const item of files) {
+    if (total <= COVER_CACHE_MAX_BYTES && count <= COVER_CACHE_MAX_FILES) break;
+    const ok = await fs.promises.rm(item.file, { force: true }).then(() => true).catch(() => false);
+    if (!ok) continue;
+    total -= item.size;
+    count -= 1;
+    removed += 1;
+    freed += item.size;
+  }
+
+  if (removed) {
+    log.debug('covers', `封面缓存已清理 ${removed} 个文件（${Math.round(freed / 1024)}KB），当前 ${count} 个 / ${Math.round(total / 1024 / 1024)}MB`);
+  }
+  return { removed, freed, count, total };
 }
 
 /**
@@ -1073,12 +1142,21 @@ async function cacheCover(rawUrl, { referer, retries = 2, timeout = 15000, signa
     // 有些站点出错时返回 HTML，别把网页存成封面
     if (/^\s*<(!doctype|html)/i.test(buffer.subarray(0, 64).toString('utf8'))) return null;
 
-    fs.mkdirSync(coversDir, { recursive: true });
     const fileName = `${key}.${ext}`;
     const target = path.join(coversDir, fileName);
     const tmp = `${target}.tmp`;
-    fs.writeFileSync(tmp, buffer);
-    fs.renameSync(tmp, target);
+    // 写盘失败（磁盘满 / 权限）不该影响本次阅读，界面继续用纯色封面。
+    const saved = degrade(
+      'coverWrite',
+      () => {
+        fs.mkdirSync(coversDir, { recursive: true });
+        fs.writeFileSync(tmp, buffer);
+        fs.renameSync(tmp, target);
+        return true;
+      },
+      { key },
+    );
+    if (!saved) return null;
     return { url: coverUrlFor(fileName), cached: false };
   } catch {
     return null;

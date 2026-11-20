@@ -31,7 +31,9 @@ npm run dev            # Vite 热更新 + Electron 窗口
 npm run dev:vite       # 只跑浏览器 UI，不启 Electron
 npm run dev:electron   # 等 5173 就绪后单独启 Electron
 npm start              # 直接启 Electron（不跑 Vite）
-npm run check          # 发版门禁：版本一致性 / 语法 / 打包配置（12 项）+ 文档事实校验
+npm run lint           # ESLint（flat config，react-hooks 规则）
+npm run test           # Vitest 单测（tests/，覆盖 utils 与主进程纯函数）
+npm run check          # 发版门禁：版本 / 语法（含 JSX 编译）/ 打包配置 + 文档校验 + lint + 单测
 npm run check:theme    # 校验 tokens.css 与 src/themes.js 同源
 npm run check:lan-edge # 局域网面板边界用例
 npm run check:lan-sync # 局域网双向同步用例

@@ -11,7 +11,7 @@
  *  4. 默认只读。写进度需要显式允许（设置里可关），且服务端永远做一次 newer-wins 合并，
  *     避免两端来回覆盖。
  *
- * 鉴权：一个 6 位访问码。可以放在 ?t=、X-Folio-Token 头里，或在 /auth 换一次 cookie。
+ * 鉴权：一个 8 位访问码。可以放在 ?t=、X-Folio-Token 头里，或在 /auth 换一次 cookie。
  * 局域网内不加密（HTTP），这是明确的取舍：数据不出内网，换取「扫一眼地址就能用」。
  */
 import http from 'http';
@@ -25,6 +25,7 @@ import { isInside } from './paths.js';
 import { createBooksService } from './lan-books.js';
 import { MAX_TRANSFER, MAX_CHUNK_BODY, CHUNK } from './bookfile.js';
 import { MAX_IMAGE } from './lan-comic.js';
+import { createDegrade } from './degrade.js';
 
 const MAX_BODY = 512 * 1024; // 请求体上限：进度条目再多也到不了这个量级
 const MAX_TEXT = 12 * 1024 * 1024; // 单本正文上限：超过就不往手机上推了
@@ -50,7 +51,9 @@ const DISCOVERY_MAGIC = 'folio-discover';
 /** 去掉 0/O/1/I/L 这些肉眼分不清的字符，念给别人的时候不会错。 */
 const TOKEN_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-export function generateToken(length = 6) {
+// 8 位 × 32 字符集 ≈ 40 bit，穷举成本比 6 位（约 30 bit）高得多；
+// 校验与长度无关，所以用户设置里存着的旧 6 位访问码照样能用。
+export function generateToken(length = 8) {
   const bytes = crypto.randomBytes(length);
   let out = '';
   for (let i = 0; i < length; i += 1) out += TOKEN_ALPHABET[bytes[i] % TOKEN_ALPHABET.length];
@@ -555,6 +558,17 @@ export function createLanService(opts) {
 
   /* ---------------- 鉴权 ---------------- */
 
+  // 降级留痕：JSON 解析失败该回 400，但也要能在 debug 日志里看出是哪条路由。
+  const degrade = createDegrade((scope, message, meta) => log('debug', `[lan] ${message}`, meta));
+
+  // 认证失败退避：同一 IP 连续失败 5 次后启动，1s→2s→4s…上限 30s；成功即清零。
+  // Map 只留内存，条目过期后在后续请求里顺手清理，不额外起定时器。
+  const AUTH_FAIL_FREE = 5;
+  const AUTH_BACKOFF_BASE = 1000;
+  const AUTH_BACKOFF_MAX = 30000;
+  const AUTH_FAIL_TTL = 10 * 60 * 1000;
+  const authFailures = new Map();
+
   function tokenOf(req, url) {
     const q = url.searchParams.get('t');
     if (q) return q;
@@ -563,12 +577,86 @@ export function createLanService(opts) {
     return parseCookies(req.headers.cookie)[COOKIE_NAME] || '';
   }
 
+  /**
+   * timingSafeEqual 要求等长。先把两边各自 sha256 再比，校验就与长度无关了 ——
+   * 历史上生成的 6 位访问码和现在默认的 8 位都能通过，不用强制用户换码。
+   */
+  function secretEqual(given, expected) {
+    const a = crypto.createHash('sha256').update(String(given)).digest();
+    const b = crypto.createHash('sha256').update(String(expected)).digest();
+    return crypto.timingSafeEqual(a, b);
+  }
+
+  function clientIp(req) {
+    return String(req.socket?.remoteAddress || 'unknown');
+  }
+
+  function sweepAuthFailures(now) {
+    for (const [ip, entry] of authFailures) {
+      if (entry.until <= now && now - entry.last > AUTH_FAIL_TTL) authFailures.delete(ip);
+    }
+  }
+
+  /** 还在退避窗口内就直接挡掉，避免继续消耗鉴权算力。 */
+  function inBackoff(req, res) {
+    const entry = authFailures.get(clientIp(req));
+    if (!entry || !entry.until) return false;
+    const now = Date.now();
+    if (entry.until <= now) {
+      entry.until = 0; // 窗口过了，但失败次数保留：再错一次按更高档退避
+      return false;
+    }
+    const wait = Math.max(1, Math.ceil((entry.until - now) / 1000));
+    res.setHeader('Retry-After', String(wait));
+    res.setHeader('Cache-Control', 'no-store');
+    if (String(req.url || '').startsWith('/api/')) {
+      sendJson(res, 429, { ok: false, error: 'too_many_attempts', retryAfter: wait });
+    } else {
+      sendText(res, 429, `尝试次数过多，请 ${wait} 秒后再试`);
+    }
+    return true;
+  }
+
+  function noteAuthFailure(req) {
+    const ip = clientIp(req);
+    const now = Date.now();
+    if (authFailures.size > 64) sweepAuthFailures(now);
+    const entry = authFailures.get(ip) || { failures: 0, until: 0, last: 0 };
+    entry.failures += 1;
+    entry.last = now;
+    if (entry.failures >= AUTH_FAIL_FREE) {
+      // 第 5 次失败后从 1s 起步；再失败一次翻倍，封顶 30s。
+      const step = Math.min(entry.failures - AUTH_FAIL_FREE, 5);
+      entry.until = now + Math.min(AUTH_BACKOFF_MAX, AUTH_BACKOFF_BASE * 2 ** step);
+    }
+    authFailures.set(ip, entry);
+  }
+
+  /**
+   * 只判断对错，不记失败：调用方要把「正确」和「退避中」分开处理，
+   * 正确访问码即使在退避窗口内也要能通过并清零，否则用户只能干等。
+   */
   function authorized(req, url) {
     const given = tokenOf(req, url);
     if (!given || !token) return false;
-    const a = Buffer.from(String(given));
-    const b = Buffer.from(token);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (secretEqual(given, token)) {
+      authFailures.delete(clientIp(req));
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 认证失败的统一出口：
+   *  - 没带访问码：只是被引导去登录页，不记失败（否则正常打开面板会被自己挡在外面）；
+   *  - 带了错误访问码：窗口内直接 429，否则记一次失败再走调用方的 401。
+   */
+  function denyAuth(req, url, res, respond) {
+    if (tokenOf(req, url)) {
+      if (inBackoff(req, res)) return;
+      noteAuthFailure(req);
+    }
+    respond();
   }
 
   function setCookie(res, value) {
@@ -1165,8 +1253,10 @@ export function createLanService(opts) {
     // 免得访问码留在地址栏和浏览历史里。
     if (pathname === '/' && method === 'GET') {
       if (!authorized(req, url)) {
-        const html = asset('lan-login.html').replace('{{HINT}}', escapeHtml(describeHint(req)));
-        sendText(res, 200, html, MIME['.html']);
+        denyAuth(req, url, res, () => {
+          const html = asset('lan-login.html').replace('{{HINT}}', escapeHtml(describeHint(req)));
+          sendText(res, 200, html, MIME['.html']);
+        });
         return;
       }
       if (url.searchParams.get('t')) {
@@ -1184,14 +1274,16 @@ export function createLanService(opts) {
       const raw = await readBody(req, 4096);
       const form = new URLSearchParams(raw);
       const code = String(form.get('code') || '').trim().toUpperCase();
-      const given = Buffer.from(code);
-      const real = Buffer.from(token);
-      if (given.length === real.length && crypto.timingSafeEqual(given, real)) {
+      if (secretEqual(code, token)) {
+        authFailures.delete(clientIp(req));
         setCookie(res, token);
         res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
         res.end();
         return;
       }
+      // 表单提交是明确的猜码行为：退避窗口内直接 429，否则记一次失败。
+      if (inBackoff(req, res)) return;
+      noteAuthFailure(req);
       sendText(res, 401, asset('lan-login.html').replace('{{HINT}}', '<span class="bad">访问码不对，再试一次</span>'), MIME['.html']);
       return;
     }
@@ -1199,7 +1291,7 @@ export function createLanService(opts) {
     // 静态资源
     if (pathname.startsWith('/assets/')) {
       if (!authorized(req, url)) {
-        sendText(res, 401, 'unauthorized');
+        denyAuth(req, url, res, () => sendText(res, 401, 'unauthorized'));
         return;
       }
       const name = pathname.slice('/assets/'.length);
@@ -1221,7 +1313,7 @@ export function createLanService(opts) {
 
     if (pathname.startsWith('/api/')) {
       if (!authorized(req, url)) {
-        sendJson(res, 401, { ok: false, error: 'unauthorized' });
+        denyAuth(req, url, res, () => sendJson(res, 401, { ok: false, error: 'unauthorized' }));
         return;
       }
       // 带设备头的任何认证请求都刷新 lastSeenAt；没带头的旧手机/浏览器完全不受影响。
@@ -1560,10 +1652,13 @@ export function createLanService(opts) {
         sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入」' });
         return;
       }
-      let payload;
-      try {
-        payload = JSON.parse(await readBody(req));
-      } catch {
+      // 读 body / 解析 JSON 失败都回 400；失败原因按路由留一条 debug 痕迹。
+      const payload = await degrade(
+        'lanMarksBody',
+        async () => JSON.parse(await readBody(req)),
+        { route: '/api/marks' },
+      );
+      if (payload === undefined) {
         sendJson(res, 400, { ok: false, error: 'bad json' });
         return;
       }
@@ -1631,10 +1726,12 @@ export function createLanService(opts) {
         sendJson(res, 403, { ok: false, error: '桌面端关闭了「允许写入进度」' });
         return;
       }
-      let payload;
-      try {
-        payload = JSON.parse(await readBody(req));
-      } catch {
+      const payload = await degrade(
+        'lanProgressBody',
+        async () => JSON.parse(await readBody(req)),
+        { route: '/api/progress' },
+      );
+      if (payload === undefined) {
         sendJson(res, 400, { ok: false, error: 'bad json' });
         return;
       }
@@ -1749,6 +1846,17 @@ export function createLanService(opts) {
 
   /* ---------------- 生命周期 ---------------- */
 
+  // RFC1918 才是「局域网」。公网 IP、100.64/10（Tailscale 等）都算非局域网地址，
+  // 面板仍然会监听 0.0.0.0（绑定地址由用户决定），但启动时要把风险说清楚。
+  const RFC1918_RE = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+
+  function warnExposure() {
+    const exposed = lanAddresses().filter((item) => !RFC1918_RE.test(item.address));
+    if (!exposed.length) return;
+    const list = exposed.map((item) => `${item.address}（${item.name}）`).join('、');
+    log('warn', `面板已暴露在非局域网地址上：${list}。访问码已是 8 位，但公网或虚拟网卡环境建议关闭面板或改用可信网络。`);
+  }
+
   function listen(port, host) {
     return new Promise((resolve, reject) => {
       const srv = http.createServer((req, res) => {
@@ -1797,6 +1905,7 @@ export function createLanService(opts) {
         startedAt = Date.now();
         startDiscovery();
         log('info', `局域网面板已启动：http://${lanAddresses()[0]?.address || '127.0.0.1'}:${port}`);
+        warnExposure();
         return { ok: true, ...status() };
       } catch (err) {
         lastError = err;

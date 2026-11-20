@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { IconList, IconSearch, IconX } from './Icons.jsx';
 import { usePresence } from '../hooks/usePresence.js';
+import { useDialogFocus } from '../hooks/useDialogFocus.js';
 
 // 长篇的目录可能有几千上万章：整表渲染加 framer 的布局投射会把主线程卡住，
 // 所以只渲染视口附近的行，滚动时换窗口。行高先按设计值估，首帧量到真实高度再校准
@@ -25,6 +26,7 @@ export default function TocPanel({
   // 挂在 open 上做测量/绑监听会在节点还不存在的第一帧里直接 return，之后再也不跑。
   // 所以所有依赖 DOM 的 effect 都跟 alive 走。
   const alive = usePresence(open);
+  const panelRef = useDialogFocus(open);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
@@ -215,7 +217,11 @@ export default function TocPanel({
           />
           <motion.aside
             key="toc-panel"
+            ref={panelRef}
             className="panel toc-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="目录"
             variants={kit.sheet('left')}
             initial="initial"
             animate="animate"

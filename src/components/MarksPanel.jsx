@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useMotionKit } from '../motion-kit.js';
 import { usePresence } from '../hooks/usePresence.js';
+import { useDialogFocus } from '../hooks/useDialogFocus.js';
 import NoteDialog from './NoteDialog.jsx';
 import { IconBookmark, IconHighlight, IconNote, IconX } from './Icons.jsx';
 
@@ -34,6 +35,7 @@ export default function MarksPanel({
 }) {
   const kit = useMotionKit();
   const alive = usePresence(open);
+  const panelRef = useDialogFocus(open);
   const [editing, setEditing] = useState(null);
 
   const sorted = useMemo(
@@ -67,7 +69,11 @@ export default function MarksPanel({
             />
             <motion.aside
               key="marks-panel"
+              ref={panelRef}
               className="panel marks-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-label="阅读痕迹"
               variants={kit.sheet('right')}
               initial="initial"
               animate="animate"

@@ -35,6 +35,15 @@ function ensureDir(dir) {
   }
 }
 
+// 书源 / 订阅地址经常带 ?key=…&token=…，日志只该留下「是谁」，不该留下密钥。
+// 参数名里含 key/token/sign/auth/password 的一律把值换成 ***。
+// 参数名要求「整体等于」或「以 _ / - 接关键词」，避免把 design、monkey 这类词误伤。
+const SECRET_QUERY_RE = /([?&](?:[^=&#\s"']*[_-])?(?:key|token|sign|auth|password)=)[^&#\s"']*/gi;
+
+export function redactSecrets(text) {
+  return String(text).replace(SECRET_QUERY_RE, '$1***');
+}
+
 function safeJson(value) {
   try {
     const text = JSON.stringify(value);
@@ -91,7 +100,8 @@ export function createLogger({ dir, maxBytes = 4 * 1024 * 1024, keep = 3, level 
     if (value > minLevel) return;
     const now = new Date();
     const head = `${now.toISOString()} ${levelName.toUpperCase().padEnd(5)} [${tag}] ${message}`;
-    const line = extra === undefined ? head : `${head} ${safeJson(extra)}`;
+    // 所有日志最终都从这里落盘/进 ring，脱敏放在这一层最稳，调用方忘了也不漏。
+    const line = redactSecrets(extra === undefined ? head : `${head} ${safeJson(extra)}`);
     ring.push(line);
     if (ring.length > MAX_RING) ring.splice(0, ring.length - MAX_RING);
     if (!logDir || failed) return;

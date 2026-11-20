@@ -70,6 +70,40 @@ jobs:
       - name: 构建 Release APK
         run: ./gradlew assembleRelease --console=plain
 
+      # 兜底断言：必须有签名证书，且不能是 debug 证书（防止 secret 缺失时误发 debug 包）
+      - name: 校验 APK 签名不是 debug 证书
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::找不到 $APK"
+            exit 1
+          fi
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK" ] || [ ! -d "$SDK/build-tools" ]; then
+            echo "::error::找不到 Android SDK build-tools（ANDROID_HOME=$SDK）"
+            exit 1
+          fi
+          APKSIGNER="$(find "$SDK/build-tools" -maxdepth 2 -type f -name apksigner 2>/dev/null | sort -V | tail -n1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::$SDK/build-tools 下找不到 apksigner"
+            exit 1
+          fi
+          echo "使用 $APKSIGNER"
+          CERTS="$("$APKSIGNER" verify --print-certs "$APK")"
+          echo "$CERTS"
+          if ! grep -q 'Signer #1 certificate DN:' <<< "$CERTS"; then
+            echo "::error::apksigner 未输出签名证书信息"
+            exit 1
+          fi
+          if grep -qi 'CN=Android Debug' <<< "$CERTS"; then
+            echo "::error::APK 使用 Android Debug 证书签名，拒绝发布"
+            exit 1
+          fi
+          echo "签名证书检查通过"
+
       - name: 整理 APK 文件名
         working-directory: .
         run: cp android/app/build/outputs/apk/release/app-release.apk "Folio-${{ steps.meta.outputs.version }}-android.apk"

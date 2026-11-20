@@ -9,6 +9,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { transformSync } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const requireDist = process.argv.includes('--require-dist');
@@ -98,15 +99,22 @@ if (versionLiterals.length) {
   pass('渲染层无硬编码版本号');
 }
 
-/* 3. 源码语法（node --check，跳过 JSX 与文档） */
-const jsFiles = allFiles.filter((file) => /\.(js|mjs|cjs)$/.test(file));
+/* 3. 源码语法（esbuild 变换一次：JS / CJS / MJS 与 JSX 都覆盖） */
+// 之前用 `node --check`，它只认纯 JS，.jsx 只能整类跳过；这里借 Vite 自带的
+// esbuild 做一次不落盘的 transform，能编译即算语法通过（不做类型检查）。
+const syntaxFiles = allFiles.filter((file) => /\.(js|jsx|mjs|cjs)$/.test(file));
 const syntaxErrors = [];
-for (const file of jsFiles) {
-  const result = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
-  if (result.status !== 0) syntaxErrors.push(`${path.relative(root, file)}：${String(result.stderr || '').split('\n')[0]}`);
+for (const file of syntaxFiles) {
+  const source = readFileSync(file, 'utf8');
+  const loader = file.endsWith('.jsx') ? 'jsx' : 'js';
+  try {
+    transformSync(source, { loader, jsx: 'automatic', logLevel: 'silent' });
+  } catch (err) {
+    syntaxErrors.push(`${path.relative(root, file)}：${String(err.message || err).split('\n')[0]}`);
+  }
 }
 if (syntaxErrors.length) fail('源码语法', syntaxErrors.slice(0, 5).join('；'));
-else pass(`源码语法（${jsFiles.length} 个 JS/CJS/MJS 文件）`);
+else pass(`源码语法（${syntaxFiles.length} 个 JS/JSX/CJS/MJS 文件）`);
 
 /* 4. 打包配置 */
 const targets = pkg.build?.win?.target;
