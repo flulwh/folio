@@ -72,6 +72,9 @@ function startServer() {
       // CLICK 支持逗号分隔的多个选择器（链式点击），用于进入二级浮层（如阅读页 → 目录）。
       if ((CLICK || EVAL || EXTRA_CSS) && url === '/index.html') {
         let html = fs.readFileSync(file, 'utf8');
+        // 生产构建带 CSP（script-src 'self'），内联注入脚本会被拦掉；
+        // 这里只服务于本机截图/点击，去掉 CSP 后再注入。
+        html = html.replace(/<meta[^>]*Content-Security-Policy[^>]*>/i, '');
         const steps = CLICK.split(',')
           .map((s) => s.trim())
           .filter(Boolean);

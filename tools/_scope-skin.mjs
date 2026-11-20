@@ -86,11 +86,16 @@ const header = `/* =============================================================
    ────────────────────────────────────────────────────────────────────────
    所有规则挂在 [data-skin='miui'] 下，与 apple.css 的 Apple 风格并存，
    由「设置 → 外观 → 界面风格」切换。
+   整份文件包在 @layer skin 里：层序 base < skin < motion 由 src/index.css 声明，
+   皮肤因此不必再用 !important 压通用层。
    不要直接改这个文件；改 src/miui.css 后重新执行 tools/_scope-skin.mjs。
    ========================================================================== */
 
+@layer skin {
+
 `;
-const result = header + process(css);
+// 收尾的 } 关掉 @layer skin
+const result = header + process(css) + '\n}\n';
 fs.writeFileSync(OUT, result, 'utf8');
 
 // 自检：作用域前缀必须成对出现，且不能有裸露的顶层规则（注释除外）

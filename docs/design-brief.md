@@ -8,16 +8,18 @@
 ## 必须遵守的约束
 
 1. **不改 JSX 结构**，除非为了新增纯装饰元素。所有既有 `className` 必须继续被样式覆盖到。
-2. **不加 `!important`**。靠加载顺序（新层在最后）+ 特异性解决。新层文件按下面顺序导入：
+2. **不加 `!important`**，靠 `@layer` 层序解决。层序在 `src/index.css` 顶部声明一次：
    ```
-   index.css → apple.css → skin-miui.css → design/tokens.css → design/base.css
-   → design/shelf.css → design/reader.css → design/library.css
-   → skin-obsidian.css → miui-motion.css
+   @layer base, skin, motion;   /* 先声明者优先级低 */
    ```
-   `skin-obsidian.css` 是黑曜皮肤的材质层（玻璃 / 纵深 / 封面 3D），作用域
-   `html[data-skin='obsidian']`，放在 `design/` 之后是因为它要改的是既有的控件外观。
-   `miui-motion.css` 是 MIUI 皮肤的手感层，只在 `[data-skin='miui']` 下生效，必须排在最后
-   —— 否则 design/ 的控件形态会把皮肤的按压与滑块盖回去（见 `docs/motion.md`）。
+   各文件整份包进对应层（加载顺序已不再决定胜负）：
+   - `base`：`index.css`、`apple.css`、`design/*.css`
+   - `skin`：`skin-miui.css`（由 `miui.css` 生成）、`skin-obsidian.css`
+   - `motion`：`miui-motion.css`
+
+   皮肤层永远压过通用层，所以皮肤不需要 `!important`；通用层里仅剩的 `!important`
+   只服务于「减少动效」这类必须压过一切动画的兜底。新增皮肤请落在 `skin` 层，
+   新增交互手感请落在 `motion` 层。
 3. **只用 tokens**，不写死颜色。可用变量见 `src/design/tokens.css`：
    - 颜色：`--bg` `--bg-elevated` `--bg-sunken` `--bg-hover` `--text` `--text-soft`
      `--text-faint` `--line` `--line-strong` `--accent` `--accent-soft` `--accent-contrast` `--accent-ink`

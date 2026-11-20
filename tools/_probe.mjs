@@ -60,6 +60,8 @@ const SERVER = await new Promise((resolve) => {
     }
     if (url === '/index.html') {
       let html = fs.readFileSync(file, 'utf8');
+      // 生产构建带 CSP（script-src 'self'），内联探针会被拦掉；本机诊断时先摘掉。
+      html = html.replace(/<meta[^>]*Content-Security-Policy[^>]*>/i, '');
       const inject = `<script>
 (function(){
   var ID='__probe'+'_out';

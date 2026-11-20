@@ -2,19 +2,17 @@
    Folio · MIUI 手感层（[data-skin='miui'] 专用）
    ────────────────────────────────────────────────────────────────────────
    为什么单独一层，而不是塞进 skin-miui.css：
-     视觉层（skin-miui.css / miui.css）在 design/ 之前加载，负责颜色、圆角、
-     阴影这些"静态长相"。而 design/ 那套编辑排版会重定义控件形态 —— 顶栏的
-     排序是下划线标签、设置页的分段是方角小滑块、滑杆是 1px 细线。
-     这些规则和皮肤同优先级且在皮肤之后，于是皮肤层里写的按压、滑块、开关
-     动效全被盖回去：MIUI 实际只活下来一个主色。
-     把手感单独成层、放在最后加载，谁也不用和谁比 !important，
-     皮肤想要的那套交互才真的跑得起来。
+     视觉层（skin-miui.css / miui.css）负责颜色、圆角、阴影这些"静态长相"。
+     而 design/ 那套编辑排版会重定义控件形态 —— 顶栏的排序是下划线标签、
+     设置页的分段是方角小滑块、滑杆是 1px 细线。
+     手感与长相分开成层：本文件在 @layer motion，层序排在 @layer skin 之后，
+     皮肤想要的按压、滑块、开关动效不会被通用层或视觉层盖回去，也不必比 !important。
 
    分工：
      · 位移 / 转场 / 级联  → src/motion-miui.js（framer 弹簧，皮肤感知）
      · 按下 / 悬停 / 拖动  → 本文件（CSS，高频交互不能等一次 React 渲染）
    ========================================================================== */
-
+@layer motion {
 /* ------------------------------ 令牌 ------------------------------------- */
 /* 与 src/motion-miui.js 的 MI_DUR / MI_SPRING 同源，改一处要对齐另一处。 */
 [data-skin='miui'] {
@@ -102,12 +100,12 @@
   transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
 }
 
-/* 封面：悬停抬起 4px，按下压回桌面。这里必须 !important ——
-   悬停规则（skin-miui.css）自带了 !important，否则按下瞬间会被顶回去。 */
+/* 封面：悬停抬起 4px，按下压回桌面。
+   本文件在 @layer motion，层序在 @layer skin 之后，按下自然压过悬停。 */
 [data-skin='miui'] .book-cover:active,
 [data-skin='miui'] .market-cover:active {
-  transform: translateY(-1px) scale(0.972) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 4px 10px -8px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-1px) scale(0.972);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14), 0 4px 10px -8px rgba(0, 0, 0, 0.3);
   transition: transform var(--mi-motion-instant) var(--mi-motion-standard);
 }
 
@@ -340,4 +338,5 @@
 
 [data-motion='off'][data-skin='miui'] .switch:checked:active::after {
   transform: translateX(20px);
+}
 }

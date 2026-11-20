@@ -64,16 +64,16 @@ src/                渲染层（React）
 ├── main.jsx           入口
 ├── App.jsx            路由（书架 / 书籍市场 / 设置 / 本地阅读 / 云端阅读）、主题注入、Toast
 ├── store/AppStore.jsx 全局状态与持久化适配器
-├── design/            设计令牌与分区样式
+├── design/            设计令牌与分区样式（整份包在 @layer base）
 │   ├── tokens.css     主题令牌的唯一真相来源
 │   ├── base.css       基础层
 │   ├── shelf.css      书架
 │   ├── library.css    书市 / 书源 / 设置
 │   └── reader.css     阅读器
-├── index.css          Apple 皮肤
+├── index.css          Apple 皮肤（兼声明 @layer base, skin, motion 层序）
 ├── miui.css           MIUI 皮肤源文件
-├── skin-miui.css      由 miui.css 作用域化生成的产物（勿直接改）
-├── miui-motion.css    MIUI 的按下 / 悬停 / 拖动
+├── skin-miui.css      由 miui.css 作用域化生成的产物（勿直接改，落在 @layer skin）
+├── miui-motion.css    MIUI 的按下 / 悬停 / 拖动（@layer motion）
 ├── skin-obsidian.css  黑曜皮肤：深空玻璃、紫电、封面 3D（作用域 html[data-skin='obsidian']）
 ├── themes.js          主题令牌副本（设置页预览卡 + 运行时注入）
 ├── motion.js          Apple 动效套件

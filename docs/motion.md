@@ -110,12 +110,10 @@ CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴
 
 ## 为什么 MIUI 的手感单独一个 CSS 层
 
-`skin-miui.css`（视觉层）在 `design/` **之前**加载，而 `design/` 那套编辑排版会重定义控件形态
-——顶栏排序是下划线标签、设置页分段是方角小滑块。皮肤层里写的按压、滑块、开关动效和这些规则
-同优先级且更早，于是全被盖回去，MIUI 实际只活下来一个主色。
-
-所以手感单独成层 `src/miui-motion.css`，**放在最后加载**：谁也不用和谁比 `!important`，
-皮肤想要的那套交互才真的跑得起来。它整套规则仍挂在 `[data-skin='miui']` 下，Apple 不受影响。
+样式表按 `@layer base, skin, motion` 分三层（顺序在 `src/index.css` 顶部声明）：
+`design/` 那套编辑排版在 `base`，皮肤长相在 `skin`，皮肤手感在 `motion`。
+层序比加载顺序和特异性都硬，手感层的按压、滑块、开关动效不会被通用层或视觉层盖回去，
+也不必比 `!important`。它整套规则仍挂在 `[data-skin='miui']` 下，Apple 不受影响。
 
 高频交互（按下、悬停、拖动）必须是 CSS：按下到变色之间不能有一次 React 渲染的延迟。
 位移和转场才交给 Motion。

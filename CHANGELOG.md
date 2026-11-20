@@ -6,6 +6,14 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
 ## [Unreleased]
 
+**皮肤样式改为分层排序，不再靠 `!important` 互相压制。**
+
+- 样式表分成 `base → skin → motion` 三层（`@layer`）：通用排版、皮肤长相、皮肤手感各占一层，
+  后层稳定压过后层，皮肤改造不会再和通用层「抢同一条规则」，也不用 `!important` 硬顶
+- 顺手清掉 MIUI 皮肤里约 190 处 `!important`：搜索框、顶栏按钮、分段控件、弹窗等界面
+  此前会零星退回 Apple 的方角与底色，现在统一按 MIUI 的形态渲染
+- 减少动效、`prefers-reduced-motion` 这类必须压过一切动画的兜底仍保留 `!important`
+
 **书源引擎搬进独立子进程。**
 
 - 抓页（同步 curl）、HTML/XPath 解析与 `@js:` 规则现在跑在独立的 `utilityProcess` 里：

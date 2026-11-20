@@ -1,3 +1,8 @@
+/* 层叠顺序：@layer 先声明者优先级低。base 放通用骨架，skin 放皮肤长相，
+   motion 放皮肤手感；皮肤层总在通用层之后，不再需要 !important 硬顶。 */
+@layer base, skin, motion;
+
+@layer base {
 /* ==========================================================================
    澧ㄨ 鈥?Immersive E-book Reader
    A single stylesheet: design tokens, bookshelf, reader, panels, motion.
@@ -6478,4 +6483,5 @@ kbd {
 
 .continue-hint .dot {
   opacity: 0.45;
+}
 }

@@ -1,3 +1,4 @@
+@layer base {
 /* ==========================================================================
    Apple Design Layer — HIG-aligned visual system
    Loaded after index.css; overrides surfaces, controls and typography.
@@ -2264,4 +2265,5 @@ input.switch:checked::after {
   .segmented-thumb {
     transition: none;
   }
+}
 }
