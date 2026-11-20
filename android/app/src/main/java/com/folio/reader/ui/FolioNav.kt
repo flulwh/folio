@@ -1,36 +1,18 @@
 package com.folio.reader.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -48,12 +30,14 @@ import com.folio.reader.ui.model.ShelfModel
 import com.folio.reader.ui.model.SyncModel
 import com.folio.reader.ui.session.SessionStore
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationBar
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationBarItem
 import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ArrowClockwise
 import io.github.alexzhirkevich.cupertino.icons.outlined.Book
 import io.github.alexzhirkevich.cupertino.icons.outlined.Gear
-import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 
 /** 路由名只用来判断「现在是不是在阅读页」（音量键翻页）。 */
 const val ROUTE_SHELF = "shelf"
@@ -110,7 +94,6 @@ private object RootRoute : Screen {
         val shelfModel = rememberScreenModel { ShelfModel(session) }
         val syncModel = rememberScreenModel { SyncModel(session) }
         val settingsModel = rememberScreenModel { SettingsModel(session) }
-        val scheme = CupertinoTheme.colorScheme
 
         LaunchedEffect(tab) {
             session.reportRoute(
@@ -122,79 +105,62 @@ private object RootRoute : Screen {
             )
         }
 
-        Column(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                CompositionLocalProvider(LocalTabBarPresent provides true) {
-                    when (tab) {
-                        0 -> ShelfScreen(
-                            model = shelfModel,
-                            onOpenBook = { book ->
-                                when {
-                                    book.isComic -> {
-                                        session.openBook(book)
-                                        navigator.push(ComicRoute)
-                                    }
-
-                                    book.isEpub -> {
-                                        session.openEpub(book)
-                                        navigator.push(EpubRoute)
-                                    }
-
-                                    else -> {
-                                        session.openBook(book)
-                                        navigator.push(ReaderRoute)
-                                    }
-                                }
-                            },
-                            onOpenSettings = { tab = 2 },
-                            onOpenSyncStatus = { tab = 1 },
-                        )
-
-                        1 -> SyncStatusScreen(model = syncModel, onBack = null)
-
-                        else -> SettingsScreen(
-                            model = settingsModel,
-                            onBack = null,
-                            onOpenSyncStatus = { tab = 1 },
-                            onOpenFontStore = { navigator.push(FontStoreRoute) },
-                        )
-                    }
-                }
-            }
+        // Tab Bar 由各根页自己的 CupertinoScaffold 承载：只有放进 scaffold 的 bottomBar，
+        // 才能拿到 iOS 的毛玻璃，并且高度会被算进内容的 PaddingValues（不会重复叠系统栏）。
+        val bottomBar: @Composable () -> Unit = {
             FolioTabBar(selected = tab, onSelect = { tab = it })
         }
-    }
-}
 
-@Composable
-private fun FolioTabBar(selected: Int, onSelect: (Int) -> Unit) {
-    val scheme = CupertinoTheme.colorScheme
-    Column(Modifier.fillMaxWidth().background(scheme.secondarySystemGroupedBackground)) {
-        Box(Modifier.fillMaxWidth().height(0.5.dp).background(scheme.separator))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .height(TabBarHeight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val items = listOf(
-                Triple(CupertinoIcons.Outlined.Book, "书架", 0),
-                Triple(CupertinoIcons.Outlined.ArrowClockwise, "同步", 1),
-                Triple(CupertinoIcons.Outlined.Gear, "设置", 2),
+        when (tab) {
+            0 -> ShelfScreen(
+                model = shelfModel,
+                onOpenBook = { book ->
+                    when {
+                        book.isComic -> {
+                            session.openBook(book)
+                            navigator.push(ComicRoute)
+                        }
+
+                        book.isEpub -> {
+                            session.openEpub(book)
+                            navigator.push(EpubRoute)
+                        }
+
+                        else -> {
+                            session.openBook(book)
+                            navigator.push(ReaderRoute)
+                        }
+                    }
+                },
+                onOpenSettings = { tab = 2 },
+                onOpenSyncStatus = { tab = 1 },
+                bottomBar = bottomBar,
             )
-            items.forEach { (icon, label, index) ->
-                TabItem(
-                    icon = icon,
-                    label = label,
-                    selected = selected == index,
-                    onClick = { onSelect(index) },
-                )
-            }
+
+            1 -> SyncStatusScreen(model = syncModel, onBack = null, bottomBar = bottomBar)
+
+            else -> SettingsScreen(
+                model = settingsModel,
+                onBack = null,
+                onOpenSyncStatus = { tab = 1 },
+                onOpenFontStore = { navigator.push(FontStoreRoute) },
+                bottomBar = bottomBar,
+            )
         }
     }
 }
 
+@OptIn(ExperimentalCupertinoApi::class)
+@Composable
+private fun FolioTabBar(selected: Int, onSelect: (Int) -> Unit) {
+    CupertinoNavigationBar {
+        TabItem(CupertinoIcons.Outlined.Book, "书架", selected == 0) { onSelect(0) }
+        TabItem(CupertinoIcons.Outlined.ArrowClockwise, "同步", selected == 1) { onSelect(1) }
+        TabItem(CupertinoIcons.Outlined.Gear, "设置", selected == 2) { onSelect(2) }
+    }
+}
+
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 private fun RowScope.TabItem(
     icon: ImageVector,
@@ -202,35 +168,19 @@ private fun RowScope.TabItem(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val scheme = CupertinoTheme.colorScheme
-    val tint = if (selected) scheme.accent else scheme.secondaryLabel
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        CupertinoIcon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.size(24.dp),
-            tint = tint,
-        )
-        Spacer(Modifier.height(2.dp))
-        CupertinoText(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
-            color = tint,
-            maxLines = 1,
-        )
-    }
+    CupertinoNavigationBarItem(
+        selected = selected,
+        onClick = onClick,
+        icon = {
+            CupertinoIcon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier = Modifier.size(24.dp),
+            )
+        },
+        // 不额外传字号/颜色：继承收起后的 caption2 与选中着色，和 iOS 一致。
+        label = { CupertinoText(text = label, maxLines = 1) },
+    )
 }
 
 private object ReaderRoute : Screen {

@@ -17,10 +17,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -49,12 +47,15 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
+import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
 import io.github.alexzhirkevich.cupertino.CupertinoSlider
 import io.github.alexzhirkevich.cupertino.CupertinoSwitch
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTextField
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
@@ -90,12 +91,12 @@ fun SettingsScreen(
     onBack: (() -> Unit)?,
     onOpenSyncStatus: () -> Unit,
     onOpenFontStore: () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
     val scheme = CupertinoTheme.colorScheme
-    val tabbed = LocalTabBarPresent.current
     var showDiagnostics by remember { mutableStateOf(false) }
 
     var urlText by remember { mutableStateOf(state.serverUrl) }
@@ -107,20 +108,24 @@ fun SettingsScreen(
         if (state.token != tokenText) tokenText = state.token
     }
 
-    Column(Modifier.fillMaxSize().background(scheme.systemBackground)) {
-        SettingsHeader(
-            appVersion = state.appVersion,
-            serverVersion = state.serverVersion,
-            onBack = onBack,
-        )
-
+    CupertinoScaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = { SettingsTopBar(onBack = onBack) },
+        bottomBar = bottomBar,
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .then(if (tabbed) Modifier else Modifier.navigationBarsPadding()),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            modifier = Modifier.fillMaxSize().background(scheme.systemBackground),
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 24.dp,
+            ),
         ) {
+            item("nav-title") {
+                SettingsTitle(
+                    appVersion = state.appVersion,
+                    serverVersion = state.serverVersion,
+                )
+            }
             /* ---------------- 连接 ---------------- */
             item("connect") {
                 Reveal(index = 0) {
@@ -540,29 +545,23 @@ fun SettingsScreen(
 
 /* ---------------- 页头 ---------------- */
 
+/** 内联顶栏：大标题滚出屏幕后出现；从设置页 push 进来时才画返回箭头。 */
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
-private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: (() -> Unit)?) {
+private fun SettingsTopBar(onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(scheme.systemBackground)
-            .statusBarsPadding()
-            .padding(horizontal = PageMargin),
-    ) {
-        // Tab 根页没有上一级，不画返回键
-        if (onBack != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+    CupertinoTopAppBar(
+        title = { CupertinoText(text = "设置", maxLines = 1) },
+        navigationIcon = {
+            if (onBack != null) {
                 val source = remember { MutableInteractionSource() }
                 Box(
                     Modifier
+                        .padding(start = PageMargin)
                         .pressScale(source, pressedScale = 0.92f)
-                        .size(34.dp)
+                        .size(42.dp)
                         .clickable(interactionSource = source, indication = null, onClick = onBack),
-                    contentAlignment = Alignment.CenterStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     CupertinoIcon(
                         imageVector = CupertinoIcons.Outlined.ChevronBackward,
@@ -572,23 +571,25 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ((
                     )
                 }
             }
-        } else {
-            Spacer(Modifier.height(10.dp))
+        },
+    )
+}
+
+@Composable
+private fun SettingsTitle(appVersion: String, serverVersion: String) {
+    val scheme = CupertinoTheme.colorScheme
+    CupertinoNavigationTitle(
+        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 4.dp),
+    ) {
+        Column {
+            CupertinoText(text = "设置")
+            Spacer(Modifier.height(4.dp))
+            CupertinoText(
+                text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
+                style = CupertinoTheme.typography.footnote,
+                color = scheme.secondaryLabel,
+            )
         }
-        CupertinoText(
-            text = "设置",
-            modifier = Modifier.padding(top = if (onBack == null) 2.dp else 6.dp),
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-            color = scheme.label,
-        )
-        CupertinoText(
-            text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-            fontSize = 13.sp,
-            color = scheme.secondaryLabel,
-        )
     }
 }
 

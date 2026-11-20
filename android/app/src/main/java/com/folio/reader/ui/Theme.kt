@@ -136,14 +136,6 @@ fun readingPalette(id: String?): ReadingPalette =
 /** 当前生效的纸色，组件与阅读器共用。 */
 val LocalReadingPalette = staticCompositionLocalOf { WHITE_PALETTE }
 
-/**
- * 页面是否挂在底部 Tab Bar 之上。
- *
- * Tab 根页不再自己加 `navigationBarsPadding()`——底部安全区由 Tab Bar 占掉，
- * 页面再加一次会在 Tab 上方留出一条空白。
- */
-val LocalTabBarPresent = staticCompositionLocalOf { false }
-
 /* --------------------------------- 字体 --------------------------------- */
 
 private val Sans = FontFamily.SansSerif

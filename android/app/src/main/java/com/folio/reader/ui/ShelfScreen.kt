@@ -35,10 +35,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -79,10 +78,13 @@ import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoDropdownMenu
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
+import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
 import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ArrowClockwise
@@ -108,13 +110,14 @@ import kotlin.math.absoluteValue
  * 封面是书架的主角：占满整格、带投影与纸色占位；书名两行、进度一条细轨。
  * 长按封面（或点右上角 ⋯）出菜单，行为与旧列表版完全一致。
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalCupertinoApi::class)
 @Composable
 fun ShelfScreen(
     model: ShelfModel,
     onOpenBook: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSyncStatus: () -> Unit,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
     val state by vm.shelf.collectAsState()
@@ -148,10 +151,12 @@ fun ShelfScreen(
         state.online,
     ) { state.sections }
 
-    // 封面墙里翻到新导入的书：先按「分区标题 + 每本一格」换算成网格下标。
+    // 封面墙里翻到新导入的书：先按「头部区 + 分区标题 + 每本一格」换算成网格下标。
+    // 头部区（大标题 / 搜索 / 筛选 / 横幅）在网格里也各占一格，计数要和下面的 item 一一对应。
+    val headerItems = 1 + 1 + 1 + 1 + if (state.importing) 1 else 0
     LaunchedEffect(state.highlightId, sections) {
         val id = state.highlightId ?: return@LaunchedEffect
-        var index = if (sections.any { it.key == "continue" }) 1 else 0
+        var index = headerItems + if (sections.any { it.key == "continue" }) 1 else 0
         var target = -1
         for (section in sections) {
             if (section.key == "continue") continue
@@ -169,113 +174,147 @@ fun ShelfScreen(
 
     val importAction = { importLauncher.launch(IMPORT_MIME_TYPES) }
 
-    Box(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
-        Column(Modifier.fillMaxSize()) {
-            ShelfHeader(
+    CupertinoScaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            ShelfTopBar(
                 state = state,
                 searchOpen = searchOpen,
                 onToggleSearch = { searchOpen = !searchOpen },
-                onQuery = vm::setQuery,
                 onImport = importAction,
                 onSync = { vm.syncNow() },
-                onOpenSyncStatus = onOpenSyncStatus,
             )
-
-            AnimatedVisibility(
-                visible = state.showBanner,
-                enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-                exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-            ) {
-                OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
+        },
+        bottomBar = bottomBar,
+    ) { padding ->
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            state = gridState,
+            modifier = Modifier.fillMaxSize().background(scheme.systemGroupedBackground),
+            contentPadding = PaddingValues(
+                start = PageMargin,
+                end = PageMargin,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 20.dp,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(22.dp),
+        ) {
+            // 大标题必须是第一个滚动容器的首项，滚动时才会被顶栏裁剪、折叠成内联标题。
+            item(key = "shelf-title", span = { GridItemSpan(maxLineSpan) }) {
+                ShelfTitle(state = state, onOpenSyncStatus = onOpenSyncStatus)
             }
 
-            FilterChips(selected = state.filter, onSelect = vm::setFilter)
+            item(key = "shelf-search", span = { GridItemSpan(maxLineSpan) }) {
+                AnimatedVisibility(
+                    visible = searchOpen,
+                    enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+                    exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+                ) {
+                    CupertinoSearchTextField(
+                        value = state.query,
+                        onValueChange = vm::setQuery,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        placeholder = {
+                            CupertinoText(
+                                text = "搜书名或作者",
+                                fontSize = 16.sp,
+                                color = scheme.placeholderText,
+                            )
+                        },
+                    )
+                }
+            }
+
+            item(key = "shelf-filter", span = { GridItemSpan(maxLineSpan) }) {
+                FilterChips(selected = state.filter, onSelect = vm::setFilter)
+            }
+
+            item(key = "shelf-banner", span = { GridItemSpan(maxLineSpan) }) {
+                AnimatedVisibility(
+                    visible = state.showBanner,
+                    enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+                    exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+                ) {
+                    OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
+                }
+            }
 
             if (state.importing) {
-                ImportStrip(label = state.importLabel.ifBlank { "正在导入…" })
+                item(key = "shelf-import", span = { GridItemSpan(maxLineSpan) }) {
+                    ImportStrip(label = state.importLabel.ifBlank { "正在导入…" })
+                }
             }
 
-            Box(Modifier.weight(1f)) {
-                if (sections.isEmpty()) {
-                    EmptyShelf(
-                        hasBooks = state.books.isNotEmpty(),
-                        onImport = importAction,
-                        onConnect = onOpenSettings,
-                    )
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(3),
-                        state = gridState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(
-                            start = PageMargin,
-                            end = PageMargin,
-                            top = 2.dp,
-                            bottom = 28.dp,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(22.dp),
-                    ) {
-                        sections.forEach { section ->
-                            if (section.key == "continue") {
-                                item(
-                                    key = "continue-hero",
-                                    span = { GridItemSpan(maxLineSpan) },
-                                ) {
-                                    val featured = section.books.first()
-                                    ContinueCard(
-                                        book = featured,
-                                        state = state,
-                                        onOpen = { onOpenBook(featured) },
-                                    )
-                                }
-                            } else {
-                                item(
-                                    key = "header-${section.key}",
-                                    span = { GridItemSpan(maxLineSpan) },
-                                ) {
-                                    SectionLabel(
-                                        title = section.title.substringBefore("（"),
-                                        count = section.books.size,
-                                    )
-                                }
-                                itemsIndexed(
-                                    items = section.books,
-                                    key = { _, book -> "book-${section.key}-${book.id}" },
-                                ) { index, book ->
-                                    val rowKey = "${section.key}-${book.id}"
-                                    Reveal(index = index) {
-                                        BookCell(
-                                            book = book,
-                                            state = state,
-                                            highlighted = state.highlightId == book.id,
-                                            menuOpen = menuFor == rowKey,
-                                            onToggleMenu = {
-                                                menuFor = if (menuFor == rowKey) null else rowKey
-                                            },
-                                            onOpen = {
-                                                menuFor = null
-                                                onOpenBook(book)
-                                            },
-                                            onDownload = {
-                                                menuFor = null
-                                                vm.downloadOffline(book)
-                                            },
-                                            onDeleteLocal = {
-                                                menuFor = null
-                                                pendingDelete = book
-                                            },
-                                            onRemoveFromShelf = {
-                                                menuFor = null
-                                                pendingRemove = book
-                                            },
-                                            onSyncStatus = {
-                                                menuFor = null
-                                                onOpenSyncStatus()
-                                            },
-                                        )
-                                    }
-                                }
+            if (sections.isEmpty()) {
+                item(key = "shelf-empty", span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().heightIn(min = 340.dp)) {
+                        EmptyShelf(
+                            hasBooks = state.books.isNotEmpty(),
+                            onImport = importAction,
+                            onConnect = onOpenSettings,
+                        )
+                    }
+                }
+            } else {
+                sections.forEach { section ->
+                    if (section.key == "continue") {
+                        item(
+                            key = "continue-hero",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            val featured = section.books.first()
+                            ContinueCard(
+                                book = featured,
+                                state = state,
+                                onOpen = { onOpenBook(featured) },
+                            )
+                        }
+                    } else {
+                        item(
+                            key = "header-${section.key}",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            SectionLabel(
+                                title = section.title.substringBefore("（"),
+                                count = section.books.size,
+                            )
+                        }
+                        itemsIndexed(
+                            items = section.books,
+                            key = { _, book -> "book-${section.key}-${book.id}" },
+                        ) { index, book ->
+                            val rowKey = "${section.key}-${book.id}"
+                            Reveal(index = index) {
+                                BookCell(
+                                    book = book,
+                                    state = state,
+                                    highlighted = state.highlightId == book.id,
+                                    menuOpen = menuFor == rowKey,
+                                    onToggleMenu = {
+                                        menuFor = if (menuFor == rowKey) null else rowKey
+                                    },
+                                    onOpen = {
+                                        menuFor = null
+                                        onOpenBook(book)
+                                    },
+                                    onDownload = {
+                                        menuFor = null
+                                        vm.downloadOffline(book)
+                                    },
+                                    onDeleteLocal = {
+                                        menuFor = null
+                                        pendingDelete = book
+                                    },
+                                    onRemoveFromShelf = {
+                                        menuFor = null
+                                        pendingRemove = book
+                                    },
+                                    onSyncStatus = {
+                                        menuFor = null
+                                        onOpenSyncStatus()
+                                    },
+                                )
                             }
                         }
                     }
@@ -284,7 +323,9 @@ fun ShelfScreen(
         }
 
         message?.let { text ->
-            Snack(text = text, onDismiss = { message = null })
+            Box(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding())) {
+                Snack(text = text, onDismiss = { message = null })
+            }
         }
     }
 
@@ -318,69 +359,29 @@ fun ShelfScreen(
 /* ---------------- 顶栏 ---------------- */
 
 /**
- * 首页顶栏（iOS 大标题导航栏）。
+ * 内联顶栏：大标题滚出屏幕后出现，自带 iOS 毛玻璃与淡入。
  *
- * 左侧 34sp 大标题 + 一行状态副标题，右侧是导航栏动作按钮——不是胶囊，
- * 就是 iOS 那种没有底色的 tinted 图标。设置与同步改由底部 Tab Bar 承担。
+ * 动作按钮沿用无底色 tinted 图标；大标题还在屏内时整条栏是透明的（由 scaffold 控制）。
  */
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
-private fun ShelfHeader(
+private fun ShelfTopBar(
     state: ShelfUiState,
     searchOpen: Boolean,
     onToggleSearch: () -> Unit,
-    onQuery: (String) -> Unit,
     onImport: () -> Unit,
     onSync: () -> Unit,
-    onOpenSyncStatus: () -> Unit,
 ) {
-    val scheme = CupertinoTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(scheme.systemGroupedBackground)
-            .statusBarsPadding(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = PageMargin, end = 6.dp, top = 8.dp, bottom = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                CupertinoText(
-                    text = "书架",
-                    fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = (-0.4).sp,
-                    color = scheme.label,
-                    maxLines = 1,
-                )
-                Spacer(Modifier.height(3.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onOpenSyncStatus)
-                        .padding(vertical = 2.dp),
-                ) {
-                    Box(
-                        Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(if (state.online) BrandPositive else scheme.secondaryLabel)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    CupertinoText(
-                        text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
-                            connectionTextOf(state),
-                        fontSize = 13.sp,
-                        color = scheme.secondaryLabel,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            NavIcon(CupertinoIcons.Outlined.MagnifyingGlass, "搜索", onToggleSearch)
+    CupertinoTopAppBar(
+        title = {
+            CupertinoText(text = "书架", maxLines = 1)
+        },
+        actions = {
+            NavIcon(
+                icon = CupertinoIcons.Outlined.MagnifyingGlass,
+                description = if (searchOpen) "关闭搜索" else "搜索",
+                onClick = onToggleSearch,
+            )
             NavIcon(CupertinoIcons.Outlined.Plus, "导入书籍", onImport)
             if (state.syncing) {
                 Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
@@ -389,29 +390,49 @@ private fun ShelfHeader(
             } else {
                 NavIcon(CupertinoIcons.Outlined.ArrowClockwise, "同步", onSync)
             }
-        }
+        },
+    )
+}
 
-        AnimatedVisibility(
-            visible = searchOpen,
-            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-        ) {
-            Column(Modifier.padding(horizontal = PageMargin, vertical = 6.dp)) {
-                CupertinoSearchTextField(
-                    value = state.query,
-                    onValueChange = onQuery,
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = {
-                        CupertinoText(
-                            text = "搜书名或作者",
-                            fontSize = 16.sp,
-                            color = scheme.placeholderText,
-                        )
-                    },
+/**
+ * 大标题：放在网格首项，滚动时被顶栏裁剪并折叠成内联标题。
+ *
+ * 字号与字重由 [CupertinoNavigationTitle] 提供的 largeTitle 决定，这里不再写死 34sp；
+ * 副标题显式给 footnote，避免继承大标题的 34sp bold。
+ */
+@Composable
+private fun ShelfTitle(state: ShelfUiState, onOpenSyncStatus: () -> Unit) {
+    val scheme = CupertinoTheme.colorScheme
+    CupertinoNavigationTitle(
+        paddingValues = PaddingValues(top = 6.dp, bottom = 2.dp),
+    ) {
+        Column {
+            CupertinoText(text = "书架", maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenSyncStatus)
+                    .padding(vertical = 2.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(if (state.online) BrandPositive else scheme.secondaryLabel)
+                )
+                Spacer(Modifier.width(6.dp))
+                CupertinoText(
+                    text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
+                        connectionTextOf(state),
+                    style = CupertinoTheme.typography.footnote,
+                    color = scheme.secondaryLabel,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -464,7 +485,7 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = PageMargin, vertical = 6.dp)
+            .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(GroupRadius))
             .background(BrandWarning.copy(alpha = 0.14f))
             .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
@@ -526,7 +547,7 @@ private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
         selectedTabIndex = index,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = PageMargin, vertical = 6.dp),
+            .padding(vertical = 6.dp),
     ) {
         ShelfUiState.FILTERS.forEachIndexed { i, (key, label) ->
             CupertinoSegmentedControlTab(
@@ -542,7 +563,7 @@ private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
 @Composable
 private fun ImportStrip(label: String) {
     val scheme = CupertinoTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 4.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         CupertinoText(
             text = label,
             fontSize = 11.sp,

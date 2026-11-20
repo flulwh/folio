@@ -15,10 +15,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +38,11 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
+import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
 import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
@@ -56,23 +58,28 @@ import java.util.Locale
 fun SyncStatusScreen(
     model: SyncModel,
     onBack: (() -> Unit)?,
+    bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
     val state by vm.shelf.collectAsState()
     val books = state.books.distinctBy { it.id }
     val scheme = CupertinoTheme.colorScheme
-    val tabbed = LocalTabBarPresent.current
 
-    Column(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
-        SyncHeader(onBack = onBack)
-
+    CupertinoScaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = { SyncTopBar(onBack = onBack) },
+        bottomBar = bottomBar,
+    ) { padding ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .then(if (tabbed) Modifier else Modifier.navigationBarsPadding()),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            modifier = Modifier.fillMaxSize().background(scheme.systemGroupedBackground),
+            contentPadding = PaddingValues(
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 24.dp,
+            ),
         ) {
+            item("nav-title") {
+                SyncTitle(state = state)
+            }
             item("stats") {
                 IosCard {
                     Row(
@@ -204,28 +211,22 @@ fun SyncStatusScreen(
     }
 }
 
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
-private fun SyncHeader(onBack: (() -> Unit)?) {
+private fun SyncTopBar(onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(scheme.systemGroupedBackground)
-            .statusBarsPadding()
-            .padding(horizontal = PageMargin),
-    ) {
-        if (onBack != null) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
+    CupertinoTopAppBar(
+        title = { CupertinoText(text = "同步", maxLines = 1) },
+        navigationIcon = {
+            if (onBack != null) {
                 val source = remember { MutableInteractionSource() }
                 Box(
                     Modifier
+                        .padding(start = PageMargin)
                         .pressScale(source)
-                        .size(34.dp)
+                        .size(42.dp)
                         .clickable(interactionSource = source, indication = null, onClick = onBack),
-                    contentAlignment = Alignment.CenterStart,
+                    contentAlignment = Alignment.Center,
                 ) {
                     CupertinoIcon(
                         imageVector = CupertinoIcons.Outlined.ChevronBackward,
@@ -235,18 +236,31 @@ private fun SyncHeader(onBack: (() -> Unit)?) {
                     )
                 }
             }
-        } else {
-            Spacer(Modifier.height(10.dp))
+        },
+    )
+}
+
+@Composable
+private fun SyncTitle(state: ShelfUiState) {
+    val scheme = CupertinoTheme.colorScheme
+    CupertinoNavigationTitle(
+        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 4.dp),
+    ) {
+        Column {
+            CupertinoText(text = "同步", maxLines = 1)
+            Spacer(Modifier.height(4.dp))
+            CupertinoText(
+                text = if (state.online) {
+                    "已连接桌面端 · 上次同步 ${lastSyncText(state.lastSyncAt)}"
+                } else {
+                    "未连接桌面端 · 上次同步 ${lastSyncText(state.lastSyncAt)}"
+                },
+                style = CupertinoTheme.typography.footnote,
+                color = scheme.secondaryLabel,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        CupertinoText(
-            text = "同步",
-            modifier = Modifier.padding(top = if (onBack == null) 2.dp else 6.dp, bottom = 6.dp),
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-            color = scheme.label,
-            maxLines = 1,
-        )
     }
 }
 

@@ -19,5 +19,3 @@ val RowInset: Dp = 16.dp
 val GroupRadius: Dp = 10.dp
 /** 面板内容区通用内边距。 */
 val SheetPadding: Dp = 16.dp
-/** 底部 Tab Bar 的内容高度（不含安全区）。 */
-val TabBarHeight: Dp = 49.dp

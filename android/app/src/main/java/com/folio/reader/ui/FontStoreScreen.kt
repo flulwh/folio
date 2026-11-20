@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -42,7 +42,11 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
+import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
 import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
@@ -71,16 +75,21 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
         if (storeState.catalog.isEmpty() && storeState.installing.isBlank()) vm.loadFontStore()
     }
 
-    Column(Modifier.fillMaxSize().background(scheme.systemGroupedBackground)) {
-        FontStoreHeader(onBack = onBack)
-
+    CupertinoScaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = { FontStoreTopBar(onBack = onBack) },
+    ) { padding ->
         Column(
             Modifier
-                .fillMaxWidth()
-                .weight(1f)
+                .fillMaxSize()
+                .background(scheme.systemGroupedBackground)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 32.dp),
+                .padding(
+                    top = padding.calculateTopPadding(),
+                    bottom = padding.calculateBottomPadding() + 24.dp,
+                ),
         ) {
+            FontStoreTitle()
             IosGroup(title = "已安装") {
                 // 「系统字体」永远在第一位：选它等于清空商店字体
                 SystemFontRow(
@@ -171,24 +180,21 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
-private fun FontStoreHeader(onBack: () -> Unit) {
+private fun FontStoreTopBar(onBack: () -> Unit) {
     val scheme = CupertinoTheme.colorScheme
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(scheme.systemGroupedBackground)
-            .statusBarsPadding()
-            .padding(horizontal = PageMargin),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+    CupertinoTopAppBar(
+        title = { CupertinoText(text = "字体", maxLines = 1) },
+        navigationIcon = {
             val source = remember { MutableInteractionSource() }
             Box(
                 Modifier
+                    .padding(start = PageMargin)
                     .pressScale(source, pressedScale = 0.92f)
-                    .size(34.dp)
+                    .size(42.dp)
                     .clickable(interactionSource = source, indication = null, onClick = onBack),
-                contentAlignment = Alignment.CenterStart,
+                contentAlignment = Alignment.Center,
             ) {
                 CupertinoIcon(
                     imageVector = CupertinoIcons.Outlined.ChevronBackward,
@@ -197,21 +203,25 @@ private fun FontStoreHeader(onBack: () -> Unit) {
                     tint = scheme.accent,
                 )
             }
+        },
+    )
+}
+
+@Composable
+private fun FontStoreTitle() {
+    val scheme = CupertinoTheme.colorScheme
+    CupertinoNavigationTitle(
+        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 12.dp),
+    ) {
+        Column {
+            CupertinoText(text = "字体")
+            Spacer(Modifier.height(4.dp))
+            CupertinoText(
+                text = "与桌面端同一份目录 · 装好即用",
+                style = CupertinoTheme.typography.footnote,
+                color = scheme.secondaryLabel,
+            )
         }
-        CupertinoText(
-            text = "字体",
-            modifier = Modifier.padding(top = 6.dp),
-            fontSize = 34.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.4).sp,
-            color = scheme.label,
-        )
-        CupertinoText(
-            text = "与桌面端同一份目录 · 装好即用",
-            modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
-            fontSize = 13.sp,
-            color = scheme.secondaryLabel,
-        )
     }
 }
 
