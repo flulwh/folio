@@ -11,6 +11,9 @@ export function formatCount(n) {
   return String(n);
 }
 
+/** 摘录统一压成单行：段落号才是锚点，字符偏移只用于显示。 */
+export const compactText = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+
 export function formatDate(ts) {
   if (!ts) return '';
   const d = new Date(ts);
