@@ -1,5 +1,7 @@
 package com.folio.reader.ui
 
+import com.folio.reader.ui.model.ReaderModel
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -30,18 +32,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -71,26 +64,39 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.SettingsStore
-import com.folio.reader.ui.miuix.FolioMotion
-import com.folio.reader.ui.miuix.HyperActionCell
-import com.folio.reader.ui.miuix.HyperMeta
-import com.folio.reader.ui.miuix.HyperRoundIcon
 import com.folio.reader.ui.reader.MarksSheet
 import com.folio.reader.ui.reader.ReaderPager
 import com.folio.reader.ui.reader.ReaderStyleSheet
 import com.folio.reader.ui.reader.SearchSheet
 import com.folio.reader.ui.reader.TocSheet
+import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
+import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoSlider
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
+import io.github.alexzhirkevich.cupertino.icons.filled.Bookmark
+import io.github.alexzhirkevich.cupertino.icons.filled.Pause
+import io.github.alexzhirkevich.cupertino.icons.filled.Play
+import io.github.alexzhirkevich.cupertino.icons.outlined.Book
+import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
+import io.github.alexzhirkevich.cupertino.icons.outlined.MagnifyingGlass
+import io.github.alexzhirkevich.cupertino.icons.outlined.SliderHorizontal3
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import java.util.Locale
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/** 章节号 / 页码这类小字标签。 */
+private val KickerStyle = TextStyle(fontSize = 11.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Medium)
+/** 章标题。 */
+private val HeadingStyle = TextStyle(fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold)
+private val BodySmallStyle = TextStyle(fontSize = 12.5.sp, lineHeight = 19.sp)
+private val TitleSmallStyle = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium)
+private val TitleMediumStyle = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
 /**
- * 小说阅读器（HyperOS 版）。
+ * 小说阅读器（Cupertino）。
  *
  * - **双阅读模式**：上下滚动（LazyColumn）/ 左右翻页（[ReaderPager]，按章分页）；
  * - **沉浸 HUD**：点正文中央显隐，顶栏与底栏都是浮动圆角卡片，不挤压正文；
@@ -99,10 +105,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  */
 @Composable
 fun ReaderScreen(
-    vm: AppViewModel,
+    model: ReaderModel,
     onBack: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val vm = model.session
     val reader by vm.reader.collectAsState()
     val settings by vm.settingsState.collectAsState()
     val scrollTarget by vm.scrollTarget.collectAsState()
@@ -115,7 +122,7 @@ fun ReaderScreen(
     val book = reader.book
     val density = LocalDensity.current
     val view = LocalView.current
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
 
     val fontSize = settings.fontSizeSp.sp
     val lineHeight = (settings.fontSizeSp * settings.lineHeight).sp
@@ -224,15 +231,9 @@ fun ReaderScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    // 进度条：拖动时先改本地值，停手 280ms 再真正 seek（Miuix Slider 没有 finished 回调）
+    // 进度条：拖动时先改本地值，CupertinoSlider 松手回调里再真正 seek
     LaunchedEffect(reader.percent, scrubbing) {
         if (!scrubbing) sliderValue = reader.percent.toFloat() / 100f
-    }
-    LaunchedEffect(scrubbing, sliderValue) {
-        if (!scrubbing) return@LaunchedEffect
-        delay(280)
-        scrubbing = false
-        vm.seekToPercent((sliderValue * 100f).toDouble())
     }
 
     val needConnect = reader.error == CLOUD_NEED_CONNECT
@@ -251,7 +252,7 @@ fun ReaderScreen(
         else -> 44.dp
     }
 
-    Box(Modifier.fillMaxSize().background(palette.background)) {
+    Box(Modifier.fillMaxSize().background(palette.systemBackground)) {
         when {
             reader.loading -> LoadingState()
 
@@ -266,8 +267,8 @@ fun ReaderScreen(
                 chapterIndex = reader.chapterIndex,
                 chapterTitle = reader.chapterTitle,
                 bodyStyle = bodyStyle,
-                kickerStyle = MaterialTheme.typography.labelSmall,
-                headingStyle = MaterialTheme.typography.headlineMedium,
+                kickerStyle = KickerStyle,
+                headingStyle = HeadingStyle,
                 paragraphGap = paragraphGap,
                 blankGap = blankGap,
                 pagePadding = settings.pagePadding,
@@ -353,38 +354,38 @@ fun ReaderScreen(
                     .padding(top = 4.dp)
                     .shadow(10.dp, RoundedCornerShape(20.dp))
                     .clip(RoundedCornerShape(20.dp))
-                    .background(palette.surface.copy(alpha = 0.96f))
-                    .border(0.5.dp, palette.dividerLine, RoundedCornerShape(20.dp))
+                    .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.96f))
+                    .border(0.5.dp, palette.separator, RoundedCornerShape(20.dp))
                     .height(50.dp)
                     .padding(horizontal = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                HyperRoundIcon(Icons.AutoMirrored.Filled.ArrowBack, "返回", onBack)
+                RoundIcon(CupertinoIcons.Outlined.ChevronBackward, "返回", palette.label, onBack)
                 Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(
+                    CupertinoText(
                         text = reader.chapterTitle.ifBlank { book?.title.orEmpty() },
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = palette.onSurface,
+                        color = palette.label,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (reader.chapterTitle.isNotBlank()) {
-                        Text(
+                        CupertinoText(
                             text = book?.title.orEmpty(),
                             fontSize = 10.5.sp,
-                            color = palette.onSurfaceVariantSummary,
+                            color = palette.secondaryLabel,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
                 val bookmarked = reader.paraIndex in bookmarkedParas
-                HyperRoundIcon(
-                    icon = if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                RoundIcon(
+                    icon = if (bookmarked) CupertinoIcons.Filled.Bookmark else CupertinoIcons.Outlined.Book,
                     contentDescription = if (bookmarked) "取消书签" else "加书签",
+                    tint = if (bookmarked) palette.accent else palette.label,
                     onClick = { vm.toggleBookmark() },
-                    tint = if (bookmarked) palette.primary else palette.onSurface,
                 )
             }
         }
@@ -403,19 +404,19 @@ fun ReaderScreen(
                     .navigationBarsPadding()
                     .padding(bottom = if (reader.controls) 156.dp else 16.dp)
                     .fillMaxWidth()
-                    .background(palette.surface)
+                    .background(palette.secondarySystemGroupedBackground)
                     .padding(start = 20.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
+                CupertinoText(
                     text = reader.error.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.onSurfaceVariantSummary,
+                    style = BodySmallStyle,
+                    color = palette.secondaryLabel,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                MiuixText(
+                CupertinoText(
                     text = "重试",
                     modifier = Modifier
                         .clickable(
@@ -426,7 +427,7 @@ fun ReaderScreen(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = palette.primary,
+                    color = palette.accent,
                 )
             }
         }
@@ -448,94 +449,98 @@ fun ReaderScreen(
                     .padding(bottom = 10.dp)
                     .shadow(12.dp, RoundedCornerShape(24.dp))
                     .clip(RoundedCornerShape(24.dp))
-                    .background(palette.surface.copy(alpha = 0.97f))
-                    .border(0.5.dp, palette.dividerLine, RoundedCornerShape(24.dp))
+                    .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.97f))
+                    .border(0.5.dp, palette.separator, RoundedCornerShape(24.dp))
                     .padding(horizontal = 14.dp)
                     .padding(top = 10.dp, bottom = 4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Chevron("‹", reader.hasPrevChapter) { vm.prevChapter() }
-                    Text(
+                    CupertinoText(
                         text = percentLabel,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
-                        color = palette.primary,
+                        color = palette.accent,
                         maxLines = 1,
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
+                    CupertinoText(
                         text = chapterLabel,
                         fontSize = 11.sp,
-                        color = palette.onSurfaceVariantSummary,
+                        color = palette.secondaryLabel,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(Modifier.weight(1f))
-                    HyperMeta(remainingLabel)
+                    CupertinoText(
+                        text = remainingLabel,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = palette.secondaryLabel,
+                        maxLines = 1,
+                    )
                     Chevron("›", reader.hasNextChapter) { vm.nextChapter() }
                 }
-                Slider(
-                    progress = shownPercent.coerceIn(0f, 100f) / 100f,
-                    onProgressChange = {
+                CupertinoSlider(
+                    value = shownPercent.coerceIn(0f, 100f) / 100f,
+                    onValueChange = {
                         scrubbing = true
                         sliderValue = it
                     },
+                    onValueChangeFinished = {
+                        scrubbing = false
+                        vm.seekToPercent((sliderValue * 100f).toDouble())
+                    },
                     modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    height = 22.dp,
-                    decimalPlaces = 3,
                 )
                 Row(
                     Modifier.fillMaxWidth().height(44.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    HyperActionCell(
-                        label = "目录",
-                        icon = { androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.MenuBook, null, modifier = Modifier.size(19.dp)) },
-                        active = reader.showToc,
-                        onClick = { vm.toggleToc() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    HyperActionCell(
-                        label = "痕迹",
-                        icon = {
-                            androidx.compose.material3.Icon(
-                                if (reader.paraIndex in bookmarkedParas) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                                null,
-                                modifier = Modifier.size(19.dp),
-                            )
-                        },
-                        active = reader.showMarks,
-                        onClick = { vm.toggleMarks() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    HyperActionCell(
-                        label = "搜索",
-                        icon = { androidx.compose.material3.Icon(Icons.Default.Search, null, modifier = Modifier.size(19.dp)) },
-                        active = reader.search.open,
-                        onClick = { vm.toggleSearch() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    HyperActionCell(
-                        label = "排版",
-                        icon = { androidx.compose.material3.Icon(Icons.Default.Tune, null, modifier = Modifier.size(19.dp)) },
-                        active = reader.showStyle,
-                        onClick = { vm.toggleStyle() },
-                        modifier = Modifier.weight(1f),
-                    )
-                    HyperActionCell(
-                        label = "自动",
-                        icon = {
-                            androidx.compose.material3.Icon(
-                                if (reader.autoScroll) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                null,
-                                modifier = Modifier.size(19.dp),
-                            )
-                        },
-                        active = reader.autoScroll,
-                        onClick = { vm.toggleAutoScroll() },
-                        modifier = Modifier.weight(1f),
-                    )
+                    ActionCell("目录", reader.showToc, Modifier.weight(1f), onClick = { vm.toggleToc() }) {
+                        CupertinoIcon(
+                            imageVector = CupertinoIcons.Outlined.Book,
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    ActionCell("痕迹", reader.showMarks, Modifier.weight(1f), onClick = { vm.toggleMarks() }) {
+                        CupertinoIcon(
+                            imageVector = if (reader.paraIndex in bookmarkedParas) {
+                                CupertinoIcons.Filled.Bookmark
+                            } else {
+                                CupertinoIcons.Outlined.Book
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    ActionCell("搜索", reader.search.open, Modifier.weight(1f), onClick = { vm.toggleSearch() }) {
+                        CupertinoIcon(
+                            imageVector = CupertinoIcons.Outlined.MagnifyingGlass,
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    ActionCell("排版", reader.showStyle, Modifier.weight(1f), onClick = { vm.toggleStyle() }) {
+                        CupertinoIcon(
+                            imageVector = CupertinoIcons.Outlined.SliderHorizontal3,
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                    ActionCell("自动", reader.autoScroll, Modifier.weight(1f), onClick = { vm.toggleAutoScroll() }) {
+                        CupertinoIcon(
+                            imageVector = if (reader.autoScroll) {
+                                CupertinoIcons.Filled.Pause
+                            } else {
+                                CupertinoIcons.Filled.Play
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
                 }
             }
         }
@@ -557,17 +562,17 @@ fun ReaderScreen(
                     .navigationBarsPadding()
                     .padding(end = 16.dp, bottom = 20.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(palette.surface.copy(alpha = 0.92f))
+                    .background(palette.secondarySystemGroupedBackground.copy(alpha = 0.92f))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
+                CupertinoText(
                     text = "自动 $speed",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = palette.onSurface,
+                    style = KickerStyle,
+                    color = palette.label,
                 )
                 Spacer(Modifier.width(6.dp))
-                Box(Modifier.size(5.dp).background(palette.primary))
+                Box(Modifier.size(5.dp).background(palette.accent))
             }
         }
     }
@@ -626,64 +631,152 @@ fun ReaderScreen(
     }
 
     if (needConnect) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = onBack,
-            title = { Text("需要连接桌面端") },
-            text = { Text("云端书需要连接桌面端才能阅读。") },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    onBack()
-                    onOpenSettings()
-                }) { Text("去连接") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = onBack) { Text("返回") }
-            },
+        FolioSheet(onDismiss = onBack) {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                Spacer(Modifier.height(4.dp))
+                CupertinoText(
+                    text = "需要连接桌面端",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.label,
+                )
+                Spacer(Modifier.height(8.dp))
+                CupertinoText(
+                    text = "云端书需要连接桌面端才能阅读。",
+                    fontSize = 13.sp,
+                    color = palette.secondaryLabel,
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    CupertinoButton(
+                        onClick = onBack,
+                        modifier = Modifier.weight(1f),
+                        colors = CupertinoButtonDefaults.grayButtonColors(),
+                    ) {
+                        CupertinoText(text = "返回", fontSize = 14.sp)
+                    }
+                    CupertinoButton(
+                        onClick = {
+                            onBack()
+                            onOpenSettings()
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = CupertinoButtonDefaults.filledButtonColors(),
+                    ) {
+                        CupertinoText(text = "去连接", fontSize = 14.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 顶栏的圆形图标按钮。 */
+@Composable
+private fun RoundIcon(
+    icon: ImageVector,
+    contentDescription: String?,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    val source = remember { MutableInteractionSource() }
+    Box(
+        Modifier
+            .pressScale(source, pressedScale = 0.9f)
+            .size(38.dp)
+            .clip(CircleShape)
+            .clickable(interactionSource = source, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        CupertinoIcon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(19.dp),
+            tint = tint,
+        )
+    }
+}
+
+/** 底栏一个「图标 + 小字」的动作位。 */
+@Composable
+private fun ActionCell(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit,
+) {
+    val scheme = CupertinoTheme.colorScheme
+    val source = remember { MutableInteractionSource() }
+    Column(
+        modifier
+            .pressScale(source, pressedScale = 0.94f)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        icon()
+        Spacer(Modifier.height(2.dp))
+        CupertinoText(
+            text = label,
+            fontSize = 10.5.sp,
+            color = if (active) scheme.accent else scheme.secondaryLabel,
+            maxLines = 1,
         )
     }
 }
 
 @Composable
 private fun LoadingState() {
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
+            CupertinoActivityIndicator(size = 26.dp, color = palette.accent)
             Spacer(Modifier.height(14.dp))
-            Text(
+            CupertinoText(
                 text = "正在排版…",
-                style = MaterialTheme.typography.titleSmall,
-                color = palette.onSurface,
+                style = TitleSmallStyle,
+                color = palette.label,
             )
             Spacer(Modifier.height(4.dp))
-            HyperMeta("正在切分章节")
+            CupertinoText(
+                text = "正在切分章节",
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = palette.secondaryLabel,
+                maxLines = 1,
+            )
         }
     }
 }
 
 @Composable
 private fun ErrorState(message: String, onRetry: () -> Unit) {
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(horizontal = 36.dp),
         ) {
-            Text(
+            CupertinoText(
                 text = "读不了这一章",
-                style = MaterialTheme.typography.titleMedium,
-                color = palette.onSurface,
+                style = TitleMediumStyle,
+                color = palette.label,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
+            CupertinoText(
                 text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = palette.onSurfaceVariantSummary,
+                style = BodySmallStyle,
+                color = palette.secondaryLabel,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(18.dp))
-            Button(onClick = onRetry, cornerRadius = 14.dp) {
-                MiuixText(text = "重试", fontSize = 14.sp, color = palette.onPrimary)
+            CupertinoButton(
+                onClick = onRetry,
+                colors = CupertinoButtonDefaults.filledButtonColors(),
+            ) {
+                CupertinoText(text = "重试", fontSize = 14.sp)
             }
         }
     }
@@ -692,26 +785,26 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
 /** 一章的标题块。 */
 @Composable
 private fun ChapterHeadingBlock(number: Int, title: String, bottomGap: androidx.compose.ui.unit.Dp) {
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(14.dp))
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(palette.dividerLine)
+                .background(palette.separator)
         )
         Spacer(Modifier.height(12.dp))
-        Text(
+        CupertinoText(
             text = "第 ${number.toString().padStart(2, '0')} 章",
-            style = MaterialTheme.typography.labelSmall,
-            color = palette.primary,
+            style = KickerStyle,
+            color = palette.accent,
         )
         Spacer(Modifier.height(6.dp))
-        Text(
+        CupertinoText(
             text = title,
-            style = MaterialTheme.typography.headlineMedium,
-            color = palette.onSurface,
+            style = HeadingStyle,
+            color = palette.label,
         )
         Spacer(Modifier.height(bottomGap))
     }
@@ -726,7 +819,7 @@ private fun ParagraphBlock(
     highlighted: Boolean,
     bottomGap: androidx.compose.ui.unit.Dp,
 ) {
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -734,7 +827,7 @@ private fun ParagraphBlock(
                 .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
                 .then(
                     if (highlighted) {
-                        Modifier.background(palette.primary.copy(alpha = 0.09f))
+                        Modifier.background(palette.accent.copy(alpha = 0.09f))
                     } else {
                         Modifier
                     },
@@ -745,14 +838,14 @@ private fun ParagraphBlock(
                     Modifier
                         .width(2.dp)
                         .fillMaxHeight()
-                        .background(palette.primary),
+                        .background(palette.accent),
                 )
                 Spacer(Modifier.width(6.dp))
             }
-            Text(
+            CupertinoText(
                 text = text,
                 style = style,
-                color = palette.onBackground,
+                color = palette.label,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -763,7 +856,7 @@ private fun ParagraphBlock(
 /** 上一章 / 下一章的窄箭头，和进度信息挤在同一行。 */
 @Composable
 private fun Chevron(glyph: String, enabled: Boolean, onClick: () -> Unit) {
-    val palette = MiuixTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Box(
         Modifier
             .size(30.dp)
@@ -776,10 +869,10 @@ private fun Chevron(glyph: String, enabled: Boolean, onClick: () -> Unit) {
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
+        CupertinoText(
             text = glyph,
             fontSize = 18.sp,
-            color = if (enabled) palette.onSurface else palette.disabledOnSurface,
+            color = if (enabled) palette.label else palette.tertiaryLabel,
             maxLines = 1,
         )
     }

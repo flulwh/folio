@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,14 +30,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.folio.reader.core.SearchHit
+import com.folio.reader.ui.FolioSheet
 import com.folio.reader.ui.SearchUiState
-import com.folio.reader.ui.miuix.HyperSheet
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 
 /**
- * 全书搜索面板（HyperOS）：胶囊输入框 + 命中状态 + 高亮结果。
+ * 全书搜索面板（Cupertino）：搜索框 + 命中状态 + 高亮结果。
  * 命中高亮由 [SearchHit.start] / [SearchHit.end] 直接给出，UI 不再重复找词。
  */
 @Composable
@@ -50,29 +49,28 @@ fun SearchSheet(
     onDismiss: () -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
         focusRequester.requestFocus()
     }
 
-    HyperSheet(
+    FolioSheet(
         onDismiss = onDismiss,
         title = "全书搜索",
         subtitle = if (state.total > 0) "命中 ${state.total} 条" else "SEARCH",
     ) {
-        TextField(
+        CupertinoSearchTextField(
             value = state.query,
             onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .focusRequester(focusRequester),
-            label = "输入关键词",
-            useLabelAsPlaceholder = true,
-            singleLine = true,
-            cornerRadius = 16.dp,
+            placeholder = {
+                CupertinoText(text = "输入关键词", fontSize = 14.sp, color = scheme.placeholderText)
+            },
         )
 
         Row(
@@ -82,14 +80,14 @@ fun SearchSheet(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(
+                CupertinoText(
                     text = when {
                         state.running -> "正在搜索…"
                         state.cursor < 0 -> "命中 ${state.total} 条"
                         else -> "当前 ${state.cursor + 1} / ${state.total}"
                     },
                     fontSize = 12.sp,
-                    color = if (state.running) scheme.primary else scheme.onSurfaceVariantSummary,
+                    color = if (state.running) scheme.accent else scheme.secondaryLabel,
                     maxLines = 1,
                 )
             }
@@ -117,31 +115,32 @@ fun SearchSheet(
                                 onClick = { onJump(hit) },
                             )
                             .background(
-                                if (current) scheme.primaryContainer else scheme.surface
+                                if (current) scheme.accent.copy(alpha = 0.12f)
+                                else androidx.compose.ui.graphics.Color.Transparent
                             )
                             .padding(horizontal = 20.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        Text(
+                        CupertinoText(
                             text = "${index + 1}".padStart(3, '0'),
                             fontSize = 11.sp,
-                            color = if (current) scheme.primary else scheme.onSurfaceVariantSummary,
+                            color = if (current) scheme.accent else scheme.secondaryLabel,
                             modifier = Modifier.widthIn(min = 34.dp),
                         )
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(
+                            CupertinoText(
                                 text = hit.chapterTitle.ifBlank { "第 ${hit.chapterIndex + 1} 章" },
                                 fontSize = 11.sp,
-                                color = scheme.onSurfaceVariantSummary,
+                                color = scheme.secondaryLabel,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Spacer(Modifier.height(4.dp))
-                            Text(
+                            CupertinoText(
                                 text = highlighted(hit),
                                 fontSize = 14.5.sp,
-                                color = scheme.onSurface,
+                                color = scheme.label,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -151,7 +150,7 @@ fun SearchSheet(
                                 Modifier
                                     .width(3.dp)
                                     .height(20.dp)
-                                    .background(scheme.primary)
+                                    .background(scheme.accent)
                             )
                         }
                     }
@@ -161,17 +160,17 @@ fun SearchSheet(
     }
 }
 
-/** 命中摘录：关键词用朱砂薄底 + 加粗标出来。 */
+/** 命中摘录：关键词用强调色薄底 + 加粗标出来。 */
 @Composable
 private fun highlighted(hit: SearchHit): AnnotatedString {
-    val primary = MiuixTheme.colorScheme.primary
+    val accent = CupertinoTheme.colorScheme.accent
     return buildAnnotatedString {
         append(hit.excerpt)
         if (hit.start >= 0 && hit.start < hit.end && hit.end <= hit.excerpt.length) {
             addStyle(
                 SpanStyle(
-                    background = primary.copy(alpha = 0.16f),
-                    color = primary,
+                    background = accent.copy(alpha = 0.16f),
+                    color = accent,
                     fontWeight = FontWeight.Bold,
                 ),
                 hit.start,
@@ -187,17 +186,17 @@ private fun EmptyHint(text: String) {
         modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
+        CupertinoText(
             text = text,
             fontSize = 13.sp,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            color = CupertinoTheme.colorScheme.secondaryLabel,
         )
     }
 }
 
 @Composable
 private fun StepAction(label: String, enabled: Boolean, onClick: () -> Unit) {
-    Text(
+    CupertinoText(
         text = label,
         modifier = Modifier
             .clickable(
@@ -208,7 +207,7 @@ private fun StepAction(label: String, enabled: Boolean, onClick: () -> Unit) {
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
         fontSize = 12.sp,
-        color = MiuixTheme.colorScheme.onSurfaceVariantSummary.copy(
+        color = CupertinoTheme.colorScheme.accent.copy(
             alpha = if (enabled) 1f else 0.32f
         ),
         maxLines = 1,

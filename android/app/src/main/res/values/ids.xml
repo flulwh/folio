@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- EPUB 阅读器的固定容器 id：Fragment 状态恢复要求 id 稳定，不能用 generateViewId()。 -->
+    <item name="epub_container" type="id" />
+</resources>

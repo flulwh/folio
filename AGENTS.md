@@ -13,7 +13,7 @@ Folio 是**本地优先的双端阅读器**，两端各自独立、只走局域�
 | 端 | 技术栈 | 版本真相（唯一的改法） |
 | --- | --- | --- |
 | 桌面端（Electron + React） | Vite + Electron 45（`devDependencies.electron`），入口 `electron/main.js`、`src/main.jsx` | `package.json` 的 `version` |
-| 安卓端（原生客户端） | Kotlin + Jetpack Compose + Miuix | `android/app/build.gradle.kts` 的 `versionCode` / `versionName` |
+| 安卓端（原生客户端） | Kotlin + Jetpack Compose + Cupertino（Voyager 导航） | `android/app/build.gradle.kts` 的 `versionCode` / `versionName` |
 
 两端**版本线不同步**：桌面端 `2.x`，安卓端 `3.x`。这是有意为之，不要「对齐」。
 
@@ -84,7 +84,7 @@ npm run preview        # 预览 dist/
 
 **中**
 
-6. 组件不自带硬编码颜色与动画时长，颜色取 `src/design/tokens.css`，动效取 `src/motion-kit.js`（安卓端取 `Miuix` 主题与现有动效常量）。
+6. 组件不自带硬编码颜色与动画时长，颜色取 `src/design/tokens.css`，动效取 `src/motion-kit.js`（安卓端取 `ui/Theme.kt` 的色板与现有动效常量）。
 7. 主线程不做重活：解析、解码、大文件 IO 放后台（桌面端 `utilityProcess`/异步，安卓端 `Dispatchers.Default`）。
 8. 删除代码要删干净：不留 `// removed` 注释、不保留只为兼容旧写法的别名。
 
@@ -101,7 +101,7 @@ npm run preview        # 预览 dist/
 
 **改安卓端功能**
 
-1. 逻辑先进 `AppViewModel` / `data/`，Compose 只做展示。
+1. 逻辑先进 `ui/session/SessionStore.kt` / `data/`，Compose 只做展示。
 2. 改 `build.gradle.kts` 的 `versionCode`（+1）与 `versionName`。
 3. 跑 `./gradlew testDebugUnitTest assembleDebug`。
 4. 在 `CHANGELOG.md` 顶部加一条 `## [Android x.y.z] — 日期`。

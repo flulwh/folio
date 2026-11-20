@@ -115,4 +115,43 @@ class BookImporterTest {
         assertEquals(SyncState.EXCLUDED, book.syncState)
         assertEquals(false, book.syncableSize)
     }
+
+    @Test
+    fun EPUB按原字节落盘且标为不同步() {
+        val epub = epubBytes()
+        val outcome = importer.importBytes("三体.epub", epub)
+        assertTrue("应该导入成功：$outcome", outcome is BookImporter.Outcome.Imported)
+        val book = (outcome as BookImporter.Outcome.Imported).book
+        assertEquals("epub", book.format)
+        assertTrue(book.isEpub)
+        assertEquals("EPUB 不同步，只能是 EXCLUDED", SyncState.EXCLUDED, book.syncState)
+        assertEquals("EPUB 不去重编码，哈希取原始字节", HashUtils.sha1(epub), book.contentHash)
+
+        val saved = files.epubFileFor(book.id)
+        assertTrue("EPUB 应该落在 books/<id>.epub", saved.isFile)
+        assertTrue("必须原样保存，重新打包就坏了", saved.readBytes().contentEquals(epub))
+    }
+
+    @Test
+    fun 没有扩展名也能按内容认出EPUB() {
+        val outcome = importer.importBytes("三体", epubBytes())
+        val book = (outcome as BookImporter.Outcome.Imported).book
+        assertTrue(book.isEpub)
+    }
+
+    @Test
+    fun EPUB重复导入只留一本() {
+        val epub = epubBytes()
+        val first = importer.importBytes("三体.epub", epub) as BookImporter.Outcome.Imported
+        val second = importer.importBytes("三体(1).epub", epub)
+        assertTrue("第二份应该是重复：$second", second is BookImporter.Outcome.Duplicate)
+        assertEquals(first.book.id, (second as BookImporter.Outcome.Duplicate).existingId)
+        assertEquals(1, books.read().size)
+    }
+
+    /** 最小的「像 EPUB」的字节：zip 头 + 规范要求的 mimetype 串。 */
+    private fun epubBytes(): ByteArray =
+        byteArrayOf(0x50, 0x4B, 0x03, 0x04) +
+            "application/epub+zip".toByteArray(Charsets.US_ASCII) +
+            ByteArray(64) { 0x00 }
 }

@@ -1,9 +1,10 @@
 package com.folio.reader.ui
 
+import com.folio.reader.ui.model.FontsModel
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,9 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,12 +36,14 @@ import androidx.compose.ui.unit.sp
 import com.folio.reader.data.CatalogFont
 import com.folio.reader.data.FontStore
 import com.folio.reader.data.InstalledFont
-import com.folio.reader.ui.miuix.GroupLabel
-import com.folio.reader.ui.miuix.Hairline
-import com.folio.reader.ui.miuix.pressScale
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
+import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
+import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 
 /**
  * 字体商店。
@@ -53,10 +53,11 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * 回调推送，UI 只管画。
  */
 @Composable
-fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
+fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
+    val vm = model.session
     val storeState by vm.fontStore.collectAsState()
     val settings by vm.settingsState.collectAsState()
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val context = LocalContext.current
     val store = remember { FontStore(context.filesDir) }
     // 已安装字体的 FontFamily 只算一次，别在每张卡片里读 installed.json
@@ -68,13 +69,16 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
         if (storeState.catalog.isEmpty() && storeState.installing.isBlank()) vm.loadFontStore()
     }
 
-    Column(Modifier.fillMaxSize().background(scheme.background)) {
+    Column(Modifier.fillMaxSize().background(scheme.systemBackground)) {
         FontStoreHeader(onBack = onBack)
 
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 GroupLabel(text = "已安装 ${storeState.installed.size}")
-                Hairline(inset = 16.dp)
+                CupertinoHorizontalDivider(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                    color = scheme.separator,
+                )
                 // 「系统字体」永远在第一位：选它等于清空商店字体
                 SystemFontRow(
                     active = settings.userFontId.isBlank(),
@@ -85,11 +89,11 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
 
             if (storeState.installed.isEmpty()) {
                 item {
-                    Text(
+                    CupertinoText(
                         text = "还没有装字体。下面挑一款下载，装好就能在正文里用。",
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
                         fontSize = 12.sp,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                     )
                 }
             }
@@ -103,7 +107,10 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                     onSelect = { vm.selectUserFont(font.id) },
                     onRemove = { vm.removeFont(font.id) },
                 )
-                Hairline(inset = 16.dp)
+                CupertinoHorizontalDivider(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                    color = scheme.separator,
+                )
             }
 
             item {
@@ -112,35 +119,35 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
+                    CupertinoText(
                         text = "字体商店",
                         modifier = Modifier.weight(1f),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                     )
-                    TextButton(
+                    PlainAction(
                         text = if (storeState.loading) "刷新中…" else "刷新",
                         onClick = { if (!storeState.loading) vm.loadFontStore(force = true) },
                     )
                 }
                 if (storeState.error.isNotBlank()) {
-                    Text(
+                    CupertinoText(
                         text = storeState.error,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                         fontSize = 12.sp,
-                        color = scheme.primary,
+                        color = scheme.accent,
                     )
                 }
             }
 
             if (storeState.catalog.isEmpty() && storeState.loading) {
                 item {
-                    Text(
+                    CupertinoText(
                         text = "正在获取字体目录…",
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         fontSize = 12.sp,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                     )
                 }
             }
@@ -158,11 +165,14 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                     onSelect = { vm.selectUserFont(font.id) },
                     onRemove = { vm.removeFont(font.id) },
                 )
-                Hairline(inset = 16.dp)
+                CupertinoHorizontalDivider(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp),
+                    color = scheme.separator,
+                )
             }
 
             item {
-                Text(
+                CupertinoText(
                     text = when (storeState.source) {
                         "cache" -> "当前显示的是本地缓存目录，联网后会更新。字体来自各上游开源项目（OFL-1.1），只装在手机本地。"
                         "bundled" -> "当前显示的是安装包自带的目录，联网后「刷新」会更新。字体来自各上游开源项目（OFL-1.1），只装在手机本地。"
@@ -171,7 +181,7 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                     fontSize = 11.sp,
                     lineHeight = 17.sp,
-                    color = scheme.onSurfaceVariantSummary,
+                    color = scheme.secondaryLabel,
                 )
             }
         }
@@ -180,11 +190,11 @@ fun FontStoreScreen(vm: AppViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun FontStoreHeader(onBack: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(scheme.background)
+            .background(scheme.systemBackground)
             .statusBarsPadding()
             .padding(horizontal = 8.dp),
     ) {
@@ -195,40 +205,40 @@ private fun FontStoreHeader(onBack: () -> Unit) {
                     .pressScale(source, pressedScale = 0.92f)
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(scheme.secondary)
+                    .background(scheme.secondarySystemFill)
                     .clickable(interactionSource = source, indication = null, onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                CupertinoIcon(
+                    imageVector = CupertinoIcons.Outlined.ChevronBackward,
                     contentDescription = "返回",
                     modifier = Modifier.size(18.dp),
-                    tint = scheme.onSurface,
+                    tint = scheme.label,
                 )
             }
         }
-        Text(
+        CupertinoText(
             text = "字体",
             modifier = Modifier.padding(start = 8.dp, top = 14.dp),
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.6).sp,
-            color = scheme.onSurface,
+            color = scheme.label,
         )
-        Text(
+        CupertinoText(
             text = "与桌面端同一份目录 · 装好即用",
             modifier = Modifier.padding(start = 8.dp, top = 5.dp, bottom = 10.dp),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 0.3.sp,
-            color = scheme.onSurfaceVariantSummary,
+            color = scheme.secondaryLabel,
         )
     }
 }
 
 @Composable
 private fun SystemFontRow(active: Boolean, systemLabel: String, onClick: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -237,15 +247,15 @@ private fun SystemFontRow(active: Boolean, systemLabel: String, onClick: () -> U
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(text = "系统字体", fontSize = 16.sp, color = scheme.onSurface)
-            Text(
+            CupertinoText(text = "系统字体", fontSize = 16.sp, color = scheme.label)
+            CupertinoText(
                 text = "跟随设置里的「$systemLabel」",
                 fontSize = 11.5.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
             )
         }
         if (active) {
-            Text(text = "使用中", fontSize = 12.sp, color = scheme.primary)
+            CupertinoText(text = "使用中", fontSize = 12.sp, color = scheme.accent)
         }
     }
 }
@@ -258,7 +268,7 @@ private fun InstalledFontRow(
     onSelect: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -267,32 +277,32 @@ private fun InstalledFontRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
+            CupertinoText(
                 text = font.name,
                 fontSize = 16.sp,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            Text(
+            CupertinoText(
                 text = "${font.name} 0123 · ${formatSize(font.size)}",
                 fontSize = 17.sp,
                 fontFamily = family ?: FontFamily.Serif,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
         if (active) {
-            Text(
+            CupertinoText(
                 text = "使用中",
                 modifier = Modifier.padding(horizontal = 6.dp),
                 fontSize = 12.sp,
-                color = scheme.primary,
+                color = scheme.accent,
             )
         }
-        TextButton(text = "移除", onClick = onRemove)
+        PlainAction(text = "移除", onClick = onRemove)
     }
 }
 
@@ -308,51 +318,55 @@ private fun CatalogFontRow(
     onSelect: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(
+                CupertinoText(
                     text = font.name,
                     fontSize = 16.sp,
-                    color = scheme.onSurface,
+                    color = scheme.label,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
+                CupertinoText(
                     text = "${font.family} · ${font.file.format.uppercase()} · ${formatSize(font.file.size)}",
                     fontSize = 11.sp,
-                    color = scheme.onSurfaceVariantSummary,
+                    color = scheme.secondaryLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
             when {
-                installing -> Text(text = progressLabel(received, total), fontSize = 12.sp, color = scheme.primary)
-                installed != null -> TextButton(text = "移除", onClick = onRemove)
-                else -> TextButton(text = "安装", onClick = onInstall)
+                installing -> CupertinoText(
+                    text = progressLabel(received, total),
+                    fontSize = 12.sp,
+                    color = scheme.accent,
+                )
+                installed != null -> PlainAction(text = "移除", onClick = onRemove)
+                else -> PlainAction(text = "安装", onClick = onInstall)
             }
         }
 
         if (font.description.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
-            Text(
+            CupertinoText(
                 text = font.description,
                 fontSize = 12.sp,
                 lineHeight = 18.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
             )
         }
 
         if (font.preview.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(
+            CupertinoText(
                 text = font.preview,
                 fontSize = 17.sp,
                 lineHeight = 26.sp,
                 // 没装时先用正常字体占位，装完立刻换成真字形
                 fontFamily = family ?: FontFamily.Default,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -366,22 +380,19 @@ private fun CatalogFontRow(
             installed != null -> {
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
+                    CupertinoText(
                         text = "已安装",
                         fontSize = 12.sp,
-                        color = scheme.primary,
+                        color = scheme.accent,
                     )
                     Spacer(Modifier.width(12.dp))
-                    TextButton(
-                        text = "使用",
-                        onClick = onSelect,
-                    )
+                    PlainAction(text = "使用", onClick = onSelect)
                     Spacer(Modifier.weight(1f))
                     if (font.license.spdx.isNotBlank()) {
-                        Text(
+                        CupertinoText(
                             text = font.license.spdx,
                             fontSize = 10.5.sp,
-                            color = scheme.onSurfaceVariantSummary,
+                            color = scheme.secondaryLabel,
                         )
                     }
                 }
@@ -389,10 +400,10 @@ private fun CatalogFontRow(
             else -> {
                 if (font.license.spdx.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
-                    Text(
+                    CupertinoText(
                         text = "许可：${font.license.name.ifBlank { font.license.spdx }}",
                         fontSize = 10.5.sp,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                     )
                 }
             }
@@ -400,23 +411,35 @@ private fun CatalogFontRow(
     }
 }
 
+/** 小号文字按钮：Cupertino 纯净按钮，不占一整行。 */
+@Composable
+private fun PlainAction(text: String, onClick: () -> Unit) {
+    CupertinoButton(
+        onClick = onClick,
+        colors = CupertinoButtonDefaults.plainButtonColors(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        CupertinoText(text = text, fontSize = 12.sp)
+    }
+}
+
 @Composable
 private fun DownloadBar(received: Long, total: Long) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val fraction = if (total > 0L) (received.toFloat() / total).coerceIn(0f, 1f) else 0f
     Box(
         Modifier
             .fillMaxWidth()
             .height(3.dp)
             .clip(CircleShape)
-            .background(scheme.secondary),
+            .background(scheme.secondarySystemFill),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(fraction)
                 .height(3.dp)
                 .clip(CircleShape)
-                .background(scheme.primary),
+                .background(scheme.accent),
         )
     }
 }

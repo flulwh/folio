@@ -1,12 +1,13 @@
 package com.folio.reader.ui
 
+import com.folio.reader.ui.model.SettingsModel
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,9 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,23 +45,28 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
-import com.folio.reader.ui.miuix.FolioMotion
-import com.folio.reader.ui.miuix.GroupLabel
-import com.folio.reader.ui.miuix.Hairline
-import com.folio.reader.ui.miuix.Reveal
-import com.folio.reader.ui.miuix.pressScale
+import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
+import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
+import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
+import io.github.alexzhirkevich.cupertino.CupertinoSlider
+import io.github.alexzhirkevich.cupertino.CupertinoSwitch
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.CupertinoTextField
+import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
+import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
+import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronBackward
+import io.github.alexzhirkevich.cupertino.section.CupertinoSection
+import io.github.alexzhirkevich.cupertino.section.SectionItem
+import io.github.alexzhirkevich.cupertino.section.SectionLink
+import io.github.alexzhirkevich.cupertino.section.SectionScope
+import io.github.alexzhirkevich.cupertino.section.SectionStyle
+import io.github.alexzhirkevich.cupertino.section.section
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import java.util.Locale
 import kotlin.math.roundToInt
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.extra.SuperArrow
-import top.yukonga.miuix.kmp.extra.SuperDropdown
-import top.yukonga.miuix.kmp.extra.SuperSwitch
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** 漫画阅读方向两档。 */
 private val DirectionChoices = listOf(
@@ -75,22 +78,23 @@ private val DirectionChoices = listOf(
 private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 
 /**
- * 设置页。
+ * 设置页（Cupertino）。
  *
- * 整页就是一张表：分组标题 + 行 + 发丝线，没有卡片、没有圆角容器。
- * 行零件全部用 Miuix 自带组件（`SuperSwitch` / `SuperArrow` / `SuperDropdown` /
- * `BasicComponent`），自己只写带数值的滑杆行、阅读排版预览和底色选择。
+ * 四组 InsetGrouped 分组：连接 / 同步 / 阅读 / 本机。
+ * 开关、滑杆、下拉全部用 Cupertino 原生件，只有「排版预览」与「底色选择」是内容块。
  */
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
 fun SettingsScreen(
-    vm: AppViewModel,
+    model: SettingsModel,
     onBack: () -> Unit,
     onOpenSyncStatus: () -> Unit,
     onOpenFontStore: () -> Unit,
 ) {
+    val vm = model.session
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     var showDiagnostics by remember { mutableStateOf(false) }
 
     var urlText by remember { mutableStateOf(state.serverUrl) }
@@ -102,7 +106,7 @@ fun SettingsScreen(
         if (state.token != tokenText) tokenText = state.token
     }
 
-    Column(Modifier.fillMaxSize().background(scheme.background)) {
+    Column(Modifier.fillMaxSize().background(scheme.systemBackground)) {
         SettingsHeader(
             appVersion = state.appVersion,
             serverVersion = state.serverVersion,
@@ -116,401 +120,414 @@ fun SettingsScreen(
             /* ---------------- 连接 ---------------- */
             item("connect") {
                 Reveal(index = 0) {
-                GroupLabel(text = "连接", topGap = 12.dp)
-                Hairline(inset = 16.dp)
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    TextField(
-                        value = urlText,
-                        onValueChange = {
-                            urlText = it
-                            vm.updateServerUrl(it)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = "http://192.168.1.20:7788",
-                        useLabelAsPlaceholder = true,
-                        singleLine = true,
-                        cornerRadius = 10.dp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    TextField(
-                        value = tokenText,
-                        onValueChange = {
-                            tokenText = it
-                            vm.updateToken(it)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = "访问码（桌面端「设置 → 网络」）",
-                        useLabelAsPlaceholder = true,
-                        singleLine = true,
-                        cornerRadius = 10.dp,
-                    )
-                }
-                Hairline(inset = 16.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Button(
-                        onClick = { vm.testConnection() },
-                        enabled = !state.searching,
-                        cornerRadius = 10.dp,
-                        minHeight = 36.dp,
-                    ) {
-                        Text("测试连接", fontSize = 13.sp, color = scheme.onPrimary)
-                    }
-                    if (state.searching) {
-                        TextButton(
-                            text = "取消",
-                            onClick = { vm.cancelDiscover() },
-                            cornerRadius = 10.dp,
-                            minHeight = 36.dp,
-                        )
-                    } else if (state.connection != ConnectionState.UNKNOWN) {
-                        TextButton(
-                            text = "断开",
-                            onClick = { vm.disconnect() },
-                            cornerRadius = 10.dp,
-                            minHeight = 36.dp,
-                        )
-                    }
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = if (state.searching) "搜索中…" else "搜索桌面端",
-                        modifier = Modifier
-                            .clickable(enabled = !state.searching) { vm.discover { } }
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        fontSize = 12.5.sp,
-                        color = if (state.searching) scheme.disabledOnSurface else scheme.primary,
-                        maxLines = 1,
-                    )
-                }
-                Hairline(inset = 16.dp)
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val dotColor by animateColorAsState(
-                        targetValue = if (state.connection.healthy) BrandGreen else scheme.primary,
-                        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
-                        label = "connection-dot",
-                    )
-                    Box(
-                        Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        text = if (state.connection.healthy) {
-                            state.connectionDetail.ifBlank { state.connection.label }
-                        } else {
-                            state.connection.label
-                        },
-                        modifier = Modifier.weight(1f),
-                        fontSize = 11.5.sp,
-                        color = scheme.onSurfaceVariantSummary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (state.discovered.isNotEmpty()) {
-                    state.discovered.forEach { url ->
-                        Hairline(inset = 16.dp)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    urlText = url
-                                    vm.updateServerUrl(url)
-                                }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = url,
-                                modifier = Modifier.weight(1f),
-                                fontSize = 12.5.sp,
-                                fontFamily = FontFamily.Monospace,
-                                color = scheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("连接")) {
+                        Item(key = "url") {
+                            CupertinoTextField(
+                                value = urlText,
+                                onValueChange = {
+                                    urlText = it
+                                    vm.updateServerUrl(it)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = {
+                                    CupertinoText(
+                                        text = "http://192.168.1.20:7788",
+                                        fontSize = 14.sp,
+                                        color = scheme.placeholderText,
+                                    )
+                                },
                             )
-                            Text(text = "填入", fontSize = 11.5.sp, color = scheme.primary)
+                        }
+                        Item(key = "token") {
+                            CupertinoTextField(
+                                value = tokenText,
+                                onValueChange = {
+                                    tokenText = it
+                                    vm.updateToken(it)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = {
+                                    CupertinoText(
+                                        text = "访问码（桌面端「设置 → 网络」）",
+                                        fontSize = 14.sp,
+                                        color = scheme.placeholderText,
+                                    )
+                                },
+                            )
+                        }
+                        Item(key = "actions") {
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    CupertinoButton(
+                                        onClick = { vm.testConnection() },
+                                        enabled = !state.searching,
+                                        colors = CupertinoButtonDefaults.filledButtonColors(),
+                                    ) {
+                                        CupertinoText(text = "测试连接", fontSize = 13.sp)
+                                    }
+                                    if (state.searching) {
+                                        CupertinoButton(
+                                            onClick = { vm.cancelDiscover() },
+                                            colors = CupertinoButtonDefaults.grayButtonColors(),
+                                        ) {
+                                            CupertinoText(text = "取消", fontSize = 13.sp)
+                                        }
+                                    } else if (state.connection != ConnectionState.UNKNOWN) {
+                                        CupertinoButton(
+                                            onClick = { vm.disconnect() },
+                                            colors = CupertinoButtonDefaults.grayButtonColors(),
+                                        ) {
+                                            CupertinoText(text = "断开", fontSize = 13.sp)
+                                        }
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                    CupertinoText(
+                                        text = if (state.searching) "搜索中…" else "搜索桌面端",
+                                        modifier = Modifier
+                                            .clickable(enabled = !state.searching) { vm.discover { } }
+                                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                                        fontSize = 12.5.sp,
+                                        color = if (state.searching) scheme.tertiaryLabel else scheme.accent,
+                                        maxLines = 1,
+                                    )
+                                }
+                                Spacer(Modifier.height(10.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val dotColor by animateColorAsState(
+                                        targetValue = if (state.connection.healthy) BrandGreen else scheme.accent,
+                                        animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
+                                        label = "connection-dot",
+                                    )
+                                    Box(
+                                        Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(dotColor)
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    CupertinoText(
+                                        text = if (state.connection.healthy) {
+                                            state.connectionDetail.ifBlank { state.connection.label }
+                                        } else {
+                                            state.connection.label
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        fontSize = 11.5.sp,
+                                        color = scheme.secondaryLabel,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                        if (state.discovered.isNotEmpty()) {
+                            state.discovered.forEach { url ->
+                                Item(key = "discovered-$url") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                urlText = url
+                                                vm.updateServerUrl(url)
+                                            },
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        CupertinoText(
+                                            text = url,
+                                            modifier = Modifier.weight(1f),
+                                            fontSize = 12.5.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = scheme.label,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        CupertinoText(text = "填入", fontSize = 11.5.sp, color = scheme.accent)
+                                    }
+                                }
+                            }
+                        } else {
+                            Item(key = "discover-hint") {
+                                CupertinoText(
+                                    text = "桌面端要开着「局域网面板」；端口在桌面端「设置 → 网络」里。",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    fontSize = 11.5.sp,
+                                    color = scheme.secondaryLabel,
+                                )
+                            }
+                        }
+                        Item(key = "sync-entry") {
+                            SectionLink(
+                                onClick = onOpenSyncStatus,
+                                caption = { CupertinoText(text = "逐本查看", fontSize = 12.sp) },
+                            ) {
+                                CupertinoText(text = "同步状态", fontSize = 15.sp, color = scheme.label)
+                            }
                         }
                     }
-                } else {
-                    Hairline(inset = 16.dp)
-                    Text(
-                        text = "桌面端要开着「局域网面板」；端口在桌面端「设置 → 网络」里。",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        fontSize = 11.5.sp,
-                        color = scheme.onSurfaceVariantSummary,
-                    )
-                }
-                Hairline(inset = 16.dp)
-                SuperArrow(
-                    title = "同步状态",
-                    summary = "逐本查看",
-                    onClick = onOpenSyncStatus,
-                )
-                Hairline(inset = 16.dp)
                 }
             }
 
             /* ---------------- 同步 ---------------- */
             item("sync") {
                 Reveal(index = 1) {
-                GroupLabel(text = "同步")
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.autoSync,
-                    onCheckedChange = vm::updateAutoSync,
-                    title = "自动同步",
-                    summary = "连上桌面端时自动对齐书架与进度",
-                )
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.autoTransferUnder20MB,
-                    onCheckedChange = vm::updateAutoTransfer,
-                    title = "自动上传 20MB 以内的书",
-                    summary = "更大的书等你点「下载到手机」",
-                )
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.wifiOnly,
-                    onCheckedChange = vm::updateWifiOnly,
-                    title = "仅在 Wi-Fi 下传输",
-                    summary = "按流量计费的网络里打开它",
-                )
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.hideRemoteWhenOffline,
-                    onCheckedChange = vm::updateHideRemote,
-                    title = "未连接时隐藏在线书",
-                    summary = "免得点进去只看到一句报错",
-                )
-                Hairline(inset = 16.dp)
-                SuperArrow(
-                    title = "立即同步",
-                    summary = lastSyncLabel(state.lastSyncAt),
-                    rightText = if (shelf.syncing) "同步中…" else "同步",
-                    onClick = if (shelf.syncing) null else ({ vm.syncNow() }),
-                )
-                if (state.conflictCount > 0) {
-                    Hairline(inset = 16.dp)
-                    SuperArrow(
-                        title = "${state.conflictCount} 处冲突",
-                        summary = "同名不同内容，需要你选保留哪一版",
-                        rightText = "处理",
-                        onClick = onOpenSyncStatus,
-                    )
-                }
-                Hairline(inset = 16.dp)
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("同步")) {
+                        SwitchItem(
+                            title = "自动同步",
+                            summary = "连上桌面端时自动对齐书架与进度",
+                            checked = state.autoSync,
+                            onCheckedChange = vm::updateAutoSync,
+                        )
+                        SwitchItem(
+                            title = "自动上传 20MB 以内的书",
+                            summary = "更大的书等你点「下载到手机」",
+                            checked = state.autoTransferUnder20MB,
+                            onCheckedChange = vm::updateAutoTransfer,
+                        )
+                        SwitchItem(
+                            title = "仅在 Wi-Fi 下传输",
+                            summary = "按流量计费的网络里打开它",
+                            checked = state.wifiOnly,
+                            onCheckedChange = vm::updateWifiOnly,
+                        )
+                        SwitchItem(
+                            title = "未连接时隐藏在线书",
+                            summary = "免得点进去只看到一句报错",
+                            checked = state.hideRemoteWhenOffline,
+                            onCheckedChange = vm::updateHideRemote,
+                        )
+                        Item(key = "sync-now") {
+                            SectionLink(
+                                onClick = { if (!shelf.syncing) vm.syncNow() },
+                                enabled = !shelf.syncing,
+                                caption = { CupertinoText(text = lastSyncLabel(state.lastSyncAt), fontSize = 12.sp) },
+                            ) {
+                                CupertinoText(
+                                    text = if (shelf.syncing) "同步中…" else "立即同步",
+                                    fontSize = 15.sp,
+                                    color = scheme.label,
+                                )
+                            }
+                        }
+                        if (state.conflictCount > 0) {
+                            Item(key = "conflicts") {
+                                SectionLink(
+                                    onClick = onOpenSyncStatus,
+                                    caption = { CupertinoText(text = "同名不同内容，需要你选保留哪一版", fontSize = 12.sp) },
+                                ) {
+                                    CupertinoText(
+                                        text = "${state.conflictCount} 处冲突",
+                                        fontSize = 15.sp,
+                                        color = scheme.accent,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             /* ---------------- 阅读 ---------------- */
             item("read") {
                 Reveal(index = 2) {
-                GroupLabel(text = "阅读")
-                Hairline(inset = 16.dp)
-                ReadingPreview(state)
-                Hairline(inset = 16.dp)
-                SuperDropdown(
-                    items = listOf("上下滚动", "左右翻页"),
-                    selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
-                    title = "阅读方式",
-                    onSelectedIndexChange = {
-                        vm.updateReadingMode(
-                            if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("阅读")) {
+                        Item(key = "preview") { ReadingPreview(state) }
+                        Item(key = "mode") {
+                            SegmentedRow(
+                                title = "阅读方式",
+                                options = listOf("上下滚动", "左右翻页"),
+                                selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
+                                onSelect = {
+                                    vm.updateReadingMode(
+                                        if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                                    )
+                                },
+                            )
+                        }
+                        SliderItem(
+                            title = "字号",
+                            valueLabel = "${state.fontSizeSp.roundToInt()}sp",
+                            value = state.fontSizeSp.coerceIn(12f, 32f),
+                            onValueChange = vm::updateFontSize,
+                            minValue = 12f,
+                            maxValue = 32f,
                         )
-                    },
-                )
-                Hairline(inset = 16.dp)
-                SliderRow(
-                    title = "字号",
-                    valueLabel = "${state.fontSizeSp.roundToInt()}sp",
-                    value = state.fontSizeSp.coerceIn(12f, 32f),
-                    onValueChange = vm::updateFontSize,
-                    minValue = 12f,
-                    maxValue = 32f,
-                    decimalPlaces = 0,
-                )
-                Hairline(inset = 16.dp)
-                SliderRow(
-                    title = "行距",
-                    valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
-                    value = state.lineHeight.coerceIn(1.3f, 2.4f),
-                    onValueChange = vm::updateLineHeight,
-                    minValue = 1.3f,
-                    maxValue = 2.4f,
-                    decimalPlaces = 2,
-                )
-                Hairline(inset = 16.dp)
-                SliderRow(
-                    title = "字距",
-                    valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
-                    value = state.letterSpacingEm.coerceIn(0f, 0.12f),
-                    onValueChange = vm::updateLetterSpacing,
-                    minValue = 0f,
-                    maxValue = 0.12f,
-                    decimalPlaces = 3,
-                )
-                Hairline(inset = 16.dp)
-                SliderRow(
-                    title = "段距",
-                    valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
-                    value = state.paragraphSpacing.coerceIn(0f, 2f),
-                    onValueChange = vm::updateParagraphSpacing,
-                    minValue = 0f,
-                    maxValue = 2f,
-                    decimalPlaces = 2,
-                )
-                Hairline(inset = 16.dp)
-                SliderRow(
-                    title = "页边距",
-                    valueLabel = "${state.pagePadding}dp",
-                    value = state.pagePadding.toFloat().coerceIn(12f, 48f),
-                    onValueChange = { vm.updatePagePadding(it.roundToInt()) },
-                    minValue = 12f,
-                    maxValue = 48f,
-                    decimalPlaces = 0,
-                )
-                Hairline(inset = 16.dp)
-                SuperDropdown(
-                    items = listOf("宋体", "黑体"),
-                    selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
-                    title = "系统字体",
-                    // 选系统字体等于放弃商店字体：两个入口共用同一份「当前正文字体」
-                    onSelectedIndexChange = { index ->
-                        vm.selectUserFont("")
-                        vm.updateFontFamily(
-                            if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                        SliderItem(
+                            title = "行距",
+                            valueLabel = String.format(Locale.US, "%.2f×", state.lineHeight),
+                            value = state.lineHeight.coerceIn(1.3f, 2.4f),
+                            onValueChange = vm::updateLineHeight,
+                            minValue = 1.3f,
+                            maxValue = 2.4f,
                         )
-                    },
-                )
-                Hairline(inset = 16.dp)
-                SuperArrow(
-                    title = "字体商店",
-                    summary = "开源中文字体，与桌面端同一份目录",
-                    rightText = "打开",
-                    onClick = onOpenFontStore,
-                )
-                Hairline(inset = 16.dp)
-                SuperDropdown(
-                    items = AutoScrollChoices,
-                    selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
-                    title = "自动滚动",
-                    onSelectedIndexChange = vm::updateAutoScrollSpeed,
-                )
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.firstLineIndent,
-                    onCheckedChange = vm::updateFirstLineIndent,
-                    title = "首行缩进",
-                    summary = "每段首行缩进两个字符",
-                )
-                Hairline(inset = 16.dp)
-                SuperSwitch(
-                    checked = state.keepScreenOn,
-                    onCheckedChange = vm::updateKeepScreenOn,
-                    title = "保持常亮",
-                    summary = "阅读时不熄屏",
-                )
-                Hairline(inset = 16.dp)
-                PaletteRow(
-                    selectedId = state.themePreset,
-                    onSelect = vm::updateThemePreset,
-                )
-                Hairline(inset = 16.dp)
-                SuperDropdown(
-                    items = DirectionChoices.map { it.first },
-                    selectedIndex = DirectionChoices
-                        .indexOfFirst { it.second == state.comicDirection }
-                        .coerceAtLeast(0),
-                    title = "漫画方向",
-                    onSelectedIndexChange = { index ->
-                        vm.updateComicDirection(DirectionChoices[index].second)
-                    },
-                )
-                Hairline(inset = 16.dp)
+                        SliderItem(
+                            title = "字距",
+                            valueLabel = String.format(Locale.US, "%.3f em", state.letterSpacingEm),
+                            value = state.letterSpacingEm.coerceIn(0f, 0.12f),
+                            onValueChange = vm::updateLetterSpacing,
+                            minValue = 0f,
+                            maxValue = 0.12f,
+                        )
+                        SliderItem(
+                            title = "段距",
+                            valueLabel = String.format(Locale.US, "%.2f×", state.paragraphSpacing),
+                            value = state.paragraphSpacing.coerceIn(0f, 2f),
+                            onValueChange = vm::updateParagraphSpacing,
+                            minValue = 0f,
+                            maxValue = 2f,
+                        )
+                        SliderItem(
+                            title = "页边距",
+                            valueLabel = "${state.pagePadding}dp",
+                            value = state.pagePadding.toFloat().coerceIn(12f, 48f),
+                            onValueChange = { vm.updatePagePadding(it.roundToInt()) },
+                            minValue = 12f,
+                            maxValue = 48f,
+                        )
+                        Item(key = "font-family") {
+                            SegmentedRow(
+                                title = "系统字体",
+                                options = listOf("宋体", "黑体"),
+                                selectedIndex = if (state.fontFamily == SettingsStore.FONT_SANS) 1 else 0,
+                                onSelect = { index ->
+                                    vm.selectUserFont("")
+                                    vm.updateFontFamily(
+                                        if (index == 1) SettingsStore.FONT_SANS else SettingsStore.FONT_SERIF
+                                    )
+                                },
+                            )
+                        }
+                        Item(key = "font-store") {
+                            SectionLink(
+                                onClick = onOpenFontStore,
+                                caption = { CupertinoText(text = "开源中文字体，与桌面端同一份目录", fontSize = 12.sp) },
+                            ) {
+                                CupertinoText(text = "字体商店", fontSize = 15.sp, color = scheme.label)
+                            }
+                        }
+                        Item(key = "auto-scroll") {
+                            SegmentedRow(
+                                title = "自动滚动",
+                                options = AutoScrollChoices,
+                                selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
+                                onSelect = vm::updateAutoScrollSpeed,
+                            )
+                        }
+                        SwitchItem(
+                            title = "首行缩进",
+                            summary = "每段首行缩进两个字符",
+                            checked = state.firstLineIndent,
+                            onCheckedChange = vm::updateFirstLineIndent,
+                        )
+                        SwitchItem(
+                            title = "保持常亮",
+                            summary = "阅读时不熄屏",
+                            checked = state.keepScreenOn,
+                            onCheckedChange = vm::updateKeepScreenOn,
+                        )
+                        Item(key = "palette") {
+                            PaletteRow(
+                                selectedId = state.themePreset,
+                                onSelect = vm::updateThemePreset,
+                            )
+                        }
+                        Item(key = "comic-direction") {
+                            SegmentedRow(
+                                title = "漫画方向",
+                                options = DirectionChoices.map { it.first },
+                                selectedIndex = DirectionChoices
+                                    .indexOfFirst { it.second == state.comicDirection }
+                                    .coerceAtLeast(0),
+                                onSelect = { index ->
+                                    vm.updateComicDirection(DirectionChoices[index].second)
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
             /* ---------------- 本机 ---------------- */
             item("local") {
                 Reveal(index = 3) {
-                GroupLabel(text = "本机")
-                Hairline(inset = 16.dp)
-                ValueRow(title = "本机正文", value = formatSize(state.localBytes))
-                Hairline(inset = 16.dp)
-                ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes))
-                Hairline(inset = 16.dp)
-                ValueRow(
-                    title = "磁盘缓存",
-                    value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
-                    valueColor = if (state.cacheIsZero) scheme.primary else null,
-                )
-                Hairline(inset = 16.dp)
-                BasicComponent(
-                    title = "清空内存缓存",
-                    summary = "3.0 起正文不留磁盘副本",
-                    onClick = { vm.clearMemoryCache() },
-                    rightActions = {
-                        Text(
-                            text = "清理",
-                            fontSize = 13.sp,
-                            color = scheme.primary,
-                            maxLines = 1,
-                        )
-                    },
-                )
-                Hairline(inset = 16.dp)
-                ValueRow(title = "本机版本", value = state.appVersion)
-                Hairline(inset = 16.dp)
-                ValueRow(
-                    title = "桌面端",
-                    value = state.serverVersion.ifBlank { "未连接" },
-                )
-                Hairline(inset = 16.dp)
-                SuperArrow(
-                    title = "诊断信息",
-                    summary = state.connectionDetail.ifBlank { "还没有连过桌面端" },
-                    rightText = if (showDiagnostics) "收起" else "展开",
-                    onClick = { showDiagnostics = !showDiagnostics },
-                )
-                if (showDiagnostics) {
-                    Hairline(inset = 16.dp)
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
-                        Text(
-                            text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
-                            fontSize = 11.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = scheme.onSurfaceVariantSummary,
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "连接状态：${state.connection.label}",
-                            fontSize = 11.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = scheme.onSurfaceVariantSummary,
-                        )
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("本机")) {
+                        Item(key = "local-bytes") { ValueRow(title = "本机正文", value = formatSize(state.localBytes)) }
+                        Item(key = "memory") { ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes)) }
+                        Item(key = "disk") {
+                            ValueRow(
+                                title = "磁盘缓存",
+                                value = if (state.cacheIsZero) "0 B ✓" else formatSize(state.cacheBytes),
+                                valueColor = if (state.cacheIsZero) scheme.accent else null,
+                            )
+                        }
+                        Item(key = "clear-cache") {
+                            SectionLink(
+                                onClick = { vm.clearMemoryCache() },
+                                caption = { CupertinoText(text = "3.0 起正文不留磁盘副本", fontSize = 12.sp) },
+                            ) {
+                                CupertinoText(text = "清空内存缓存", fontSize = 15.sp, color = scheme.label)
+                            }
+                        }
+                        Item(key = "version") { ValueRow(title = "本机版本", value = state.appVersion) }
+                        Item(key = "server-version") {
+                            ValueRow(
+                                title = "桌面端",
+                                value = state.serverVersion.ifBlank { "未连接" },
+                            )
+                        }
+                        Item(key = "diagnostics") {
+                            SectionLink(
+                                onClick = { showDiagnostics = !showDiagnostics },
+                                caption = {
+                                    CupertinoText(
+                                        text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                                        fontSize = 12.sp,
+                                    )
+                                },
+                            ) {
+                                CupertinoText(
+                                    text = if (showDiagnostics) "诊断信息 · 收起" else "诊断信息 · 展开",
+                                    fontSize = 15.sp,
+                                    color = scheme.label,
+                                )
+                            }
+                        }
+                        if (showDiagnostics) {
+                            Item(key = "diagnostics-body") {
+                                Column {
+                                    CupertinoText(
+                                        text = state.connectionDetail.ifBlank { "还没有连过桌面端" },
+                                        fontSize = 11.5.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = scheme.secondaryLabel,
+                                    )
+                                    Spacer(Modifier.height(6.dp))
+                                    CupertinoText(
+                                        text = "连接状态：${state.connection.label}",
+                                        fontSize = 11.5.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = scheme.secondaryLabel,
+                                    )
+                                }
+                            }
+                        }
+                        val message = state.message ?: shelf.message
+                        if (!message.isNullOrBlank()) {
+                            Item(key = "message") {
+                                CupertinoText(
+                                    text = message,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    fontSize = 12.sp,
+                                    color = scheme.accent,
+                                )
+                            }
+                        }
                     }
-                }
-                Hairline(inset = 16.dp)
-                val message = state.message ?: shelf.message
-                if (!message.isNullOrBlank()) {
-                    Text(
-                        text = message,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        fontSize = 12.sp,
-                        color = scheme.primary,
-                    )
-                }
                 }
             }
         }
@@ -521,11 +538,11 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(scheme.background)
+            .background(scheme.systemBackground)
             .statusBarsPadding()
             .padding(horizontal = 8.dp),
     ) {
@@ -539,94 +556,162 @@ private fun SettingsHeader(appVersion: String, serverVersion: String, onBack: ()
                     .pressScale(source, pressedScale = 0.92f)
                     .size(38.dp)
                     .clip(CircleShape)
-                    .background(scheme.secondary)
+                    .background(scheme.secondarySystemFill)
                     .clickable(interactionSource = source, indication = null, onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                CupertinoIcon(
+                    imageVector = CupertinoIcons.Outlined.ChevronBackward,
                     contentDescription = "返回",
                     modifier = Modifier.size(18.dp),
-                    tint = scheme.onSurface,
+                    tint = scheme.label,
                 )
             }
         }
-        Text(
+        CupertinoText(
             text = "设置",
             modifier = Modifier.padding(start = 8.dp, top = 14.dp),
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.6).sp,
-            color = scheme.onSurface,
+            color = scheme.label,
         )
-        Text(
+        CupertinoText(
             text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
             modifier = Modifier.padding(start = 8.dp, top = 5.dp, bottom = 10.dp),
             fontSize = 11.sp,
             fontFamily = FontFamily.Monospace,
             letterSpacing = 0.3.sp,
-            color = scheme.onSurfaceVariantSummary,
+            color = scheme.secondaryLabel,
         )
     }
 }
 
-/* ---------------- 行零件（Miuix 没提供的两样） ---------------- */
+/* ---------------- Section 内的行 ---------------- */
 
-/** 标题 + 数值 + 滑杆，水平内边距与 `BasicComponent` 对齐。 */
+/** Section 里的普通整行：内容自己排，外层只提供卡片内边距。 */
+@OptIn(ExperimentalCupertinoApi::class)
 @Composable
-private fun SliderRow(
+private fun SectionScope.Item(key: String, content: @Composable () -> Unit) {
+    SectionItem(title = content)
+}
+
+private fun sectionTitle(text: String): @Composable () -> Unit = {
+    CupertinoText(
+        text = text,
+        fontSize = 12.sp,
+        color = CupertinoTheme.colorScheme.secondaryLabel,
+    )
+}
+
+@OptIn(ExperimentalCupertinoApi::class)
+@Composable
+private fun SectionScope.SwitchItem(
+    title: String,
+    summary: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val scheme = CupertinoTheme.colorScheme
+    SectionItem(
+        trailingContent = {
+            CupertinoSwitch(checked = checked, onCheckedChange = onCheckedChange)
+        },
+        title = {
+            Column {
+                CupertinoText(text = title, fontSize = 15.sp, color = scheme.label)
+                Spacer(Modifier.height(2.dp))
+                CupertinoText(text = summary, fontSize = 12.sp, color = scheme.secondaryLabel)
+            }
+        },
+    )
+}
+
+@OptIn(ExperimentalCupertinoApi::class)
+@Composable
+private fun SectionScope.SliderItem(
     title: String,
     valueLabel: String,
     value: Float,
     onValueChange: (Float) -> Unit,
     minValue: Float,
     maxValue: Float,
-    decimalPlaces: Int,
 ) {
-    val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                fontSize = 16.sp,
-                color = scheme.onSurface,
-            )
-            Text(
-                text = valueLabel,
-                fontSize = 12.5.sp,
-                fontFamily = FontFamily.Monospace,
-                color = scheme.onSurfaceVariantSummary,
+    val scheme = CupertinoTheme.colorScheme
+    SectionItem(title = {
+        Column(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CupertinoText(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 15.sp,
+                    color = scheme.label,
+                )
+                CupertinoText(
+                    text = valueLabel,
+                    fontSize = 12.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = scheme.secondaryLabel,
+                )
+            }
+            CupertinoSlider(
+                value = value,
+                onValueChange = onValueChange,
+                valueRange = minValue..maxValue,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
         }
-        Slider(
-            progress = value,
-            onProgressChange = onValueChange,
-            minValue = minValue,
-            maxValue = maxValue,
-            decimalPlaces = decimalPlaces,
+    })
+}
+
+/** 下拉用 Cupertino 分段控件代替：选项少，点一下就切。 */
+@Composable
+private fun SegmentedRow(
+    title: String,
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    val scheme = CupertinoTheme.colorScheme
+    Column(Modifier.fillMaxWidth()) {
+        CupertinoText(text = title, fontSize = 15.sp, color = scheme.label)
+        Spacer(Modifier.height(8.dp))
+        CupertinoSegmentedControl(
+            selectedTabIndex = selectedIndex,
             modifier = Modifier.fillMaxWidth(),
-        )
+        ) {
+            options.forEachIndexed { index, label ->
+                CupertinoSegmentedControlTab(
+                    onClick = { onSelect(index) },
+                    isSelected = index == selectedIndex,
+                ) {
+                    CupertinoText(text = label, fontSize = 13.sp)
+                }
+            }
+        }
     }
 }
 
-/** 只读的「标题 — 值」行，用 Miuix 的 `BasicComponent` 排。 */
+/** 只读的「标题 — 值」行。 */
 @Composable
 private fun ValueRow(title: String, value: String, valueColor: Color? = null) {
-    val scheme = MiuixTheme.colorScheme
-    BasicComponent(
-        title = title,
-        rightActions = {
-            Text(
-                text = value,
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
-                color = valueColor ?: scheme.onSurfaceVariantSummary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-    )
+    val scheme = CupertinoTheme.colorScheme
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        CupertinoText(
+            text = title,
+            modifier = Modifier.weight(1f),
+            fontSize = 15.sp,
+            color = scheme.label,
+        )
+        CupertinoText(
+            text = value,
+            fontSize = 13.sp,
+            fontFamily = FontFamily.Monospace,
+            color = valueColor ?: scheme.secondaryLabel,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /**
@@ -648,88 +733,84 @@ private fun ReadingPreview(state: SettingsUiState) {
         letterSpacing = state.letterSpacingEm.em,
         textIndent = if (state.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent.None,
     )
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .background(preset.bg)
-                .border(0.5.dp, preset.line, RoundedCornerShape(8.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(
-                text = "山色空蒙雨亦奇",
-                style = style,
-                color = preset.ink,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height((fontScale * state.paragraphSpacing).dp))
-            Text(
-                text = "水光潋滟晴方好，淡妆浓抹总相宜。",
-                style = style,
-                color = preset.ink,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = "${state.fontSizeSp.roundToInt()}sp · 行距 " +
-                    String.format(Locale.US, "%.2f", state.lineHeight) + " · 段距 " +
-                    String.format(Locale.US, "%.2f", state.paragraphSpacing),
-                fontSize = 10.sp,
-                fontFamily = FontFamily.Monospace,
-                color = preset.soft,
-                maxLines = 1,
-            )
-        }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(preset.bg)
+            .border(0.5.dp, preset.line, RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        CupertinoText(
+            text = "山色空蒙雨亦奇",
+            style = style,
+            color = preset.ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height((fontScale * state.paragraphSpacing).dp))
+        CupertinoText(
+            text = "水光潋滟晴方好，淡妆浓抹总相宜。",
+            style = style,
+            color = preset.ink,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(10.dp))
+        CupertinoText(
+            text = "${state.fontSizeSp.roundToInt()}sp · 行距 " +
+                String.format(Locale.US, "%.2f", state.lineHeight) + " · 段距 " +
+                String.format(Locale.US, "%.2f", state.paragraphSpacing),
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            color = preset.soft,
+            maxLines = 1,
+        )
     }
 }
 
 /** 阅读底色：横排色块，选中的那格描朱砂边。 */
 @Composable
 private fun PaletteRow(selectedId: String, onSelect: (String) -> Unit) {
-    val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            READING_PALETTES.forEach { palette ->
-                val selected = selectedId == palette.id
-                Column(
-                    modifier = Modifier.weight(1f).clickable { onSelect(palette.id) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
+    val scheme = CupertinoTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        READING_PALETTES.forEach { palette ->
+            val selected = selectedId == palette.id
+            Column(
+                modifier = Modifier.weight(1f).clickable { onSelect(palette.id) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(palette.bg)
+                        .border(
+                            width = if (selected) 2.dp else 0.5.dp,
+                            color = if (selected) scheme.accent else scheme.separator,
+                            shape = RoundedCornerShape(6.dp),
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(palette.bg)
-                            .border(
-                                width = if (selected) 2.dp else 0.5.dp,
-                                color = if (selected) scheme.primary else scheme.dividerLine,
-                                shape = RoundedCornerShape(6.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (selected) {
-                            Box(
-                                Modifier
-                                    .size(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(scheme.primary)
-                            )
-                        }
+                    if (selected) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(scheme.accent)
+                        )
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = palette.label,
-                        fontSize = 11.sp,
-                        color = if (selected) scheme.primary else scheme.onSurfaceVariantSummary,
-                        maxLines = 1,
-                    )
                 }
+                Spacer(Modifier.height(6.dp))
+                CupertinoText(
+                    text = palette.label,
+                    fontSize = 11.sp,
+                    color = if (selected) scheme.accent else scheme.secondaryLabel,
+                    maxLines = 1,
+                )
             }
         }
     }

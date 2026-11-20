@@ -25,6 +25,18 @@ class BookFileStore(
     /** 下载中的临时文件。 */
     fun partFor(id: String): File = File(root(), safeName(id) + ".txt.part")
 
+    /**
+     * EPUB 原文件。
+     *
+     * EPUB 是 zip 容器，Readium 要直接读它，所以**保留原始字节**，
+     * 不能像 txt 那样重新编码。
+     */
+    fun epubFileFor(id: String): File = File(root(), safeName(id) + ".epub")
+
+    fun epubPartFor(id: String): File = File(root(), safeName(id) + ".epub.part")
+
+    fun epubExists(id: String): Boolean = epubFileFor(id).isFile
+
     fun exists(id: String): Boolean = fileFor(id).isFile
 
     fun sizeOf(id: String): Long = fileFor(id).let { if (it.isFile) it.length() else 0L }
@@ -49,6 +61,20 @@ class BookFileStore(
         return try {
             part.writeBytes(bytes)
             commitPart(id)
+        } catch (err: Exception) {
+            runCatching { part.delete() }
+            null
+        }
+    }
+
+    /** 原子写 EPUB 原文件（先 `.epub.part` 再改名）。 */
+    fun writeEpub(id: String, bytes: ByteArray): File? {
+        val part = epubPartFor(id)
+        return try {
+            part.writeBytes(bytes)
+            val target = epubFileFor(id)
+            if (target.exists()) target.delete()
+            if (part.renameTo(target)) target else null
         } catch (err: Exception) {
             runCatching { part.delete() }
             null
@@ -80,10 +106,12 @@ class BookFileStore(
         runCatching { partFor(id).delete() }
     }
 
-    /** 删掉一本的正文与临时文件。 */
+    /** 删掉一本的正文与临时文件（txt 与 epub 一起清）。 */
     fun delete(id: String) {
         runCatching { fileFor(id).delete() }
         runCatching { partFor(id).delete() }
+        runCatching { epubFileFor(id).delete() }
+        runCatching { epubPartFor(id).delete() }
     }
 
     /** 这个文件系统的可用字节数（空间预检用）。 */
@@ -91,7 +119,7 @@ class BookFileStore(
 
     /** 已经落盘的正文文件数，用于自查与设置页展示。 */
     fun count(): Int = runCatching {
-        root().listFiles()?.count { it.isFile && it.name.endsWith(".txt") } ?: 0
+        root().listFiles()?.count { it.isFile && (it.name.endsWith(".txt") || it.name.endsWith(".epub")) } ?: 0
     }.getOrDefault(0)
 
     /**

@@ -1,5 +1,10 @@
 package com.folio.reader.ui
 
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import com.folio.reader.data.CoverImage
+import com.folio.reader.ui.model.ShelfModel
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -43,23 +48,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,7 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,25 +64,35 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import com.folio.reader.core.Book
 import com.folio.reader.core.Origin
 import com.folio.reader.data.ConnectionState
-import com.folio.reader.ui.miuix.FolioMotion
-import com.folio.reader.ui.miuix.Hairline
-import com.folio.reader.ui.miuix.HyperSheet
-import com.folio.reader.ui.miuix.PageMargin
-import com.folio.reader.ui.miuix.Reveal
-import com.folio.reader.ui.miuix.pressScale
+import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
+import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoDropdownMenu
+import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
+import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
+import io.github.alexzhirkevich.cupertino.icons.outlined.ArrowClockwise
+import io.github.alexzhirkevich.cupertino.icons.outlined.Book
+import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronForward
+import io.github.alexzhirkevich.cupertino.icons.outlined.Gear
+import io.github.alexzhirkevich.cupertino.icons.outlined.MagnifyingGlass
+import io.github.alexzhirkevich.cupertino.icons.outlined.Plus
+import io.github.alexzhirkevich.cupertino.icons.outlined.Xmark
+import io.github.alexzhirkevich.cupertino.MenuAction
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import java.util.Locale
 import kotlin.math.absoluteValue
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * 书架。
@@ -110,15 +108,15 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ShelfScreen(
-    vm: AppViewModel,
+    model: ShelfModel,
     onOpenBook: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSyncStatus: () -> Unit,
 ) {
+    val vm = model.session
     val state by vm.shelf.collectAsState()
-    val covers by vm.covers.collectAsState()
     val gridState = rememberLazyGridState()
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
 
     var searchOpen by remember { mutableStateOf(false) }
     var menuFor by remember { mutableStateOf<String?>(null) }
@@ -168,7 +166,7 @@ fun ShelfScreen(
 
     val importAction = { importLauncher.launch(IMPORT_MIME_TYPES) }
 
-    Box(Modifier.fillMaxSize().background(scheme.background)) {
+    Box(Modifier.fillMaxSize().background(scheme.systemBackground)) {
         Column(Modifier.fillMaxSize()) {
             ShelfHeader(
                 state = state,
@@ -223,11 +221,9 @@ fun ShelfScreen(
                                     span = { GridItemSpan(maxLineSpan) },
                                 ) {
                                     val featured = section.books.first()
-                                    LaunchedEffect(featured.id) { vm.loadCover(featured) }
                                     ContinueCard(
                                         book = featured,
                                         state = state,
-                                        cover = covers[featured.id],
                                         onOpen = { onOpenBook(featured) },
                                     )
                                 }
@@ -246,12 +242,10 @@ fun ShelfScreen(
                                     key = { _, book -> "book-${section.key}-${book.id}" },
                                 ) { index, book ->
                                     val rowKey = "${section.key}-${book.id}"
-                                    LaunchedEffect(section.key, book.id) { vm.loadCover(book) }
                                     Reveal(index = index) {
                                         BookCell(
                                             book = book,
                                             state = state,
-                                            cover = covers[book.id],
                                             highlighted = state.highlightId == book.id,
                                             menuOpen = menuFor == rowKey,
                                             onToggleMenu = {
@@ -332,11 +326,11 @@ private fun ShelfHeader(
     onOpenSettings: () -> Unit,
     onOpenSyncStatus: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxWidth()
-            .background(scheme.background)
+            .background(scheme.systemBackground)
             .statusBarsPadding(),
     ) {
         Row(
@@ -346,12 +340,12 @@ private fun ShelfHeader(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(
+                CupertinoText(
                     text = "书架",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.6).sp,
-                    color = scheme.onSurface,
+                    color = scheme.label,
                     maxLines = 1,
                 )
                 Spacer(Modifier.height(5.dp))
@@ -366,15 +360,15 @@ private fun ShelfHeader(
                         Modifier
                             .size(6.dp)
                             .clip(CircleShape)
-                            .background(if (state.online) BrandGreen else scheme.primary)
+                            .background(if (state.online) BrandGreen else scheme.accent)
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text(
+                    CupertinoText(
                         text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
                             connectionTextOf(state),
                         fontSize = 11.sp,
                         letterSpacing = 0.3.sp,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -396,27 +390,16 @@ private fun ShelfHeader(
             exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
         ) {
             Column(Modifier.padding(horizontal = PageMargin, vertical = 4.dp)) {
-                TextField(
+                CupertinoSearchTextField(
                     value = state.query,
                     onValueChange = onQuery,
                     modifier = Modifier.fillMaxWidth(),
-                    label = "搜书名或作者",
-                    useLabelAsPlaceholder = true,
-                    singleLine = true,
-                    cornerRadius = 12.dp,
-                    trailingIcon = if (state.query.isNotEmpty()) {
-                        {
-                            MiuixText(
-                                text = "清除",
-                                fontSize = 12.sp,
-                                color = scheme.primary,
-                                modifier = Modifier
-                                    .clickable { onQuery("") }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp),
-                            )
-                        }
-                    } else {
-                        null
+                    placeholder = {
+                        CupertinoText(
+                            text = "搜书名或作者",
+                            fontSize = 14.sp,
+                            color = scheme.placeholderText,
+                        )
                     },
                 )
             }
@@ -435,24 +418,24 @@ private fun ToolbarPill(
     onSync: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(scheme.secondary)
+            .background(scheme.secondarySystemFill)
             .padding(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PillIcon(Icons.Default.Search, "搜索", onSearch, active = searchActive)
-        PillIcon(Icons.Default.Add, "导入 TXT", onImport)
+        PillIcon(CupertinoIcons.Outlined.MagnifyingGlass, "搜索", onSearch, active = searchActive)
+        PillIcon(CupertinoIcons.Outlined.Plus, "导入书籍", onImport)
         if (syncing) {
             Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(size = 15.dp, strokeWidth = 2.dp)
+                CupertinoActivityIndicator(size = 15.dp)
             }
         } else {
-            PillIcon(Icons.Default.Refresh, "同步", onSync)
+            PillIcon(CupertinoIcons.Outlined.ArrowClockwise, "同步", onSync)
         }
-        PillIcon(Icons.Default.Settings, "设置", onSettings)
+        PillIcon(CupertinoIcons.Outlined.Gear, "设置", onSettings)
     }
 }
 
@@ -463,7 +446,7 @@ private fun PillIcon(
     onClick: () -> Unit,
     active: Boolean = false,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val source = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
@@ -477,11 +460,11 @@ private fun PillIcon(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
+        CupertinoIcon(
             imageVector = icon,
             contentDescription = description,
             modifier = Modifier.size(18.dp),
-            tint = if (active) scheme.primary else scheme.onSurface,
+            tint = if (active) scheme.accent else scheme.label,
         )
     }
 }
@@ -501,38 +484,38 @@ private fun mbOf(bytes: Long): String =
 
 @Composable
 private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = PageMargin, vertical = 6.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(scheme.primaryContainer)
+            .background(scheme.accent.copy(alpha = 0.12f))
             .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
+            CupertinoText(
                 text = "未连接桌面端",
                 fontSize = 12.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = scheme.primary,
+                color = scheme.accent,
                 maxLines = 1,
             )
             Spacer(Modifier.height(2.dp))
-            Text(
+            CupertinoText(
                 text = "同步与下载暂停；本机书照常可读。",
                 fontSize = 11.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        MiuixText(
+        CupertinoText(
             text = "去连接",
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = scheme.primary,
+            color = scheme.accent,
             modifier = Modifier
                 .clickable(onClick = onConnect)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -544,11 +527,11 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.Default.Close,
+            CupertinoIcon(
+                CupertinoIcons.Outlined.Xmark,
                 "不再提示",
                 Modifier.size(13.dp),
-                tint = scheme.onSurfaceVariantSummary,
+                tint = scheme.secondaryLabel,
             )
         }
     }
@@ -558,7 +541,7 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
 
 @Composable
 private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -570,12 +553,12 @@ private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
         ShelfUiState.FILTERS.forEach { (key, label) ->
             val active = selected == key
             val bg by animateColorAsState(
-                targetValue = if (active) scheme.primary else scheme.secondary,
+                targetValue = if (active) scheme.accent else scheme.secondarySystemFill,
                 animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
                 label = "chip-bg",
             )
             val fg by animateColorAsState(
-                targetValue = if (active) scheme.onPrimary else scheme.onSurfaceVariantSummary,
+                targetValue = if (active) Color.White else scheme.secondaryLabel,
                 animationSpec = tween(FolioMotion.Instant, easing = FolioMotion.Easing),
                 label = "chip-fg",
             )
@@ -588,7 +571,7 @@ private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
+                CupertinoText(
                     text = label,
                     fontSize = 12.5.sp,
                     fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
@@ -602,19 +585,21 @@ private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 private fun ImportStrip(label: String) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 4.dp)) {
-        Text(
+        CupertinoText(
             text = label,
             fontSize = 11.sp,
-            color = scheme.primary,
+            color = scheme.accent,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = null,
-            modifier = Modifier.fillMaxWidth().height(2.dp),
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(CupertinoTheme.colorScheme.accent.copy(alpha = 0.32f))
         )
     }
 }
@@ -623,28 +608,28 @@ private fun ImportStrip(label: String) {
 
 @Composable
 private fun SectionLabel(title: String, count: Int) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth().padding(top = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
+            CupertinoText(
                 text = title,
                 modifier = Modifier.weight(1f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.3.sp,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 1,
             )
-            Text(
+            CupertinoText(
                 text = "$count 本",
                 fontSize = 10.5.sp,
                 letterSpacing = 0.6.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
                 maxLines = 1,
             )
         }
         Spacer(Modifier.height(10.dp))
-        Hairline()
+        CupertinoHorizontalDivider(color = scheme.separator)
     }
 }
 
@@ -652,7 +637,7 @@ private fun SectionLabel(title: String, count: Int) {
 
 @Composable
 private fun EmptyShelf(hasBooks: Boolean, onImport: () -> Unit, onConnect: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
             .fillMaxSize()
@@ -665,44 +650,49 @@ private fun EmptyShelf(hasBooks: Boolean, onImport: () -> Unit, onConnect: () ->
             Modifier
                 .size(96.dp)
                 .clip(CircleShape)
-                .background(scheme.secondary),
+                .background(scheme.secondarySystemFill),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.MenuBook,
+            CupertinoIcon(
+                CupertinoIcons.Outlined.Book,
                 null,
                 Modifier.size(38.dp),
-                tint = scheme.onSurfaceVariantSummary,
+                tint = scheme.secondaryLabel,
             )
         }
         Spacer(Modifier.height(22.dp))
-        Text(
+        CupertinoText(
             text = if (hasBooks) "没有符合条件的书" else "书架是空的",
             fontSize = 20.sp,
             fontWeight = FontWeight.SemiBold,
-            color = scheme.onSurface,
+            color = scheme.label,
         )
         Spacer(Modifier.height(8.dp))
-        Text(
+        CupertinoText(
             text = if (hasBooks) {
                 "换个筛选条件，或清掉搜索词再看看。"
             } else {
                 "从手机里导入 TXT，或连接桌面端把书架搬过来。"
             },
             fontSize = 12.5.sp,
-            color = scheme.onSurfaceVariantSummary,
+            color = scheme.secondaryLabel,
         )
         Spacer(Modifier.height(26.dp))
-        Button(
+        CupertinoButton(
             onClick = onImport,
             modifier = Modifier.width(200.dp),
-            cornerRadius = 22.dp,
-            minHeight = 44.dp,
+            colors = CupertinoButtonDefaults.filledButtonColors(),
         ) {
-            MiuixText(text = "从文件导入 TXT", fontSize = 14.sp, color = scheme.onPrimary)
+            CupertinoText(text = "从文件导入 TXT", fontSize = 14.sp)
         }
         Spacer(Modifier.height(6.dp))
-        TextButton(text = "连接桌面端", onClick = onConnect, modifier = Modifier.width(200.dp))
+        CupertinoButton(
+            onClick = onConnect,
+            modifier = Modifier.width(200.dp),
+            colors = CupertinoButtonDefaults.plainButtonColors(),
+        ) {
+            CupertinoText(text = "连接桌面端", fontSize = 14.sp)
+        }
     }
 }
 
@@ -712,10 +702,9 @@ private fun EmptyShelf(hasBooks: Boolean, onImport: () -> Unit, onConnect: () ->
 private fun ContinueCard(
     book: Book,
     state: ShelfUiState,
-    cover: ImageBitmap?,
     onOpen: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val summary = state.progressSummaryOf(book)
     val percent = state.progressPercentOf(book)
     val source = remember { MutableInteractionSource() }
@@ -725,8 +714,8 @@ private fun ContinueCard(
             .padding(top = 6.dp)
             .pressScale(source, pressedScale = 0.985f)
             .clip(RoundedCornerShape(20.dp))
-            .background(scheme.surface)
-            .border(0.5.dp, scheme.dividerLine, RoundedCornerShape(20.dp))
+            .background(scheme.secondarySystemGroupedBackground)
+            .border(0.5.dp, scheme.separator, RoundedCornerShape(20.dp))
             .clickable(
                 interactionSource = source,
                 indication = null,
@@ -737,7 +726,6 @@ private fun ContinueCard(
     ) {
         CoverArt(
             book = book,
-            cover = cover,
             dimmed = false,
             modifier = Modifier.width(62.dp).aspectRatio(0.68f),
             radius = 8.dp,
@@ -750,30 +738,30 @@ private fun ContinueCard(
                     Modifier
                         .size(5.dp)
                         .clip(CircleShape)
-                        .background(scheme.primary)
+                        .background(scheme.accent)
                 )
                 Spacer(Modifier.width(6.dp))
-                Text(
+                CupertinoText(
                     text = "继续阅读",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     letterSpacing = 1.4.sp,
-                    color = scheme.primary,
+                    color = scheme.accent,
                     maxLines = 1,
                 )
             }
             Spacer(Modifier.height(6.dp))
-            Text(
+            CupertinoText(
                 text = book.title,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 lineHeight = 22.sp,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(4.dp))
-            Text(
+            CupertinoText(
                 text = buildString {
                     val chapter = summary.chapterText
                     if (chapter.isNotBlank()) {
@@ -784,7 +772,7 @@ private fun ContinueCard(
                     }
                 },
                 fontSize = 11.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -795,10 +783,10 @@ private fun ContinueCard(
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(10.dp))
-                MiuixText(
+                CupertinoText(
                     text = summary.percentText.ifBlank { "已开始" },
                     fontSize = 10.5.sp,
-                    color = scheme.primary,
+                    color = scheme.accent,
                     maxLines = 1,
                 )
             }
@@ -808,14 +796,14 @@ private fun ContinueCard(
             Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(scheme.primary),
+                .background(scheme.accent),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowForward,
+            CupertinoIcon(
+                CupertinoIcons.Outlined.ChevronForward,
                 "继续阅读",
                 Modifier.size(17.dp),
-                tint = scheme.onPrimary,
+                tint = Color.White,
             )
         }
     }
@@ -828,7 +816,6 @@ private fun ContinueCard(
 private fun BookCell(
     book: Book,
     state: ShelfUiState,
-    cover: ImageBitmap?,
     highlighted: Boolean,
     menuOpen: Boolean,
     onToggleMenu: () -> Unit,
@@ -838,7 +825,7 @@ private fun BookCell(
     onRemoveFromShelf: () -> Unit,
     onSyncStatus: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val badge = state.badgeOf(book)
     val percent = state.progressPercentOf(book)
     val summary = state.progressSummaryOf(book)
@@ -858,7 +845,6 @@ private fun BookCell(
         Box {
             CoverArt(
                 book = book,
-                cover = cover,
                 dimmed = dimmed,
                 modifier = Modifier.fillMaxWidth().aspectRatio(0.68f),
             )
@@ -868,7 +854,7 @@ private fun BookCell(
                         .align(Alignment.TopStart)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(scheme.surface.copy(alpha = 0.92f))
+                        .background(scheme.secondarySystemGroupedBackground.copy(alpha = 0.92f))
                         .padding(horizontal = 5.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -879,7 +865,7 @@ private fun BookCell(
                             .background(badgeColor(badge))
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text(
+                    CupertinoText(
                         text = badgeLabel(badge, state.transferPercent(book)),
                         fontSize = 9.sp,
                         color = badgeColor(badge),
@@ -888,7 +874,7 @@ private fun BookCell(
                 }
             }
             if (summary.read) {
-                Text(
+                CupertinoText(
                     text = summary.percentText,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -907,41 +893,44 @@ private fun BookCell(
                     Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(scheme.surface.copy(alpha = 0.82f))
+                        .background(scheme.secondarySystemGroupedBackground.copy(alpha = 0.82f))
                         .clickable(onClick = onToggleMenu),
                     contentAlignment = Alignment.Center,
                 ) {
-                    MiuixText(
+                    CupertinoText(
                         text = "⋯",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                     )
                 }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = onToggleMenu) {
+                CupertinoDropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = onToggleMenu,
+                ) {
                     if (!book.isCloud && !book.hasLocalFile) {
-                        DropdownMenuItem(text = { Text("下载到手机") }, onClick = onDownload)
+                        MenuAction(onClick = onDownload) { CupertinoText("下载到手机", fontSize = 14.sp) }
                     }
                     if (book.hasLocalFile) {
-                        DropdownMenuItem(text = { Text("删除本机副本") }, onClick = onDeleteLocal)
+                        MenuAction(onClick = onDeleteLocal) { CupertinoText("删除本机副本", fontSize = 14.sp) }
                     }
                     if (book.origin == Origin.DESKTOP) {
-                        DropdownMenuItem(text = { Text("从手机书架移除") }, onClick = onRemoveFromShelf)
+                        MenuAction(onClick = onRemoveFromShelf) { CupertinoText("从手机书架移除", fontSize = 14.sp) }
                     }
-                    DropdownMenuItem(text = { Text("查看同步状态") }, onClick = onSyncStatus)
+                    MenuAction(onClick = onSyncStatus) { CupertinoText("查看同步状态", fontSize = 14.sp) }
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(
+        CupertinoText(
             text = book.title,
             fontSize = 13.sp,
             lineHeight = 17.sp,
             fontWeight = FontWeight.Medium,
             color = when {
-                highlighted -> scheme.primary
-                dimmed -> scheme.disabledOnSurface
-                else -> scheme.onSurface
+                highlighted -> scheme.accent
+                dimmed -> scheme.tertiaryLabel
+                else -> scheme.label
             },
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -953,14 +942,14 @@ private fun BookCell(
                 modifier = Modifier.weight(1f),
             )
             Spacer(Modifier.width(8.dp))
-            MiuixText(
+            CupertinoText(
                 text = when {
                     summary.read -> summary.percentText
                     !readable -> "未下载"
                     else -> "未读"
                 },
                 fontSize = 9.5.sp,
-                color = scheme.onSurfaceVariantSummary,
+                color = scheme.secondaryLabel,
                 maxLines = 1,
             )
         }
@@ -969,7 +958,7 @@ private fun BookCell(
 
 @Composable
 private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     val filled by animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
@@ -980,14 +969,14 @@ private fun ProgressRail(progress: Float, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .height(2.dp)
             .clip(CircleShape)
-            .background(scheme.dividerLine),
+            .background(scheme.separator),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(filled)
                 .fillMaxHeight()
                 .clip(CircleShape)
-                .background(scheme.primary)
+                .background(scheme.accent)
         )
     }
 }
@@ -1001,12 +990,12 @@ private fun badgeLabel(badge: BookBadge, percent: Int): String =
 
 @Composable
 private fun badgeColor(badge: BookBadge): Color {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     return when (badge) {
-        BookBadge.MISMATCH, BookBadge.FAILED -> scheme.primary
+        BookBadge.MISMATCH, BookBadge.FAILED -> scheme.accent
         BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> BrandBlue
-        BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.onSurfaceVariantSummary
-        BookBadge.NONE -> scheme.onSurfaceVariantSummary
+        BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.secondaryLabel
+        BookBadge.NONE -> scheme.secondaryLabel
     }
 }
 
@@ -1019,7 +1008,6 @@ private fun badgeColor(badge: BookBadge): Color {
 @Composable
 private fun CoverArt(
     book: Book,
-    cover: ImageBitmap?,
     dimmed: Boolean,
     modifier: Modifier = Modifier,
     radius: Dp = 10.dp,
@@ -1038,26 +1026,28 @@ private fun CoverArt(
             .border(0.5.dp, Color.Black.copy(alpha = 0.06f), shape)
             .alpha(if (dimmed) 0.55f else 1f),
     ) {
-        if (cover != null) {
-            Image(
-                bitmap = cover,
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .width(4.dp)
+                .background(inkTone.copy(alpha = 0.12f))
+        )
+        CupertinoText(
+            text = book.title.take(1).ifBlank { "书" },
+            modifier = Modifier.align(Alignment.Center),
+            fontSize = initialSize,
+            fontWeight = FontWeight.SemiBold,
+            color = inkTone.copy(alpha = 0.78f),
+        )
+        // 有封面就盖在纸色底上；加载失败时这张图不画，回落到书名首字。
+        if (book.cover != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(CoverImage.of(book))
+                    .build(),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-            )
-        } else {
-            Box(
-                Modifier
-                    .fillMaxHeight()
-                    .width(4.dp)
-                    .background(inkTone.copy(alpha = 0.12f))
-            )
-            Text(
-                text = book.title.take(1).ifBlank { "书" },
-                modifier = Modifier.align(Alignment.Center),
-                fontSize = initialSize,
-                fontWeight = FontWeight.SemiBold,
-                color = inkTone.copy(alpha = 0.78f),
             )
         }
     }
@@ -1071,7 +1061,7 @@ private fun Snack(text: String, onDismiss: () -> Unit) {
         kotlinx.coroutines.delay(2600)
         onDismiss()
     }
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Box(
         Modifier
             .fillMaxSize()
@@ -1079,16 +1069,16 @@ private fun Snack(text: String, onDismiss: () -> Unit) {
         contentAlignment = Alignment.BottomCenter,
     ) {
         Reveal {
-            MiuixText(
+            CupertinoText(
                 text = text,
                 modifier = Modifier
                     .padding(bottom = 26.dp, start = 24.dp, end = 24.dp)
                     .shadow(10.dp, RoundedCornerShape(14.dp))
                     .clip(RoundedCornerShape(14.dp))
-                    .background(scheme.onSurface.copy(alpha = 0.94f))
+                    .background(scheme.label.copy(alpha = 0.94f))
                     .padding(horizontal = 16.dp, vertical = 11.dp),
                 fontSize = 12.5.sp,
-                color = scheme.surface,
+                color = scheme.secondarySystemGroupedBackground,
             )
         }
     }
@@ -1102,23 +1092,38 @@ private fun ConfirmSheet(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
-    HyperSheet(onDismiss = onCancel) {
+    val scheme = CupertinoTheme.colorScheme
+    FolioSheet(onDismiss = onCancel) {
         Column(Modifier.padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(6.dp))
-            Text(text = title, fontSize = 19.sp, fontWeight = FontWeight.Medium, color = scheme.onSurface)
+            CupertinoText(text = title, fontSize = 19.sp, fontWeight = FontWeight.Medium, color = scheme.label)
             Spacer(Modifier.height(8.dp))
-            Text(text = summary, fontSize = 13.sp, color = scheme.onSurfaceVariantSummary)
+            CupertinoText(text = summary, fontSize = 13.sp, color = scheme.secondaryLabel)
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(text = "取消", onClick = onCancel, modifier = Modifier.weight(1f))
-                Button(onClick = onConfirm, modifier = Modifier.weight(1f), cornerRadius = 10.dp) {
-                    MiuixText(text = confirmText, fontSize = 14.sp, color = scheme.onPrimary)
+                CupertinoButton(
+                    onClick = onCancel,
+                    modifier = Modifier.weight(1f),
+                    colors = CupertinoButtonDefaults.grayButtonColors(),
+                ) {
+                    CupertinoText(text = "取消", fontSize = 14.sp)
+                }
+                CupertinoButton(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f),
+                    colors = CupertinoButtonDefaults.filledButtonColors(),
+                ) {
+                    CupertinoText(text = confirmText, fontSize = 14.sp)
                 }
             }
         }
     }
 }
 
-/** SAF 允许的类型：纯文本为主，兜底给一个二进制流。 */
-private val IMPORT_MIME_TYPES = arrayOf("text/plain", "text/*", "application/octet-stream")
+/** SAF 允许的类型：纯文本、EPUB，兜底给一个二进制流。 */
+private val IMPORT_MIME_TYPES = arrayOf(
+    "text/plain",
+    "text/*",
+    "application/epub+zip",
+    "application/octet-stream",
+)

@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +48,8 @@ import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Chapter
 import com.folio.reader.core.Paragraph
 import com.folio.reader.ui.PageTurn
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -296,18 +296,18 @@ fun ReaderPager(
                 .padding(horizontal = (pagePadding + 2).dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
+            CupertinoText(
                 text = chapterTitle.ifBlank { "—" },
                 modifier = Modifier.weight(1f),
                 style = kickerStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = CupertinoTheme.colorScheme.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            CupertinoText(
                 text = if (pages.isEmpty()) "—" else "${pagerState.currentPage + 1} / ${pages.size}",
                 style = kickerStyle,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = CupertinoTheme.colorScheme.secondaryLabel,
                 maxLines = 1,
             )
         }
@@ -326,7 +326,7 @@ private fun PageView(
     bookmarkedParas: Set<Int>,
     highlightedParas: Set<Int>,
 ) {
-    val palette = MaterialTheme.colorScheme
+    val palette = CupertinoTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -336,13 +336,13 @@ private fun PageView(
             when (block) {
                 is PageBlock.Heading -> {
                     Column(Modifier.fillMaxWidth()) {
-                        Text(
+                        CupertinoText(
                             text = "第 ${block.number.toString().padStart(2, '0')} 章",
                             style = kickerStyle,
-                            color = palette.primary,
+                            color = palette.accent,
                         )
                         Spacer(Modifier.height(6.dp))
-                        Text(text = block.title, style = headingStyle, color = palette.onBackground)
+                        CupertinoText(text = block.title, style = headingStyle, color = palette.label)
                         Spacer(Modifier.height(paragraphGap))
                     }
                 }
@@ -356,7 +356,7 @@ private fun PageView(
                             .height(IntrinsicSize.Min)
                             .then(
                                 if (highlighted) {
-                                    Modifier.background(palette.primary.copy(alpha = 0.09f))
+                                    Modifier.background(palette.accent.copy(alpha = 0.09f))
                                 } else {
                                     Modifier
                                 }
@@ -367,11 +367,11 @@ private fun PageView(
                                 Modifier
                                     .width(2.dp)
                                     .fillMaxHeight()
-                                    .background(palette.primary)
+                                    .background(palette.accent)
                             )
                             Spacer(Modifier.width(6.dp))
                         }
-                        Text(
+                        CupertinoText(
                             text = block.text,
                             modifier = Modifier.weight(1f),
                             style = bodyStyle.copy(
@@ -381,7 +381,7 @@ private fun PageView(
                                     TextIndent.None
                                 }
                             ),
-                            color = palette.onBackground,
+                            color = palette.label,
                         )
                     }
                     Spacer(Modifier.height(paragraphGap))

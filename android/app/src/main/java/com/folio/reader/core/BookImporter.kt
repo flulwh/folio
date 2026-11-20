@@ -40,8 +40,10 @@ class BookImporter(
      */
     fun importBytes(displayName: String, bytes: ByteArray): Outcome {
         if (bytes.isEmpty()) return Outcome.Failed("这本书是空的")
+        // EPUB 是 zip 容器，必须按原字节保存（Readium 直接读它），不能走文本解码。
+        if (isEpub(displayName, bytes)) return importEpub(displayName, bytes)
         if (TextDecoder.looksBinary(bytes)) {
-            return Outcome.Failed("暂不支持该格式。当前版本专注于纯文本（TXT / Markdown）电子书，请导入 TXT 或 Markdown 文件。")
+            return Outcome.Failed("暂不支持该格式。可以导入 TXT / Markdown / EPUB 电子书。")
         }
 
         // 1. 解码（顺序与桌面端 decodeText 一致）
@@ -92,15 +94,21 @@ class BookImporter(
      */
     fun importStream(displayName: String, input: InputStream): Outcome =
         input.use { stream ->
+            val limit = if (displayName.endsWith(".epub", ignoreCase = true)) {
+                EPUB_INTAKE_LIMIT
+            } else {
+                INTAKE_LIMIT
+            }
             val buffer = java.io.ByteArrayOutputStream()
             val chunk = ByteArray(HashUtils.BUFFER_BYTES)
             while (true) {
                 val count = stream.read(chunk)
                 if (count <= 0) break
                 buffer.write(chunk, 0, count)
-                // 单本上限 30MB：超过就没法同步，也没必要读进内存
-                if (buffer.size() > INTAKE_LIMIT) {
-                    return@use Outcome.Failed("这本书超过 30MB，暂时只能放在桌面端阅读")
+                // 单本上限：txt 30MB（同步口径），EPUB 200MB（本机专用，不同步）
+                if (buffer.size() > limit) {
+                    val mb = limit / 1024 / 1024
+                    return@use Outcome.Failed("这本书超过 ${mb}MB，暂时无法导入")
                 }
             }
             importBytes(displayName, buffer.toByteArray())
@@ -117,8 +125,48 @@ class BookImporter(
         return base.ifBlank { "未命名" }
     }
 
+    /** EPUB 判定：扩展名优先，其次看 zip 头与规范要求的 `application/epub+zip`。 */
+    private fun isEpub(displayName: String, bytes: ByteArray): Boolean {
+        if (displayName.endsWith(".epub", ignoreCase = true)) return true
+        if (bytes.size < 4) return false
+        if (bytes[0] != 0x50.toByte() || bytes[1] != 0x4B.toByte()) return false
+        val probe = bytes.copyOfRange(0, minOf(bytes.size, 2048))
+        return String(probe, Charsets.US_ASCII).contains("application/epub+zip")
+    }
+
+    /**
+     * EPUB 导入：原字节落盘 → 元数据。
+     *
+     * 不重编码、不算「规范化正文字节」：EPUB 是容器，重新打包就坏了。
+     * `syncState = EXCLUDED` 是结构保证：桌面端不认这个格式，永不上传。
+     */
+    private fun importEpub(displayName: String, bytes: ByteArray): Outcome {
+        val hash = HashUtils.sha1(bytes)
+        val id = "sha1-$hash"
+        books.findByHash(hash)?.let { existing -> return Outcome.Duplicate(existing.id) }
+        files.writeEpub(id, bytes) ?: return Outcome.Failed("写入 EPUB 失败，检查手机存储空间")
+        val book = LocalBook(
+            id = id,
+            title = titleOf(displayName),
+            author = null,
+            origin = Origin.LOCAL,
+            type = BookType.NOVEL,
+            contentHash = hash,
+            size = bytes.size.toLong(),
+            format = "epub",
+            hasLocalFile = true,
+            addedAt = System.currentTimeMillis(),
+            syncState = SyncState.EXCLUDED,
+        )
+        books.upsert(book)
+        return Outcome.Imported(book)
+    }
+
     companion object {
         /** SAF 一次导入的字节上限（30MB，与可同步上限一致）。 */
         const val INTAKE_LIMIT = 30 * 1024 * 1024
+
+        /** EPUB 上限：本机专用、不同步，只受内存与磁盘限制。 */
+        const val EPUB_INTAKE_LIMIT = 200 * 1024 * 1024
     }
 }

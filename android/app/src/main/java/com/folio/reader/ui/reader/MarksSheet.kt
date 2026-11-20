@@ -26,22 +26,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.folio.reader.core.ReaderMark
-import com.folio.reader.ui.miuix.HyperSheet
+import com.folio.reader.ui.FolioSheet
+import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoText
+import io.github.alexzhirkevich.cupertino.CupertinoTextField
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
- * 书签与笔记面板（HyperOS）：统计 + 主操作 + 痕迹列表。
+ * 书签与笔记面板（Cupertino）：统计 + 主操作 + 痕迹列表。
  * 点整行跳转；行内「跳转 / 笔记 / 删除」是小号文字按钮。
  */
 @Composable
@@ -57,9 +58,9 @@ fun MarksSheet(
 ) {
     var editing by remember { mutableStateOf<ReaderMark?>(null) }
     val dateFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
 
-    HyperSheet(
+    FolioSheet(
         onDismiss = onDismiss,
         title = "书签与笔记",
         subtitle = "${marks.size} 条痕迹",
@@ -76,17 +77,16 @@ fun MarksSheet(
             StatCell(if (isBookmarked) "有" else "无", "P.${currentPara + 1}", Modifier.weight(1f))
         }
 
-        Button(
+        CupertinoButton(
             onClick = onToggleBookmark,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp, vertical = 8.dp),
-            cornerRadius = 16.dp,
+            colors = CupertinoButtonDefaults.filledButtonColors(),
         ) {
-            Text(
+            CupertinoText(
                 text = if (isBookmarked) "取消本页书签" else "给当前位置加书签",
                 fontSize = 15.sp,
-                color = scheme.onPrimary,
             )
         }
 
@@ -95,12 +95,12 @@ fun MarksSheet(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(text = "还没有痕迹", fontSize = 14.sp, color = scheme.onSurface)
+                CupertinoText(text = "还没有痕迹", fontSize = 14.sp, color = scheme.label)
                 Spacer(Modifier.height(6.dp))
-                Text(
+                CupertinoText(
                     text = "点顶栏书签图标，或在段落上划线",
                     fontSize = 12.sp,
-                    color = scheme.onSurfaceVariantSummary,
+                    color = scheme.secondaryLabel,
                 )
             }
         } else {
@@ -133,17 +133,17 @@ fun MarksSheet(
 
 @Composable
 private fun StatCell(value: String, label: String, modifier: Modifier = Modifier) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(scheme.secondary)
+            .background(scheme.secondarySystemFill)
             .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = value, fontSize = 18.sp, color = scheme.onSurface)
+        CupertinoText(text = value, fontSize = 18.sp, color = scheme.label)
         Spacer(Modifier.height(2.dp))
-        Text(text = label, fontSize = 11.sp, color = scheme.onSurfaceVariantSummary, maxLines = 1)
+        CupertinoText(text = label, fontSize = 11.sp, color = scheme.secondaryLabel, maxLines = 1)
     }
 }
 
@@ -155,7 +155,7 @@ private fun MarkRow(
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -168,17 +168,17 @@ private fun MarkRow(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(
+        CupertinoText(
             text = "P.${mark.paraIndex + 1}",
             fontSize = 11.sp,
-            color = scheme.onSurfaceVariantSummary,
+            color = scheme.secondaryLabel,
             modifier = Modifier.widthIn(min = 40.dp),
         )
         Column(Modifier.weight(1f)) {
-            Text(
+            CupertinoText(
                 text = mark.excerpt.ifBlank { "（无摘录）" },
                 fontSize = 14.5.sp,
-                color = scheme.onSurface,
+                color = scheme.label,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -189,13 +189,13 @@ private fun MarkRow(
                         Modifier
                             .width(2.dp)
                             .fillMaxHeight()
-                            .background(scheme.primary)
+                            .background(scheme.accent)
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(
+                    CupertinoText(
                         text = mark.note,
                         fontSize = 12.5.sp,
-                        color = scheme.onSurfaceVariantSummary,
+                        color = scheme.secondaryLabel,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -203,29 +203,29 @@ private fun MarkRow(
             }
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
+                CupertinoText(
                     text = buildString {
                         append(mark.chapterTitle.ifBlank { "第 ${mark.chapterIndex + 1} 章" })
                         append(" · ")
                         append(dateLabel)
                     },
                     fontSize = 11.sp,
-                    color = scheme.onSurfaceVariantSummary,
+                    color = scheme.secondaryLabel,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                MarkAction("跳转", scheme.onSurfaceVariantSummary, onJump)
-                MarkAction("笔记", scheme.onSurfaceVariantSummary, onEdit)
-                MarkAction("删除", scheme.primary, onRemove)
+                MarkAction("跳转", scheme.secondaryLabel, onJump)
+                MarkAction("笔记", scheme.secondaryLabel, onEdit)
+                MarkAction("删除", scheme.accent, onRemove)
             }
         }
     }
 }
 
 @Composable
-private fun MarkAction(text: String, color: androidx.compose.ui.graphics.Color, onClick: () -> Unit) {
-    Text(
+private fun MarkAction(text: String, color: Color, onClick: () -> Unit) {
+    CupertinoText(
         text = text,
         modifier = Modifier
             .clickable(
@@ -247,34 +247,40 @@ private fun NoteEditor(
     onConfirm: (String) -> Unit,
 ) {
     var text by remember(mark.id) { mutableStateOf(mark.note) }
-    val scheme = MiuixTheme.colorScheme
+    val scheme = CupertinoTheme.colorScheme
 
-    HyperSheet(onDismiss = onDismiss, title = "笔记") {
+    FolioSheet(onDismiss = onDismiss, title = "笔记") {
         Column(Modifier.padding(horizontal = 16.dp)) {
-            TextField(
+            CupertinoTextField(
                 value = text,
                 onValueChange = { text = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = "写点什么",
-                useLabelAsPlaceholder = true,
+                placeholder = {
+                    CupertinoText(
+                        text = "写点什么",
+                        fontSize = 14.sp,
+                        color = scheme.placeholderText,
+                    )
+                },
                 minLines = 4,
-                cornerRadius = 16.dp,
             )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                TextButton(
-                    text = "取消",
+                CupertinoButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
-                )
-                Button(
+                    colors = CupertinoButtonDefaults.grayButtonColors(),
+                ) {
+                    CupertinoText(text = "取消", fontSize = 14.sp)
+                }
+                CupertinoButton(
                     onClick = { onConfirm(text) },
                     modifier = Modifier.weight(1f),
-                    cornerRadius = 16.dp,
+                    colors = CupertinoButtonDefaults.filledButtonColors(),
                 ) {
-                    Text(text = "保存", fontSize = 14.sp, color = scheme.onPrimary)
+                    CupertinoText(text = "保存", fontSize = 14.sp)
                 }
             }
         }

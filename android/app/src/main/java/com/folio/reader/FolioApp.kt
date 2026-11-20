@@ -3,13 +3,19 @@ package com.folio.reader
 import android.app.Application
 import android.content.ComponentCallbacks2
 import android.util.Log
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.memory.MemoryCache
 import com.folio.reader.core.BookImporter
 import com.folio.reader.core.ChapterMemoryCache
-import com.folio.reader.core.ImageLoader
 import com.folio.reader.data.BookFileStore
 import com.folio.reader.data.BookStore
 import com.folio.reader.data.CloudChapterSource
+import com.folio.reader.data.ComicImageFetcher
 import com.folio.reader.data.ConnectionManager
+import com.folio.reader.data.CoverImageFetcher
+import com.folio.reader.data.EpubLibrary
+import com.folio.reader.data.EpubProgressStore
 import com.folio.reader.data.FontRepository
 import com.folio.reader.data.FontStore
 import com.folio.reader.data.MarkStore
@@ -20,6 +26,7 @@ import com.folio.reader.data.ProgressSync
 import com.folio.reader.data.SettingsStore
 import com.folio.reader.data.SyncEngine
 import com.folio.reader.data.SyncStateStore
+import com.folio.reader.ui.session.SessionStore
 import java.io.File
 
 /**
@@ -47,6 +54,10 @@ class AppContainer(app: Application) {
     val syncState = SyncStateStore(libraryDir)
     val files = BookFileStore(app.filesDir)
     val importer = BookImporter(books, files)
+
+    /** EPUB：原文件只在本机，解析与排版交给 Readium；位置也只存本机。 */
+    val epubLibrary = EpubLibrary(app, files)
+    val epubProgress = EpubProgressStore(libraryDir)
 
     /** 云端小说 3 章内存缓存。 */
     val chapters = ChapterMemoryCache()
@@ -83,12 +94,6 @@ class AppContainer(app: Application) {
 
     val sync = SyncEngine(books, progress, syncState, files) { connection.client() }
 
-    /** 漫画页：按 `(书, 话, 页)` 取图，全内存。 */
-    val images = ImageLoader(
-        openPage = { key -> connection.client().comicPage(key.bookId, key.chapter, key.page) },
-        screenWidthPx = { app.resources.displayMetrics.widthPixels },
-    )
-
     val migration = Migration(app.filesDir)
 }
 
@@ -97,9 +102,31 @@ class FolioApp : Application() {
     lateinit var container: AppContainer
         private set
 
+    /** 应用级会话状态：页面出栈重建后，书架 / 阅读 / 同步状态都还在。 */
+    lateinit var session: SessionStore
+        private set
+
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Coil：漫画页与封面统一走这里。
+        // diskCache(null) 是「缓存占用恒 0」的结构保证；内存上限取堆的 15%，
+        // 采样、并发、请求去重都由 Coil 负责，不再手写 LRU 与 BitmapFactory。
+        SingletonImageLoader.setSafe { context ->
+            ImageLoader.Builder(context)
+                .components {
+                    add(ComicImageFetcher(client = { container.connection.client() }))
+                    add(CoverImageFetcher { container.connection.client() })
+                }
+                .diskCache(null)
+                .memoryCache {
+                    MemoryCache.Builder()
+                        .maxSizePercent(context, 0.15)
+                        .build()
+                }
+                .build()
+        }
+        session = SessionStore(this)
 
         // 2.5 → 3.0 的一次性迁移：旧 books.json 转数组、清掉 offline/
         val report = container.migration.run()
@@ -116,7 +143,7 @@ class FolioApp : Application() {
     /** 内存压力：图片与章节缓存跟着让路，绝不去动磁盘（本来也没有磁盘缓存）。 */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        container.images.onTrimMemory(level)
+        SingletonImageLoader.get(this).memoryCache?.clear()
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             container.chapters.clear()
         }

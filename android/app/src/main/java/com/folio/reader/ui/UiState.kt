@@ -14,6 +14,7 @@ import com.folio.reader.data.CatalogFont
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.InstalledFont
 import com.folio.reader.data.SyncStateStore
+import org.readium.r2.shared.publication.Locator
 
 /**
  * 书架条目右上角的角标。
@@ -124,8 +125,9 @@ data class ShelfUiState(
     fun transferPercent(book: Book): Int =
         syncStates[book.id]?.takeIf { it.state == SyncState.TRANSFERRING }?.progressPercent ?: 0
 
-    /** 来源小标：本机 / 桌面端 / 云端 / 云端 · 漫画。 */
+    /** 来源小标：本机 / 桌面端 / 云端 / 云端 · 漫画 / EPUB。 */
     fun sourceLabelOf(book: Book): String = when {
+        book.isEpub -> "EPUB"
         book.isCloud && book.isComic -> "云端 · 漫画"
         book.isCloud -> "云端"
         book.origin == Origin.LOCAL -> "本机"
@@ -268,6 +270,20 @@ data class DeleteConfirmState(
 )
 
 /**
+ * EPUB 阅读页状态。
+ *
+ * 只放「打开这本书」需要的几样：书、加载态、失败原因、上次位置；
+ * 正文排版与翻页在 `EpubNavigatorFragment` 里，Compose 不碰。
+ */
+data class EpubUiState(
+    val book: Book? = null,
+    val loading: Boolean = false,
+    val error: String? = null,
+    /** 上次读到的地方（本机 `epub-progress.json`）。 */
+    val initialLocator: Locator? = null,
+)
+
+/**
  * 阅读页状态（小说）。
  *
  * [controls] / [showStyle] 是 UI 自己的显隐开关，放在状态里是为了
@@ -368,8 +384,6 @@ data class ComicUiState(
     val loading: Boolean = false,
     /** 话级错误（拿不到目录 / 拿不到页数）。 */
     val error: String? = null,
-    /** 单页失败原因：页号 → 文案。只影响那一页。 */
-    val pageErrors: Map<Int, String> = emptyMap(),
     val direction: String = "vertical",
     val controls: Boolean = true,
     /** 话选择抽屉是否展开。 */

@@ -68,6 +68,19 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 - 云端书跳章时如果正在加载，会提示「正在加载，稍后再试」，不再点了没反应
 - 云端书预取不再重复抓取窗口内已经加载的章节，换窗口后旧窗口的迟到响应会被丢弃
 
+## [Android 4.0.0] — 2026-11-21
+
+**界面与底层组件整体换代。**
+
+- 界面换成 [Cupertino](https://github.com/alexzhirkevich/compose-cupertino) 组件库（iOS 风格），
+  按钮、搜索框、分段控件、开关、滑杆、弹窗与加载指示器全部来自组件库，色板仍是纸 / 墨 / 朱
+- 页面导航改用 [Voyager](https://github.com/adrielcafe/voyager) 的 `Navigator`，返回键、滑动转场与页面栈行为与之前一致
+- 漫画页与封面改用 [Coil](https://github.com/coil-kt/coil) 加载（内存缓存上限为堆的 15%，依旧不写磁盘）；
+  漫画双指缩放 / 双击放大改用 [Telephoto](https://github.com/saket/telephoto)
+- 新增 **EPUB** 导入与阅读（[Readium](https://github.com/readium/kotlin-toolkit)）：书架「导入书籍」可选 EPUB，
+  记录阅读位置；EPUB 是本机专用格式，不参与桌面端同步
+- 版本号升到 4.0.0（versionCode 22），书籍与进度数据格式不变，可覆盖安装
+
 ## [Android 3.6.1] — 2026-11-20
 
 **签名与备份收紧。**

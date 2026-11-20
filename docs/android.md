@@ -17,7 +17,7 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 
 | | 本机书（`origin=LOCAL`） | 云端书（`isCloud`） |
 | --- | --- | --- |
-| 正文 | 手机私有目录 `books/<id>.txt` | 桌面端书源缓存，按章现取 |
+| 正文 | 手机私有目录 `books/<id>.txt`（EPUB 为 `<id>.epub`） | 桌面端书源缓存，按章现取 |
 | 断网 | **能读**，进度先存本地 | **不能读**，提示「云端书需要连接桌面端才能阅读」 |
 | 同步 | 整文件双向（手机 ↔ 桌面端） | 不搬正文，只同步清单与进度 |
 | 缓存 | 文件本身是数据，不叫缓存 | **零磁盘缓存**，正文只在内存待 3 章 |
@@ -26,10 +26,13 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 
 ## 本机导入
 
-「导入」走系统 `OpenMultipleDocuments`，可一次选多本（`text/plain`、`text/*`、`application/octet-stream`），单本上限 30MB。
+「导入」走系统 `OpenMultipleDocuments`，可一次选多本（`text/plain`、`text/*`、`application/epub+zip`、`application/octet-stream`），
+TXT / Markdown 单本上限 30MB、EPUB 200MB。
 
 - 编码识别：UTF-8（含 BOM）→ UTF-16 → GB18030，都不行按 UTF-8 硬解并保留原文
 - 正文落 `books/<id>.txt`，先写 `.part` 再原子改名，中断不留半本书
+- **EPUB**：按扩展名或 zip 头 + `application/epub+zip` 识别，原字节落 `books/<id>.epub`，
+  `format = "epub"`、`syncState = EXCLUDED`（本机专用，不上传桌面端）；阅读交给 Readium
 - **不重复入架**：`contentHash = sha1(UTF-8 正文)`，撞上已有哈希就提示「《书名》已在书架里」
   并滚到那一本；书 id 还与桌面端下发的 id 归并，同一本书两台设备各导一次最后只剩一条
 
@@ -68,18 +71,29 @@ Folio 的手机端，原生 Kotlin + Jetpack Compose，不套 WebView。
 
 | 内容 | 落盘 | 说明 |
 | --- | --- | --- |
-| 本机书正文 | ✅ `books/<id>.txt` | 这就是数据本身，不是缓存 |
+| 本机书正文 | ✅ `books/<id>.txt` / `<id>.epub` | 这就是数据本身，不是缓存 |
 | 云端文章节 | ❌ | `ChapterMemoryCache` 只留最近 3 章 |
-| 漫画图片 / 封面 | ❌ | `ImageLoader` 内存 LRU（≤96MiB，按堆 1/8 取小），不写 `cacheDir` |
+| 漫画图片 / 封面 | ❌ | Coil 内存缓存（≤堆的 15%），`diskCache(null)` 不写 `cacheDir` |
 
 自证靠读数：设置页「存储」里的**磁盘缓存**直接读 `cacheDir` 的实际大小，必须恒为 0，旁边挂
 「零缓存」角标；单测 `ChapterMemoryCacheTest.读四章不产生任何磁盘文件` 断言文件数不变。
 
 ## 漫画阅读器
 
-竖向整页流，item 先按屏宽等比占位（`aspectRatio`），图片到位前列表不跳高；双指 1–3x、
-双击 2x、放大态拖动平移不越界（不引第三方缩放库）；`ImageLoader` 内 `Semaphore(3)` 限并发，
-当前页变化预取 ±2 页，读到本话 80% 预取下一话；单页失败只影响那一页（占位显示原因 + 重试）。
+竖向整页流，item 先按屏宽等比占位（`aspectRatio`），图片到位前列表不跳高；双指缩放 / 双击放大交给
+[Telephoto](https://github.com/saket/telephoto) 的 `ZoomableAsyncImage`，图片加载与预取由
+[Coil](https://github.com/coil-kt/coil) 负责；读到本话 80% 预取下一话；单页失败只影响那一页（占位显示原因 + 重试）。
+
+## EPUB 阅读（4.0.0）
+
+EPUB 由 [Readium](https://github.com/readium/kotlin-toolkit) 渲染，Compose 只提供加载态、失败提示与返回入口：
+
+- `data/EpubLibrary.kt` 负责「落盘文件 → `Publication`」，按书 id 只留一份，离开阅读页时关闭
+- `ui/book/EpubHostFragment.kt` 用 `EpubNavigatorFactory` 生成子 Fragment（**在 `super.onCreate` 前设置工厂**，
+  否则旋屏恢复时拿不到）；
+- `ui/book/EpubReaderScreen.kt` 通过 `FragmentContainerView`（固定 id `epub_container`）把宿主挂进 Compose
+- 阅读位置写在本机 `files/library/epub-progress.json`（`href` / `progression` / `totalProgression`），
+  不进 `progress.json`，也不参与双端同步
 
 ## 连接桌面端
 
@@ -178,22 +192,23 @@ keystore 与口令不入库：CI 从仓库 secrets 的 `FOLIO_KEYSTORE_BASE64` �
 
 ## 测试
 
-共 167 项，`./gradlew testDebugUnitTest` 一次跑完。`LanIntegrationTest` 21 项**真的起一个桌面端服务**
+共 194 项，`./gradlew testDebugUnitTest` 一次跑完。`LanIntegrationTest` 21 项**真的起一个桌面端服务**
 （ping / 清单 / 下载 / 分块上传 / 漫画取图 / 进度回写 / 错误访问码 / UDP 发现，
 以及设备流的心跳建档 / 推书下载与 sha1 校验 / 过期清扫 / 唯一副本拒绝 / 快照上报），
 缺 `node` 或 UDP 45678 被占用时跳过、不算失败；其余是纯函数与协议测试：
-`CommandExecutorTest` 16、`SyncDiffTest` 13、`TextParserTest` 10、`SnapshotThrottleTest` 10、
-`ProgressCodecTest` 8、`TextDecoderTest` 7、`BookImporterTest` 7、`SampleSizeTest` 7、
-`ChapterMemoryCacheTest` 7（含「读四章不产生任何磁盘文件」）、`ProgressMergerTest` 7、
-`ComicProgressTest` 6、`DeviceHeadersTest` 6、`HashUtilsTest` 5、`SyncEngineCloudTest` 5、
-`FontCatalogTest` 7（坏 id / 坏 url / 超限大小 / 摘要残缺 / 字体 magic）、`FontStoreTest` 7（落盘、清单、缓存）、
-`ShelfSectionsTest` 5、`DeviceChannelTest` 5（Lifecycle 翻转 → 连接数 0→1→0）、
-`ComicPageKeyTest` 4、`DeleteConfirmQueueTest` 4。
+`CommandExecutorTest` 18、`SyncDiffTest` 13、`ProgressMergerTest` 11、`TextParserTest` 10、
+`SnapshotThrottleTest` 10、`ProgressCodecTest` 8、`MarkSyncTest` 8、`TextDecoderTest` 7、
+`BookImporterTest` 10（含 EPUB 识别 / 原字节落盘 / 去重）、`ChapterMemoryCacheTest` 7（含「读四章不产生任何磁盘文件」）、
+`FontCatalogTest` 7、`FontStoreTest` 7、`ComicProgressTest` 6、`DeviceHeadersTest` 6、
+`MarkStoreTest` 6、`TextSearchTest` 6、`HashUtilsTest` 5、`ShelfSectionsTest` 5、
+`LocalBookFormatTest` 5（`format` 序列化与旧 JSON 兼容）、
+`DeviceChannelTest` 5、`SyncEngineCloudTest` 5、`ComicPageKeyTest` 4、`DeleteConfirmQueueTest` 4。
 
 ## 数据位置
 
 `files/library/` 下四份 json：书架真相 `books.json`、进度 `progress.json`、待补写 `pending.json`、每本书的 `sync-state.json`；
-本机正文在 `files/books/<id>.txt`（导入中为 `.txt.part`），字体在 `files/fonts/<id>.<ttf|otf>`（清单 `installed.json`，
+EPUB 的阅读位置单独存 `epub-progress.json`；
+本机正文在 `files/books/<id>.txt`（EPUB 为 `<id>.epub`，导入中为 `.txt.part` / `.epub.part`），字体在 `files/fonts/<id>.<ttf|otf>`（清单 `installed.json`，
 目录缓存在 `files/library/font-catalog.json`），设置在 `shared_prefs/folio_settings.xml`。
 `cacheDir` 下没有 Folio 的文件 —— 这是红线，不是巧合。从 2.5 升上来时 `Migration` 会把老
 `library/books.json` 的 `{"books":[...]}` 迁成顶层数组，并删掉 `offline/` 里那批章节副本。
@@ -216,18 +231,28 @@ keystore 与口令不入库：CI 从仓库 secrets 的 `FOLIO_KEYSTORE_BASE64` �
 - 正文与排版预览都走 `ui/FontFamilies.kt`：按「路径 + 大小 + mtime」缓存最近 4 款 FontFamily，
   文件被删或解析失败时回落到系统字体
 
-## UI 架构（3.4.0 / Miuix）
+## UI 架构（4.0.0 / Cupertino）
 
-界面层统一用 [Miuix](https://github.com/miuix-kotlin-multiplatform/miuix)（HyperOS 风格的 Compose 组件库），
-`FolioTheme` 同时提供 `MiuixTheme` 与 `MaterialTheme`：组件用 Miuix，色板仍是纸 / 墨 / 朱，
-圆角 10–28dp，强调色只出现在进度、开关与当前项。
+界面层统一用 [compose-cupertino](https://github.com/alexzhirkevich/compose-cupertino)（iOS 风格的 Compose 组件库）：
+按钮、搜索框、分段控件、开关、滑杆、弹窗、加载指示器都用它的 `Cupertino*` 组件，色板仍是纸 / 墨 / 朱
+（`ui/Theme.kt`），圆角 10–28dp，强调色只出现在进度、开关与当前项。不再使用 Miuix / Material3 组件。
+
+页面导航用 [Voyager](https://github.com/adrielcafe/voyager)：`ui/FolioNav.kt` 里一个 `Navigator` + `SlideTransition`，
+每个页面是 `Screen` 对象，跨页共享状态放在应用级 `ui/session/SessionStore.kt`，
+页面各自的 `ScreenModel` 只表示生命周期锚点。
+
+图片统一走 [Coil](https://github.com/coil-kt/coil)：`data/ComicImage.kt` / `data/CoverImage.kt` 注册 Fetcher，
+`FolioApp` 里 `diskCache(null)` + 内存缓存 15%。漫画缩放用 [Telephoto](https://github.com/saket/telephoto)。
 
 | 文件 | 职责 |
 | --- | --- |
-| `ui/miuix/HyperKit.kt` | HyperOS 底部面板（弹簧上滑、下拉关闭）、分组卡片、行、开关、滑杆、胶囊分段、动作格 |
+| `ui/FolioNav.kt` | 导航栈：书架 / 小说 / 漫画 / EPUB / 设置 / 同步 / 字体商店 |
+| `ui/session/SessionStore.kt` | 应用级状态：书架、阅读、同步、落盘、网络 |
+| `ui/model/ScreenModels.kt` | 各页面的 Voyager `ScreenModel` |
 | `ui/ReaderScreen.kt` | 阅读页：浮动 HUD、点击 / 音量键翻页、滚动与翻页双模式切换 |
 | `ui/reader/ReaderPager.kt` | 翻页模式：按章用 `TextMeasurer` 分页，超长段落按行切分，页脚显示页码 |
-| `ui/reader/*Sheet.kt` | 目录 / 搜索 / 痕迹 / 排版四套面板，全部基于 `HyperSheet` |
+| `ui/reader/*Sheet.kt` | 目录 / 搜索 / 痕迹 / 排版四套面板 |
+| `ui/book/EpubReaderScreen.kt` | EPUB：Compose 外壳 + Readium Fragment |
 | `ui/ShelfScreen.kt` | 书架：大标题、胶囊筛选、圆角书卡、底部浮动工具条 |
 | `ui/SettingsScreen.kt` | 设置：分组卡片 + 开关 / 滑杆 / 分段 |
 | `ui/SyncStatusScreen.kt` | 同步报告：状态卡、逐本账本、等宽诊断 |
@@ -243,4 +268,5 @@ keystore 与口令不入库：CI 从仓库 secrets 的 `FOLIO_KEYSTORE_BASE64` �
 - **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。
 - **云端书必须连着桌面端**：想整本离线请用本机导入（云端书不做离线副本）。
 - **超过 30MB 的书不同步**，只在本机读；封面取不到时退回首字色块。
+- **EPUB 只在本机**：不参与桌面端同步，阅读位置也只存在本机；桌面端没有对应阅读器。
 - **字体下载要能连上 GitHub 或桌面端**：两条都不通时商店能开（缓存目录）但装不了；已装字体不受影响。

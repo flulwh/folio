@@ -1,12 +1,8 @@
 package com.folio.reader.ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Shapes
-import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -16,12 +12,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
+import io.github.alexzhirkevich.cupertino.theme.Shapes
+import io.github.alexzhirkevich.cupertino.theme.Typography
+import io.github.alexzhirkevich.cupertino.theme.darkColorScheme
+import io.github.alexzhirkevich.cupertino.theme.lightColorScheme
 
 /* ==========================================================================
    Folio · Anthropic 皮肤
    --------------------------------------------------------------------------
-   组件结构、圆角、动效全部交给 Miuix（HyperOS 观感）；品牌色换成 Anthropic：
-   - 墨 #141413 / 纸 #FAF9F5 / 中灰 #B0AEA5 / 浅灰 #E8E6DC
+   组件与观感全部交给 compose-cupertino（iOS 风格），这里只做三件事：
+   - 品牌色换成 Anthropic：墨 #141413 / 纸 #FAF9F5 / 中灰 #B0AEA5 / 浅灰 #E8E6DC
    - 强调色只有暖橙 #D97757，蓝 #6A9BCC 与绿 #788C5D 只做状态点缀
    - 底色 = 当前阅读底色预设（白 / 纸 / 米 / 石墨 / 夜间），全部落在品牌灰阶上
    正文的排版（字号 / 行距 / 字距 / 段距）与皮肤无关，仍由阅读设置驱动。
@@ -60,6 +61,10 @@ data class ReadingPalette(
     /** 橙是中调，上面压深墨才看得清。 */
     val accentInk: Color get() = Color(0xFF1F1A16)
     val accentSoft: Color get() = accent.copy(alpha = if (isDark) 0.20f else 0.12f)
+    /** 卡片底：比页面底色略亮 / 略深，用来区分分组。 */
+    val card: Color get() = if (isDark) mix(bg, ink, 0.10f) else mix(bg, BrandLight, 0.72f)
+    /** 比卡片再高一层：输入框、分段控件底。 */
+    val fill: Color get() = if (isDark) mix(bg, ink, 0.16f) else mix(bg, ink, 0.06f)
 }
 
 private val WHITE_PALETTE = ReadingPalette(
@@ -122,108 +127,100 @@ fun readingPalette(id: String?): ReadingPalette =
 /** 当前生效的纸色，组件与阅读器共用。 */
 val LocalReadingPalette = staticCompositionLocalOf { WHITE_PALETTE }
 
+private fun mix(a: Color, b: Color, amount: Float): Color =
+    Color(
+        red = a.red + (b.red - a.red) * amount,
+        green = a.green + (b.green - a.green) * amount,
+        blue = a.blue + (b.blue - a.blue) * amount,
+        alpha = 1f,
+    )
+
+/** 深色底略微提亮，浅色底略微提亮，用来区分 surface 与 background。 */
+private fun elevate(bg: Color, ink: Color, amount: Float = 0.03f): Color = mix(bg, ink, amount)
+
 /* --------------------------------- 字体 --------------------------------- */
 
 private val Sans = FontFamily.SansSerif
 private val Mono = FontFamily.Monospace
 
 /**
+ * 字号刻度沿用原来的 11 → 32 级，只是换到 Cupertino 的槽位上。
  * 网格标题：字重沉、字距收（中文靠字号与留白拉层次，不靠花体）。
  * 元信息：等宽 + 大幅字距，读起来像标尺刻度。
  */
 val FolioTypography: Typography = Typography(
-    displayLarge = TextStyle(
-        fontFamily = Sans,
-        fontSize = 40.sp,
-        lineHeight = 42.sp,
-        fontWeight = FontWeight.Black,
-        letterSpacing = (-1.4).sp,
-    ),
-    displayMedium = TextStyle(
+    largeTitle = TextStyle(
         fontFamily = Sans,
         fontSize = 32.sp,
         lineHeight = 34.sp,
         fontWeight = FontWeight.Black,
         letterSpacing = (-1.0).sp,
     ),
-    headlineLarge = TextStyle(
+    title1 = TextStyle(
         fontFamily = Sans,
         fontSize = 27.sp,
         lineHeight = 31.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.6).sp,
     ),
-    headlineMedium = TextStyle(
+    title2 = TextStyle(
         fontFamily = Sans,
         fontSize = 23.sp,
         lineHeight = 27.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = (-0.4).sp,
     ),
-    headlineSmall = TextStyle(
+    title3 = TextStyle(
         fontFamily = Sans,
         fontSize = 20.sp,
         lineHeight = 24.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = (-0.2).sp,
     ),
-    titleLarge = TextStyle(
+    headline = TextStyle(
         fontFamily = Sans,
         fontSize = 18.sp,
         lineHeight = 22.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.sp,
     ),
-    titleMedium = TextStyle(
-        fontFamily = Sans,
-        fontSize = 16.sp,
-        lineHeight = 21.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.1.sp,
-    ),
-    titleSmall = TextStyle(
-        fontFamily = Sans,
-        fontSize = 14.sp,
-        lineHeight = 19.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.1.sp,
-    ),
-    bodyLarge = TextStyle(
+    body = TextStyle(
         fontFamily = Sans,
         fontSize = 16.sp,
         lineHeight = 24.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.2.sp,
     ),
-    bodyMedium = TextStyle(
+    callout = TextStyle(
         fontFamily = Sans,
-        fontSize = 14.sp,
-        lineHeight = 21.sp,
+        fontSize = 14.5.sp,
+        lineHeight = 20.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.2.sp,
     ),
-    bodySmall = TextStyle(
+    subhead = TextStyle(
+        fontFamily = Sans,
+        fontSize = 14.sp,
+        lineHeight = 19.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = 0.1.sp,
+    ),
+    footnote = TextStyle(
         fontFamily = Sans,
         fontSize = 12.5.sp,
         lineHeight = 18.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = 0.2.sp,
     ),
-    labelLarge = TextStyle(
-        fontFamily = Mono,
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Medium,
-        letterSpacing = 0.6.sp,
-    ),
-    labelMedium = TextStyle(
+    // 元信息用等宽：像刻度尺，与正文区分开。
+    caption1 = TextStyle(
         fontFamily = Mono,
         fontSize = 11.sp,
         lineHeight = 15.sp,
         fontWeight = FontWeight.Medium,
         letterSpacing = 1.2.sp,
     ),
-    labelSmall = TextStyle(
+    caption2 = TextStyle(
         fontFamily = Mono,
         fontSize = 10.sp,
         lineHeight = 14.sp,
@@ -232,7 +229,7 @@ val FolioTypography: Typography = Typography(
     ),
 )
 
-/** 纸是软的：HyperOS 的圆角语言，卡片 16dp、抽屉 28dp。 */
+/** 纸是软的：卡片 18dp、抽屉 28dp，与旧版圆角语言保持一致。 */
 val FolioShapes: Shapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
     small = RoundedCornerShape(14.dp),
@@ -243,168 +240,61 @@ val FolioShapes: Shapes = Shapes(
 
 /* --------------------------------- 主题 --------------------------------- */
 
-private fun schemeFor(palette: ReadingPalette) = with(palette) {
-    val base = if (isDark) {
+/**
+ * 把纸色预设映射到 Cupertino 的 iOS 语义色板。
+ *
+ * accent = 暖橙；label = 墨；separator = 发丝线；
+ * systemGroupedBackground = 页面底；secondarySystemGroupedBackground = 卡片底。
+ */
+fun folioColorScheme(palette: ReadingPalette) = with(palette) {
+    val cardColor = card
+    val fillColor = fill
+    if (isDark) {
         darkColorScheme(
-            primary = accent,
-            onPrimary = accentInk,
-            primaryContainer = accentSoft,
-            onPrimaryContainer = tint(accent, ink, 0.55f),
-            secondary = ink,
-            onSecondary = bg,
-            secondaryContainer = ink.copy(alpha = 0.10f),
-            onSecondaryContainer = ink,
-            background = bg,
-            onBackground = ink,
-            surface = elevate(bg, ink),
-            onSurface = ink,
-            surfaceVariant = elevate(bg, ink, 0.05f),
-            onSurfaceVariant = soft,
-            outline = lineStrong,
-            outlineVariant = line,
-            error = Color(0xFFE8836A),
-            onError = Color(0xFF2A110A),
-            errorContainer = Color(0xFF40231B),
-            onErrorContainer = Color(0xFFF6C4B4),
+            accent = accent,
+            label = ink,
+            secondaryLabel = soft,
+            tertiaryLabel = soft.copy(alpha = 0.72f),
+            quaternaryLabel = soft.copy(alpha = 0.48f),
+            systemFill = ink.copy(alpha = 0.16f),
+            secondarySystemFill = ink.copy(alpha = 0.12f),
+            tertiarySystemFill = ink.copy(alpha = 0.08f),
+            quaternarySystemFill = ink.copy(alpha = 0.04f),
+            placeholderText = soft.copy(alpha = 0.60f),
+            separator = line,
+            opaqueSeparator = lineStrong,
+            link = BrandBlue,
+            systemGroupedBackground = bg,
+            secondarySystemGroupedBackground = cardColor,
+            tertiarySystemGroupedBackground = fillColor,
+            systemBackground = bg,
+            secondarySystemBackground = cardColor,
+            tertiarySystemBackground = fillColor,
         )
     } else {
         lightColorScheme(
-            primary = accent,
-            onPrimary = accentInk,
-            primaryContainer = accentSoft,
-            onPrimaryContainer = Color(0xFF5C2A1B),
-            secondary = ink,
-            onSecondary = bg,
-            secondaryContainer = ink.copy(alpha = 0.06f),
-            onSecondaryContainer = ink,
-            background = bg,
-            onBackground = ink,
-            surface = elevate(bg, ink),
-            onSurface = ink,
-            surfaceVariant = elevate(bg, ink, 0.04f),
-            onSurfaceVariant = soft,
-            outline = lineStrong,
-            outlineVariant = line,
-            error = Color(0xFFB5462F),
-            onError = BrandLight,
-            errorContainer = Color(0xFFF6E3DA),
-            onErrorContainer = Color(0xFF48170C),
-        )
-    }
-    base
-}
-
-/** 深色底略微提亮，浅色底略微提亮，用来区分 surface 与 background。 */
-private fun elevate(bg: Color, ink: Color, amount: Float = 0.03f): Color =
-    Color(
-        red = bg.red + (ink.red - bg.red) * amount,
-        green = bg.green + (ink.green - bg.green) * amount,
-        blue = bg.blue + (ink.blue - bg.blue) * amount,
-        alpha = 1f,
-    )
-
-private fun tint(from: Color, toward: Color, amount: Float): Color =
-    Color(
-        red = from.red + (toward.red - from.red) * amount,
-        green = from.green + (toward.green - from.green) * amount,
-        blue = from.blue + (toward.blue - from.blue) * amount,
-        alpha = 1f,
-    )
-
-/* ------------------------------ Miuix 配色 ------------------------------ */
-
-/**
- * 把纸色预设映射到 Miuix 的 HyperOS 色板。
- *
- * 只覆盖「有品牌含义」的几组，其余用 Miuix 默认值：
- * primary = 暖橙（开关 / 滑杆 / 选中）；
- * background = 阅读底色；surface = 提亮后的卡片色；
- * secondaryContainer = 输入框 / 分段控件的浅底。
- */
-fun miuixSchemeFor(palette: ReadingPalette) = with(palette) {
-    val card = if (isDark) mix(bg, ink, 0.10f) else mix(bg, BrandLight, 0.72f)
-    val elevated = if (isDark) mix(bg, ink, 0.16f) else mix(bg, ink, 0.06f)
-    val quiet = if (isDark) mix(bg, ink, 0.22f) else mix(bg, ink, 0.10f)
-    if (isDark) {
-        top.yukonga.miuix.kmp.theme.darkColorScheme(
-            primary = accent,
-            onPrimary = accentInk,
-            primaryVariant = accent,
-            primaryContainer = accent.copy(alpha = 0.22f),
-            onPrimaryContainer = ink,
-            secondary = elevated,
-            onSecondary = ink,
-            secondaryVariant = card,
-            onSecondaryVariant = soft,
-            secondaryContainer = elevated,
-            onSecondaryContainer = soft,
-            tertiaryContainer = accent.copy(alpha = 0.18f),
-            onTertiaryContainer = accent,
-            background = bg,
-            onBackground = ink,
-            onBackgroundVariant = soft,
-            surface = card,
-            onSurface = ink,
-            surfaceVariant = card,
-            onSurfaceSecondary = ink.copy(alpha = 0.82f),
-            onSurfaceVariantSummary = soft,
-            onSurfaceVariantActions = soft.copy(alpha = 0.72f),
-            disabledOnSurface = soft.copy(alpha = 0.38f),
-            outline = quiet,
-            dividerLine = ink.copy(alpha = 0.10f),
-            surfaceContainer = elevated,
-            onSurfaceContainer = ink,
-            onSurfaceContainerVariant = soft,
-            surfaceContainerHigh = quiet,
-            onSurfaceContainerHigh = soft,
-            surfaceContainerHighest = quiet,
-            onSurfaceContainerHighest = ink,
-        )
-    } else {
-        top.yukonga.miuix.kmp.theme.lightColorScheme(
-            primary = accent,
-            onPrimary = accentInk,
-            primaryVariant = accent,
-            primaryContainer = accent.copy(alpha = 0.14f),
-            onPrimaryContainer = ink,
-            secondary = elevated,
-            onSecondary = ink,
-            secondaryVariant = BrandLight,
-            onSecondaryVariant = ink,
-            secondaryContainer = elevated,
-            onSecondaryContainer = soft,
-            tertiaryContainer = accent.copy(alpha = 0.10f),
-            onTertiaryContainer = accent,
-            background = bg,
-            onBackground = ink,
-            onBackgroundVariant = soft,
-            surface = card,
-            onSurface = ink,
-            surfaceVariant = card,
-            onSurfaceSecondary = ink.copy(alpha = 0.82f),
-            onSurfaceVariantSummary = soft,
-            onSurfaceVariantActions = soft.copy(alpha = 0.72f),
-            disabledOnSurface = soft.copy(alpha = 0.38f),
-            outline = quiet,
-            dividerLine = ink.copy(alpha = 0.08f),
-            surfaceContainer = elevated,
-            onSurfaceContainer = ink,
-            onSurfaceContainerVariant = soft,
-            surfaceContainerHigh = elevated,
-            onSurfaceContainerHigh = soft,
-            surfaceContainerHighest = card,
-            onSurfaceContainerHighest = ink,
+            accent = accent,
+            label = ink,
+            secondaryLabel = soft,
+            tertiaryLabel = soft.copy(alpha = 0.72f),
+            quaternaryLabel = soft.copy(alpha = 0.48f),
+            systemFill = ink.copy(alpha = 0.10f),
+            secondarySystemFill = ink.copy(alpha = 0.07f),
+            tertiarySystemFill = ink.copy(alpha = 0.05f),
+            quaternarySystemFill = ink.copy(alpha = 0.03f),
+            placeholderText = soft.copy(alpha = 0.60f),
+            separator = line,
+            opaqueSeparator = lineStrong,
+            link = BrandBlue,
+            systemGroupedBackground = bg,
+            secondarySystemGroupedBackground = cardColor,
+            tertiarySystemGroupedBackground = fillColor,
+            systemBackground = bg,
+            secondarySystemBackground = cardColor,
+            tertiarySystemBackground = fillColor,
         )
     }
 }
-
-private fun mix(a: Color, b: Color, amount: Float): Color =
-    Color(
-        red = a.red + (b.red - a.red) * amount,
-        green = a.green + (b.green - a.green) * amount,
-        blue = a.blue + (b.blue - a.blue) * amount,
-        alpha = 1f,
-    )
 
 @Composable
 fun FolioTheme(
@@ -412,15 +302,10 @@ fun FolioTheme(
     content: @Composable () -> Unit,
 ) {
     val palette = readingPalette(preset)
-    val miuixColors = remember(palette) { miuixSchemeFor(palette) }
-    androidx.compose.runtime.CompositionLocalProvider(LocalReadingPalette provides palette) {
-        top.yukonga.miuix.kmp.theme.MiuixTheme(colors = miuixColors) {
-            MaterialTheme(
-                colorScheme = schemeFor(palette),
-                typography = FolioTypography,
-                shapes = FolioShapes,
-                content = content,
-            )
+    val colors = remember(palette) { folioColorScheme(palette) }
+    CupertinoTheme(colorScheme = colors, typography = FolioTypography, shapes = FolioShapes) {
+        CompositionLocalProvider(LocalReadingPalette provides palette) {
+            content()
         }
     }
 }

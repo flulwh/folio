@@ -82,6 +82,13 @@ data class LocalBook(
     val contentHash: String? = null,
     val size: Long = 0L,
     val encoding: String? = null,
+    /**
+     * 正文格式：`txt`（纯文本 / Markdown）或 `epub`。
+     *
+     * EPUB 是本机专用格式（原文件落盘、Readium 解析），**不参与同步**；
+     * 缺省 `txt`，老数据读进来不会受影响。
+     */
+    val format: String = "txt",
     val hasLocalFile: Boolean = false,
     val cover: String? = null,
     val remoteId: String? = null,
@@ -100,6 +107,8 @@ data class LocalBook(
     val isCloud: Boolean get() = kind == BookKind.CLOUD
 
     val isComic: Boolean get() = type == BookType.COMIC
+
+    val isEpub: Boolean get() = format == "epub"
 
     /** 冲突判定用的键：书名规整后比较，见 [titleKeyOf]。 */
     val titleKey: String get() = titleKeyOf(title)
@@ -122,6 +131,7 @@ data class LocalBook(
         remoteKind?.let { json.put("remoteKind", it) }
         contentHash?.let { json.put("contentHash", it) }
         encoding?.let { json.put("encoding", it) }
+        if (format != "txt") json.put("format", format)
         cover?.let { json.put("cover", it) }
         remoteId?.let { json.put("remoteId", it) }
         comicPage?.let { json.put("comicPage", it) }
@@ -167,6 +177,7 @@ data class LocalBook(
                 contentHash = hash.takeIf { it.length == 40 },
                 size = json.optLong("size", 0L).coerceAtLeast(0L),
                 encoding = json.optString("encoding").takeIf { it.isNotBlank() && it != "null" },
+                format = json.optString("format").takeIf { it == "epub" } ?: "txt",
                 hasLocalFile = json.optBoolean("hasLocalFile", false),
                 cover = json.optString("cover")
                     .takeIf { it.isNotBlank() && (it.startsWith("http") || it.startsWith("/")) },

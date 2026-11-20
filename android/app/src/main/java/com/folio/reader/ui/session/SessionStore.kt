@@ -1,36 +1,45 @@
-package com.folio.reader.ui
+package com.folio.reader.ui.session
 
 import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.LruCache
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
 import com.folio.reader.FolioApp
 import com.folio.reader.core.Book
 import com.folio.reader.core.BookImporter
-import com.folio.reader.core.BookKind
 import com.folio.reader.core.JsonIo
-import com.folio.reader.core.PageKey
 import com.folio.reader.core.ProgressEntry
 import com.folio.reader.core.ProgressMerger
 import com.folio.reader.core.ReaderMark
-import com.folio.reader.core.SampleSize
 import com.folio.reader.core.SearchHit
 import com.folio.reader.core.TextParser
 import com.folio.reader.core.TextSearch
 import com.folio.reader.core.TocChapter
 import com.folio.reader.core.comicPercent
+import com.folio.reader.data.ComicPage
 import com.folio.reader.data.ConnectionManager
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.DeleteConfirmer
 import com.folio.reader.data.SettingsStore
 import com.folio.reader.net.LanDiscovery
+import com.folio.reader.ui.ComicUiState
+import com.folio.reader.ui.DeleteConfirmQueue
+import com.folio.reader.ui.DeleteConfirmState
+import com.folio.reader.ui.EpubUiState
+import com.folio.reader.ui.FontStoreUiState
+import com.folio.reader.ui.PageTurn
+import com.folio.reader.ui.ReaderUiState
+import com.folio.reader.ui.SearchUiState
+import com.folio.reader.ui.SettingsUiState
+import com.folio.reader.ui.ShelfUiState
 import android.view.KeyEvent
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import org.readium.r2.shared.publication.Locator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,7 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 全局状态。
+ * 应用级会话状态（Application 作用域，不随页面销毁）。
  *
  * 分工（与架构文档 §1.5 一致）：
  *  - **书架真相**在 `books.json`，桌面端清单只用来算差集；
@@ -48,8 +57,12 @@ import kotlinx.coroutines.withContext
  *  - **云端正文零缓存**：小说经 `CloudChapterSource`（3 章内存），
  *    漫画经 `ImageLoader`（按字节内存 LRU），两者都不碰磁盘；
  *  - 进度：本地 0.6 秒防抖落盘，1.5 秒后回写桌面端，失败挂 `pending.json`。
+ *
+ * 页面各自的临时状态由 Voyager ScreenModel 持有；跨页共享的部分都在这里。
  */
-class AppViewModel(app: Application) : AndroidViewModel(app) {
+class SessionStore(private val app: Application) {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val container = (app as FolioApp).container
     private val settings = container.settings
@@ -62,7 +75,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val connection = container.connection
     private val progressSync = container.progressSync
     private val sync = container.sync
-    private val images = container.images
+    /** 漫画页与封面统一走 Coil（见 FolioApp 的 SingletonImageLoader 配置）。 */
+    private val coil: ImageLoader = SingletonImageLoader.get(app)
     /** 书签 / 划线：与进度分开一份文件，见 [MarkStore]。 */
     private val marks = container.marks
     private val marksSync = container.marksSync
@@ -81,9 +95,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _comic = MutableStateFlow(ComicUiState())
     val comic: StateFlow<ComicUiState> = _comic.asStateFlow()
 
-    /** 已解码的漫画页（内存）。key 是 `(书, 话, 页)`。 */
-    private val _comicPictures = MutableStateFlow<Map<PageKey, ImageBitmap>>(emptyMap())
-    val comicPictures: StateFlow<Map<PageKey, ImageBitmap>> = _comicPictures.asStateFlow()
+    /** EPUB 阅读页：本机专用，位置也只落本机。 */
+    private val _epub = MutableStateFlow(EpubUiState())
+    val epub: StateFlow<EpubUiState> = _epub.asStateFlow()
 
     private val _settings = MutableStateFlow(SettingsUiState())
     val settingsState: StateFlow<SettingsUiState> = _settings.asStateFlow()
@@ -95,6 +109,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** T11：桌面端要求删「唯一副本」时，等用户点确认的弹层状态。 */
     private val deleteConfirms = DeleteConfirmQueue()
     val deleteConfirm: StateFlow<DeleteConfirmState?> = deleteConfirms.request
+
+    /** 当前页面路由：音量键只在小说阅读页消费，其余页面保持系统音量行为。 */
+    private val _route = MutableStateFlow("")
+    val route: StateFlow<String> = _route.asStateFlow()
+
+    fun reportRoute(value: String) {
+        _route.value = value
+    }
 
     /** 目录跳章用的目标段落，由列表状态消费后清空。 */
     private val _scrollTarget = MutableStateFlow(-1)
@@ -113,7 +135,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         jumpLocked = true
         jumpUnlockJob?.cancel()
         // 兜底：UI 万一个别分支没回调，600ms 后自动解锁，不会永久冻住进度上报
-        jumpUnlockJob = viewModelScope.launch {
+        jumpUnlockJob = scope.launch {
             delay(600)
             jumpLocked = false
         }
@@ -134,11 +156,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _pageTurn = MutableStateFlow(PageTurn())
     val pageTurn: StateFlow<PageTurn> = _pageTurn.asStateFlow()
 
-    /** 封面缓存：字节用 LruCache，位图用 StateFlow 驱动重组。 */
-    private val coverBytes = LruCache<String, ByteArray>(24)
-    private val _covers = MutableStateFlow<Map<String, ImageBitmap>>(emptyMap())
-    val covers: StateFlow<Map<String, ImageBitmap>> = _covers.asStateFlow()
-
     private var progressMap: MutableMap<String, ProgressEntry> = mutableMapOf()
     private var persistJob: Job? = null
     private var pushJob: Job? = null
@@ -154,7 +171,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         reloadLocal()
         loadSettingsState()
         if (settings.hasServer) {
-            viewModelScope.launch { bootstrap() }
+            scope.launch { bootstrap() }
         }
     }
 
@@ -209,7 +226,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testConnection() {
-        viewModelScope.launch {
+        scope.launch {
             val health = withContext(Dispatchers.IO) { connection.check(force = true) }
             applyHealth(health)
             _shelf.update {
@@ -238,7 +255,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 回前台：最多查一次健康检查，连着就顺手同步。 */
     fun onForeground() {
         if (!settings.hasServer) return
-        viewModelScope.launch {
+        scope.launch {
             val health = withContext(Dispatchers.IO) { connection.onForeground() }
             applyHealth(health)
             if (health.ok && settings.autoSync && !_shelf.value.syncing && dueForAutoSync()) {
@@ -298,7 +315,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 当前是不是 Wi-Fi（「仅在 Wi-Fi 下同步」开关用）。 */
     private fun onWifi(): Boolean {
-        val app = getApplication<Application>()
         val manager = app.getSystemService(android.content.Context.CONNECTIVITY_SERVICE)
             as? android.net.ConnectivityManager ?: return true
         val network = manager.activeNetwork ?: return false
@@ -319,7 +335,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         _shelf.update { it.copy(syncing = true) }
-        viewModelScope.launch {
+        scope.launch {
             val health = withContext(Dispatchers.IO) { connection.check(force = !silent) }
             applyHealth(health)
             if (!health.ok) {
@@ -366,7 +382,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 同步状态页的单条「重试」。 */
     fun retrySync(book: Book) {
-        viewModelScope.launch {
+        scope.launch {
             if (book.hasLocalFile) {
                 // 本机书：走一次整体同步，把上传补上
                 syncNow(silent = false)
@@ -401,10 +417,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             openComic(book)
             return
         }
-        images.clear()
         _pageTurn.value = PageTurn()
         _reader.value = ReaderUiState(book = book, loading = true)
-        viewModelScope.launch {
+        scope.launch {
             books.touchRead(book.id)
             if (book.isCloud) {
                 openCloudBook(book)
@@ -530,7 +545,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val state = _reader.value
         val book = state.book ?: return
         _reader.update { it.copy(error = null) }
-        viewModelScope.launch {
+        scope.launch {
             when {
                 state.isCloud && state.toc.isEmpty() -> {
                     _reader.update { it.copy(loading = true) }
@@ -550,7 +565,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 顺手把下一章拉进内存，翻章时不用等。失败一律吞掉。 */
     private fun prefetchNextChapter(book: Book, toc: List<TocChapter>, position: Int) {
         val next = toc.getOrNull(position + 1)?.index ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             runCatching { cloud.prefetch(book.id, listOf(next)) }
         }
     }
@@ -564,7 +579,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (index == state.chapterIndex && state.paragraphs.isNotEmpty()) return
             lockJump()
             _reader.update { it.copy(loading = true, error = null, showToc = false) }
-            viewModelScope.launch {
+            scope.launch {
                 readCloudChapter(book, state.toc, index, progressMap[book.id])
                 unlockJump()
             }
@@ -614,7 +629,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 updatePosition(target)
             } else {
                 _reader.update { it.copy(loading = true) }
-                viewModelScope.launch {
+                scope.launch {
                     readCloudChapter(book, state.toc, chapter, null)
                     val after = _reader.value
                     val target = (ratio * (after.paragraphs.size - 1).coerceAtLeast(0)).toInt()
@@ -736,12 +751,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun closeReader() {
         flush()
         searchJob?.cancel()
-        images.clear()
         cloud.clear()
         _reader.value = ReaderUiState()
         // T10：退出阅读器是快照的三个触发点之一（刚读完的书 lastReadAt / 进度都变了）。
         // 60s 内重复会被 SyncEngine 自己挡掉，这里不用再判断。
-        viewModelScope.launch { runCatching { sync.reportSnapshot() } }
+        scope.launch { runCatching { sync.reportSnapshot() } }
     }
 
     /* ---------------- 书签 · 划线 · 笔记 ---------------- */
@@ -827,7 +841,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun commitMark(mark: ReaderMark) {
-        viewModelScope.launch {
+        scope.launch {
             val list = withContext(Dispatchers.IO) { marks.put(mark) }
             _reader.update { it.copy(marks = list) }
             scheduleMarksSync()
@@ -836,7 +850,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeMark(id: String) {
         val book = _reader.value.book ?: return
-        viewModelScope.launch {
+        scope.launch {
             val list = withContext(Dispatchers.IO) { marks.remove(book.id, id) }
             _reader.update { it.copy(marks = list) }
             scheduleMarksSync()
@@ -846,7 +860,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 给某条痕迹写 / 改笔记；写空即退回纯书签。 */
     fun updateMarkNote(id: String, note: String) {
         val book = _reader.value.book ?: return
-        viewModelScope.launch {
+        scope.launch {
             val list = withContext(Dispatchers.IO) { marks.updateNote(book.id, id, note) }
             _reader.update { it.copy(marks = list) }
             scheduleMarksSync()
@@ -862,7 +876,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private fun scheduleMarksSync() {
         if (!settings.hasServer) return
         marksSyncJob?.cancel()
-        marksSyncJob = viewModelScope.launch {
+        marksSyncJob = scope.launch {
             delay(1200)
             val outcome = withContext(Dispatchers.IO) { marksSync.sync() }
             if (outcome.changed) refreshOpenMarks()
@@ -917,7 +931,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val position = state.toc.indexOfFirst { it.index == mark.chapterNo }
             if (position >= 0 && position != state.chapterIndex) {
                 _reader.update { it.copy(loading = true, error = null) }
-                viewModelScope.launch {
+                scope.launch {
                     readCloudChapter(
                         book = book,
                         toc = state.toc,
@@ -974,7 +988,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _reader.update { it.copy(search = it.search.copy(hits = emptyList(), running = false)) }
             return
         }
-        searchJob = viewModelScope.launch {
+        searchJob = scope.launch {
             delay(260)
             val state = _reader.value
             val hits = withContext(Dispatchers.Default) {
@@ -1071,15 +1085,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openComic(book: Book) {
         cloud.clear()
-        images.clear()
-        _comicPictures.value = emptyMap()
         prefetchedChapters.clear()
         _comic.value = ComicUiState(
             book = book,
             loading = true,
             direction = settings.comicDirection,
         )
-        viewModelScope.launch {
+        scope.launch {
             books.touchRead(book.id)
             if (!_shelf.value.online) {
                 _comic.update { it.copy(loading = false, error = "云端书需要连接桌面端才能阅读") }
@@ -1133,90 +1145,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 page = page,
                 loading = false,
                 error = null,
-                pageErrors = emptyMap(),
             )
         }
-        // 换话时把上一话的图丢掉，否则 Map 会跨话累积
-        pruneComicPictures(book.id, chapterNo, page)
-        requestComicPage(page)
         recordComicProgress(book, toc, safePosition, chapterNo, page, total, immediate = true)
         maybePrefetchNextChapter(book, toc, safePosition, page, total)
     }
 
-    /** 请求某一页（已在缓存/已失败的直接跳过）。 */
-    fun requestComicPage(page: Int) {
-        val state = _comic.value
-        val book = state.book ?: return
-        if (page < 0 || (state.total > 0 && page >= state.total)) return
-        if (state.pageErrors.containsKey(page)) return
-        val key = PageKey.of(book.id, state.chapterNo, page)
-        if (_comicPictures.value.containsKey(key)) return
-        viewModelScope.launch {
-            val bitmap = images.load(key).await()
-            if (bitmap == null) {
-                val reason = probeComicPageError(book, state.chapterNo, page)
-                _comic.update { it.copy(pageErrors = it.pageErrors + (page to reason)) }
-            } else {
-                _comicPictures.update { it + (key to bitmap.asImageBitmap()) }
-            }
-        }
-    }
-
-    /**
-     * 失败页的「重试」：先清掉失败标记，再走一次加载。
-     */
-    fun retryComicPage(page: Int) {
-        _comic.update { it.copy(pageErrors = it.pageErrors - page) }
-        requestComicPage(page)
-    }
-
-    /**
-     * 取失败原因。
-     *
-     * `ImageLoader` 只回 null（它自己打了日志），但 UI 要显示「为什么失败」，
-     * 所以失败时再探一次接口把服务端/网络的原始文案拿回来 —— 只在失败路径上多一次请求。
-     */
-    private suspend fun probeComicPageError(book: Book, chapterNo: Int, page: Int): String {
-        val error = withContext(Dispatchers.IO) {
-            runCatching {
-                connection.client().comicPage(book.id, chapterNo, page).use { it.input.readBytes() }
-            }.exceptionOrNull()
-        }
-        return error?.message?.takeIf { it.isNotBlank() } ?: "这一页没取到"
-    }
-
-    /** 当前页变化（滚动或翻页触发）。 */
+    /** 当前页变化（滚动或翻页触发）：只记进度与预取，图片由 Coil 按页请求。 */
     fun onComicPageChanged(page: Int) {
         val state = _comic.value
         val book = state.book ?: return
         if (page == state.page || page < 0) return
         _comic.update { it.copy(page = page) }
-        pruneComicPictures(book.id, state.chapterNo, page)
-        requestComicPage(page)
-        requestComicPage(page + 1)
-        requestComicPage(page + 2)
-        if (page - 1 >= 0) requestComicPage(page - 1)
         recordComicProgress(book, state.toc, state.chapterIndex, state.chapterNo, page, state.total, false)
         maybePrefetchNextChapter(book, state.toc, state.chapterIndex, page, state.total)
-    }
-
-    /**
-     * 只留当前话、离当前页不远的图。
-     *
-     * [com.folio.reader.core.ImageLoader] 的 LRU 上限是内存的 1/8，但这里如果
-     * 把读过的每一页都留在 Map 里，等于绕开上限：一话几十页、每页几 MB，
-     * 读久了内存只涨不降。保留前后各 [COMIC_KEEP_RADIUS] 页，翻回去仍能命中
-     * ImageLoader 的内存缓存，不会重新下载。
-     */
-    private fun pruneComicPictures(bookId: String, chapterNo: Int, page: Int) {
-        val current = _comicPictures.value
-        if (current.isEmpty()) return
-        val kept = current.filterKeys { key ->
-            key.bookId == bookId &&
-                key.chapter == chapterNo &&
-                kotlin.math.abs(key.page - page) <= COMIC_KEEP_RADIUS
-        }
-        if (kept.size != current.size) _comicPictures.value = kept
     }
 
     fun switchComicChapter(index: Int) {
@@ -1225,7 +1167,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (index < 0 || index >= state.toc.size) return
         if (index == state.chapterIndex && state.total > 0) return
         _comic.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
+        scope.launch {
             loadComicChapter(book, state.toc, index, 0)
         }
     }
@@ -1254,14 +1196,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * 重试整话：`ComicReaderScreen` 的「重试」按钮走这里。
      *
-     * 只清错误标记与失败页记录，已经加载成功的页继续用内存里的图，
      * 不整份重来（重来会把用户翻到的位置打回第一页）。
      */
     fun reloadComic() {
         val state = _comic.value
         val book = state.book ?: return
-        _comic.update { it.copy(loading = true, error = null, pageErrors = emptyMap()) }
-        viewModelScope.launch {
+        _comic.update { it.copy(loading = true, error = null) }
+        scope.launch {
             if (state.toc.isEmpty()) {
                 // 连目录都没拿到 —— 整份重开。
                 openComic(book)
@@ -1284,14 +1225,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val next = toc.getOrNull(position + 1) ?: return
         val stamp = "${book.id}#${next.index}"
         if (!prefetchedChapters.add(stamp)) return
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             runCatching {
                 val pages = connection.client().comicPages(book.id, next.index)
-                val keys = (0 until minOf(2, pages.total))
-                    .map { PageKey.of(book.id, next.index, it) }
-                // 只预热 ImageLoader 的 LRU，不往 _comicPictures 里塞：
-                // 那里只放「当前话」的图，跨话常驻会绕开缓存上限。
-                images.prefetch(keys)
+                // 预热 Coil 的内存缓存（它有全局上限，跨话常驻不会绕开）。
+                repeat(minOf(2, pages.total)) { index ->
+                    coil.enqueue(
+                        ImageRequest.Builder(app)
+                            .data(ComicPage.of(book.id, next.index, index))
+                            .build(),
+                    )
+                }
             }
         }
     }
@@ -1334,7 +1278,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         comicProgressJob?.cancel()
-        comicProgressJob = viewModelScope.launch {
+        comicProgressJob = scope.launch {
             if (!immediate) delay(700)
             progressStore.write(progressMap)
             withContext(Dispatchers.IO) { progressSync.push(book, entry) }
@@ -1352,10 +1296,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         flush()
-        images.clear()
+        coil.memoryCache?.clear()
         cloud.clear()
-        _comicPictures.value = emptyMap()
         _comic.value = ComicUiState(direction = settings.comicDirection)
+    }
+
+    /* ---------------- EPUB ---------------- */
+
+    /**
+     * 打开 EPUB：先找回上次位置，再让 Readium 解析。
+     *
+     * 解析放在 IO 线程（`EpubLibrary.open` 内部切），页面只显示加载态与失败原因。
+     */
+    fun openEpub(book: Book) {
+        val local = books.findById(book.id)
+        if (local == null || !local.isEpub) {
+            _epub.value = EpubUiState(book = book, error = "这本书没有落盘的 EPUB 文件，请重新导入")
+            return
+        }
+        val saved = runCatching { container.epubProgress.load(book.id)?.toLocator() }.getOrNull()
+        _epub.value = EpubUiState(book = book, loading = true, initialLocator = saved)
+        scope.launch {
+            container.epubLibrary.open(local).fold(
+                onSuccess = { _epub.update { it.copy(loading = false) } },
+                onFailure = { err ->
+                    _epub.update { it.copy(loading = false, error = err.message ?: "打不开这本 EPUB") }
+                },
+            )
+        }
+    }
+
+    /** 阅读页每翻一次记一次位置；写盘放 IO，失败不打扰阅读。 */
+    fun saveEpubLocator(bookId: String, locator: Locator) {
+        scope.launch(Dispatchers.IO) { container.epubProgress.save(bookId, locator) }
+    }
+
+    /** 离开 EPUB 阅读页：释放 Readium 的 Publication（文件句柄与已解析资源）。 */
+    fun closeEpub() {
+        _epub.value.book?.let { container.epubLibrary.close(it.id) }
+        _epub.value = EpubUiState()
     }
 
     /* ---------------- 进度落盘与回写 ---------------- */
@@ -1367,12 +1346,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         persistJob?.cancel()
-        persistJob = viewModelScope.launch {
+        persistJob = scope.launch {
             delay(600)
             progressStore.write(progressMap)
         }
         pushJob?.cancel()
-        pushJob = viewModelScope.launch {
+        pushJob = scope.launch {
             delay(1500)
             val ok = withContext(Dispatchers.IO) { progressSync.push(book, entry) }
             if (ok) {
@@ -1391,58 +1370,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         progressStore.write(progressMap)
         val dirty = progressStore.readPending()
         if (dirty.isEmpty()) return
-        viewModelScope.launch {
+        scope.launch {
             val outcome = withContext(Dispatchers.IO) { progressSync.flushPending() }
             if (outcome.ok) {
                 _shelf.update { it.copy(message = "进度已同步到桌面端") }
             }
         }
-    }
-
-    /* ---------------- 封面 ---------------- */
-
-    fun loadCover(book: Book) {
-        if (_covers.value.containsKey(book.id)) return
-        if (book.cover == null) return
-        viewModelScope.launch {
-            val bytes = coverBytes.get(book.id) ?: withContext(Dispatchers.IO) {
-                runCatching {
-                    connection.client().fetchCover(book.remoteId ?: book.id)
-                }.getOrNull()
-            }
-            if (bytes == null) return@launch
-            coverBytes.put(book.id, bytes)
-            // 解码与采样都放后台：封面原图常有 1000×1500 以上，主线程解码会卡住书架滚动
-            val bitmap = withContext(Dispatchers.Default) { decodeCover(bytes) }?.asImageBitmap()
-            if (bitmap != null) {
-                _covers.update { it + (book.id to bitmap) }
-            }
-        }
-    }
-
-    /**
-     * 按书架显示尺寸采样解码封面。
-     *
-     * 书架上的封面最多占半屏宽，没必要把原图整张解出来；
-     * 采样后单张内存往往从几 MB 降到几百 KB，滚动和 GC 都轻松。
-     */
-    private fun decodeCover(bytes: ByteArray): android.graphics.Bitmap? {
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val screen = getApplication<Application>().resources.displayMetrics.widthPixels
-        val sample = SampleSize.calculate(
-            sourceWidth = bounds.outWidth,
-            sourceHeight = bounds.outHeight,
-            targetWidth = (screen / 2).coerceAtLeast(1),
-        )
-        val options = android.graphics.BitmapFactory.Options().apply {
-            inSampleSize = sample
-            inScaled = false
-        }
-        return runCatching {
-            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-        }.getOrNull()
     }
 
     /* ---------------- 书架动作 ---------------- */
@@ -1465,7 +1398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _shelf.update { it.copy(message = "《${book.title}》已经在本机了") }
             return
         }
-        viewModelScope.launch {
+        scope.launch {
             _shelf.update { it.copy(message = "正在下载《${book.title}》…") }
             val outcome = sync.pullBook(book.remoteId ?: book.id)
             _shelf.update { it.copy(message = outcome.message) }
@@ -1493,7 +1426,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun removeEntry(book: Book, message: String) {
-        viewModelScope.launch {
+        scope.launch {
             withContext(Dispatchers.IO) {
                 files.delete(book.id)
                 books.remove(book.id)
@@ -1501,8 +1434,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 progressStore.remove(book.id)
                 cloud.clear(book.id)
             }
-            _covers.update { it - book.id }
-            coverBytes.remove(book.id)
             _shelf.update { it.copy(message = message) }
             reloadLocal()
         }
@@ -1518,7 +1449,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun importDocuments(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        viewModelScope.launch {
+        scope.launch {
             _shelf.update {
                 it.copy(importing = true, importLabel = "正在导入 0/${uris.size}…", message = null)
             }
@@ -1573,7 +1504,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun importOne(uri: Uri): BookImporter.Outcome {
-        val app = getApplication<Application>()
         val name = displayNameOf(uri)
         val bytes = runCatching {
             app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
@@ -1585,7 +1515,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun displayNameOf(uri: Uri): String {
-        val app = getApplication<Application>()
         val fromProvider = runCatching {
             app.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -1600,7 +1529,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /* ---------------- 设置 ---------------- */
 
     fun loadSettingsState() {
-        val app = getApplication<Application>()
         _settings.update {
             it.copy(
                 serverUrl = settings.serverUrl,
@@ -1633,7 +1561,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 lastSyncAt = syncState.lastSyncAt(),
                 conflictCount = _shelf.value.conflictCount,
                 localBytes = files.root().walkTopDown().filter { it.isFile }.sumOf { it.length() },
-                memoryBytes = cloud.cacheBytes + images.sizeBytes(),
+                memoryBytes = cloud.cacheBytes + (coil.memoryCache?.size ?: 0L),
                 // 恒 0 自证：直接读 cacheDir 实际占用，而不是写死 0
                 cacheBytes = JsonIo.sizeOf(app.cacheDir),
             )
@@ -1725,7 +1653,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_fontStore.value.loading) return
         _fontStore.update { it.copy(loading = true, error = "") }
         fontCatalogJob?.cancel()
-        fontCatalogJob = viewModelScope.launch {
+        fontCatalogJob = scope.launch {
             val installed = withContext(Dispatchers.IO) { fonts.installed() }
             try {
                 val result = fontRepository.catalog(force)
@@ -1763,7 +1691,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 error = "",
             )
         }
-        viewModelScope.launch {
+        scope.launch {
             try {
                 fontRepository.install(font) { received, total ->
                     val size = if (total > 0) total else font.file.size
@@ -1785,7 +1713,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun removeFont(id: String) {
-        viewModelScope.launch {
+        scope.launch {
             val remaining = withContext(Dispatchers.IO) {
                 fonts.remove(id)
                 fonts.installed()
@@ -1863,10 +1791,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** 清掉内存缓存（章节 + 图片 + 封面）。磁盘上本来就没有缓存可清。 */
     fun clearMemoryCache() {
         cloud.clear()
-        images.clear()
-        _comicPictures.value = emptyMap()
-        coverBytes.evictAll()
-        _covers.value = emptyMap()
+        coil.memoryCache?.clear()
         loadSettingsState()
         _settings.update { it.copy(message = "内存缓存已清空，磁盘缓存本来就是 0") }
     }
@@ -1875,7 +1800,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun discover(onFound: (List<String>) -> Unit) {
         val seq = ++discoverSeq
         _settings.update { it.copy(searching = true, message = null) }
-        viewModelScope.launch {
+        scope.launch {
             val found = withContext(Dispatchers.IO) {
                 LanDiscovery.discover { seq != discoverSeq }
             }
@@ -1895,23 +1820,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _settings.update { it.copy(searching = false) }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        connection.channel.stop()
-        images.clear()
-        cloud.clear()
-    }
-
     companion object {
-        const val KIND_LOCAL = BookKind.LOCAL
-
         /** 回前台自动同步的最小间隔：1 分钟。 */
         private const val AUTO_SYNC_MIN_GAP_MS = 60_000L
 
-        /** 漫画当前话保留的页半径（前后各 4 页）。 */
-        private const val COMIC_KEEP_RADIUS = 4
-
-        /** 底色预设 → (背景, 文字)。夜间模式也走同一套 Material 主题，不另开分支。 */
+        /** 底色预设 → (背景, 文字)。夜间模式也走同一套主题，不另开分支。 */
         fun colorsOf(preset: String): Pair<Int, Int> = when (preset) {
             SettingsStore.THEME_PAPER -> 0xFFFBF8F1.toInt() to 0xFF23201C.toInt()
             SettingsStore.THEME_CREAM -> 0xFFF1E7D3.toInt() to 0xFF1F1A12.toInt()
