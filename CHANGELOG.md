@@ -31,9 +31,9 @@ Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
   顺手清掉写入中断留下的残片
 - 数据文件读坏、封面写盘失败这类「静默降级」现在会在 debug 日志里留痕（每分钟采样一条），
   日志里的 `?key=` / `token=` / `sign=` 等查询参数自动打码
-- 目录 / 设置 / 痕迹三个抽屉补上 dialog 语义与焦点管理：打开时焦点进入面板、Tab 在面板内循环，
-  关闭后焦点回到原来的按钮
-- 仓库补上工程护栏：新增 Vitest 单测（166 例）、ESLint（react-hooks）、`npm run check` 现在
+- 长篇恢复位置更可靠：等排版测量彻底结束才落位，落位后再用最终高度表反解校对，
+  偏差超过 2 段自动修正并留一条 `恢复位置修正` 日志，不会再「打开停在 7% 又把错位写回存档」
+- 仓库补上工程护栏：新增 Vitest 单测（176 例）、ESLint（react-hooks）、`npm run check` 现在
   会校验 JSX 能否编译并跑单测；发布产物附带 `SHA256SUMS.txt`，安卓 Release 增加签名断言
 - `npm run check` 增加文档事实校验：README、AGENTS、docs 索引与代码不一致会直接失败
 

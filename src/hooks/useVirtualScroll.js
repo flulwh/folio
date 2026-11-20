@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { sortedIndexFrom, sortedLastIndex } from '../utils/sortedIndex.js';
+import { sortedIndexFrom } from '../utils/sortedIndex.js';
+import { indexAtOffset } from '../utils/virtual.js';
 
 /**
  * A dependency-free variable-height virtual scroller.
@@ -13,14 +14,6 @@ import { sortedIndexFrom, sortedLastIndex } from '../utils/sortedIndex.js';
  * Item nodes must carry `data-index={index}` so a single shared ref callback
  * can measure them.
  */
-/**
- * Index of the row that occupies `top`. `scrollTop` is fractional (display
- * scaling) and lands a hair below an exact boundary, which would otherwise
- * report the previous row — the off-by-one that made chapter jumps highlight
- * the chapter above the target.
- */
-const TOLERANCE = 1;
-
 /**
  * Chromium 单个滚动容器的可滚动高度大约只有 2^25 物理像素，CSS px 还要除以 DPR：
  * 125% 缩放下只有 2680 万 px，200% 缩放下只剩 1670 万。
@@ -35,14 +28,6 @@ const MAX_SPAN = 8000000;
 // 距离窗口边缘多远开始换窗。换窗后会以当前阅读位置为中心重新开窗，
 // 所以两次换窗之间至少能滚 300 万 px，长篇一辈子也遇不到几次。
 const WINDOW_EDGE = 1000000;
-
-export function indexAtOffset(offsets, count, top) {
-  if (count <= 0) return 0;
-  // Vendored lodash upper-bound probe over [0, count): last offset <= probe.
-  // The trailing sentinel slot (offsets[count]) is deliberately excluded.
-  const upper = sortedLastIndex(offsets, top + TOLERANCE, count);
-  return upper > 0 ? upper - 1 : 0;
-}
 
 /** Pure range calculation, kept separate so it can be verified exhaustively. */
 export function computeVisibleRange(offsets, count, top, viewport, overscan) {
@@ -409,6 +394,13 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
     };
   }, [count]);
 
+  // 任意逻辑偏移 → 段落索引。恢复位置的后置断言要用最终高度表
+  // 反解「实际落到了哪一段」，不能只看当前 scrollTop 对应的状态。
+  const getIndexAtTop = useCallback(
+    (top) => indexAtOffset(offsetsRef.current, count, top),
+    [count]
+  );
+
   const getLogicalTop = useCallback(() => {
     const el = scrollRef.current;
     return originRef.current + (el ? el.scrollTop : 0);
@@ -480,6 +472,7 @@ export function useVirtualScroll({ count, estimate = 96, overscan = 6, onResize 
     getItemOffset,
     getTotal,
     getLogicalTop,
+    getIndexAtTop,
     scrollTo,
     animateTo,
     stopAnimation,

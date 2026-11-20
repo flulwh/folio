@@ -17,6 +17,7 @@ import {
 } from '../utils/chapters.js';
 import { clamp, estimateRemainingMinutes, formatPercent } from '../utils/format.js';
 import { findMatchRange, searchBook } from '../utils/search.js';
+import { clampIndex } from '../utils/virtual.js';
 import TocPanel from './TocPanel.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 import MarksPanel from './MarksPanel.jsx';
@@ -352,6 +353,7 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     getItemOffset,
     getTotal,
     getLogicalTop,
+    getIndexAtTop,
     scrollTo: scrollToOffset,
     animateTo,
     stopAnimation,
@@ -411,7 +413,22 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const lastIndexRef = useRef(progress[book.id]?.paraIndex ?? 0);
   const mountedRef = useRef(true);
   const downScrollRef = useRef(0);
-  const restoredRef = useRef(false);
+  // 恢复位置状态机：pending → measuring → settled。
+  // 高度表是分帧写回的，测量期间前缀偏移一直在变；这时定位只能拿到「估计高度」，
+  // 长篇（paraIndex 3000）会被算到 7.6% 之类完全错误的位置。所以测量期只记录
+  // 目标段落，settled 后再按最终高度表落位一次，落位后还要做后置断言。
+  const restoreRef = useRef({
+    phase: 'pending',
+    target: resume ? progress[book.id]?.paraIndex ?? null : null,
+    settledOnce: false,
+    applied: false,
+    asserted: false,
+    chipShown: false,
+    raf: 0,
+  });
+  // 落位逻辑随排版/高度表更新，但测量 layout effect 不能被它的新引用触发重跑，
+  // 所以只通过 ref 调用最新版本。
+  const locateRestoreRef = useRef(null);
   const firstSettingsRun = useRef(true);
   const measureRef = useRef(null);
   const measureRafRef = useRef(0);
@@ -489,8 +506,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   const flushSave = useCallback(() => {
     // 测量期只有 600 段挂在 DOM 上、滚动高度被夹小，此时取到的 index 是假的。
+    // 恢复位置还没落位（pending/measuring）时同理：scrollTop 只是走到一半的中间值。
     // 宁可不存，也不能把错误位置写进 progress（下次打开会跳到前面）。
-    if (measuring) return;
+    if (measuring || restoreRef.current.phase !== 'settled') return;
     const state = getScrollState();
     // 位置没动就不写：关书 / 切窗口的兜底保存会把手上的时间戳刷成「现在」，
     // 只是「打开又关掉」也能压过另一端真正更新的进度。段落和上次一致就跳过。
@@ -599,13 +617,17 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
         lastStamp = now;
 
         const state = getScrollState();
-        lastIndexRef.current = state.index;
         setScrollPercent(state.percent);
         setCurrentPara((prev) => (prev === state.index ? prev : state.index));
         setSelection(null);
         const ci = chapterIndexForPara(chapters, state.index);
         setChapterIndex((prev) => (prev === ci ? prev : ci));
-        scheduleSave();
+        // 恢复位置还没 settled 时，滚动事件可能来自「落位」本身（中间值）；
+        // 只更新画面，不把 lastIndexRef 和进度写成这个位置。
+        if (restoreRef.current.phase === 'settled') {
+          lastIndexRef.current = state.index;
+          scheduleSave();
+        }
         // 滚动/方向键/自动滚动不呼出工具栏：只亮发丝进度线，保持沉浸
         setHairline(true);
         if (hairTimer.current) clearTimeout(hairTimer.current);
@@ -643,52 +665,106 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   /* --------------------- restore reading position ------------------- */
 
-  // 重新测量（窗口宽度、字体加载完、换字号）会把整本书的段落高度换一套，
-  // 文档总高随之变化；此时 scrollTop 不动就会「漂」到别的段落。
-  // 做法：测量结束的那一帧，把当前段落重新对到视口顶部。
-  const wasMeasuringRef = useRef(true);
-  useEffect(() => {
-    const wasMeasuring = wasMeasuringRef.current;
-    wasMeasuringRef.current = measuring;
-    if (measuring || !wasMeasuring) return undefined;
-    const raf = requestAnimationFrame(() => {
-      // 高度表换了一套，逻辑偏移也变了；按当前段落重新对位（内部会顺带换窗）。
-      scrollToOffset(getOffset(lastIndexRef.current));
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [measuring, getOffset, scrollToOffset]);
+  // 落位后的后置断言：用最终高度表把 scrollTop 反解成「实际停在哪一段」。
+  // 若与目标相差超过 2 段，说明位置在测量/换窗中被算歪了，直接按高度表修正，
+  // 不再靠「再等几帧看浏览器会不会自愈」。
+  const assertRestoreLanding = useCallback(() => {
+    const r = restoreRef.current;
+    if (r.phase !== 'settled' || r.asserted) return;
+    const count = paragraphs.length;
+    if (!count || r.target == null) {
+      r.asserted = true;
+      return;
+    }
+    r.asserted = true;
+    const target = clampIndex(r.target, count);
+    const el = scrollRef.current;
+    const viewport = el ? el.clientHeight : 0;
+    // 目标贴底时段落顶不到视口顶部，按「最大可滚动位置」折算期望索引，
+    // 否则末尾段落永远会被误判成「落歪了」。
+    const wantedTop = Math.min(getOffset(target), Math.max(0, getTotal() - viewport));
+    const expected = getIndexAtTop(wantedTop);
+    const landed = getIndexAtTop(getLogicalTop());
+    if (Math.abs(landed - expected) <= 2) return;
+    scrollToOffset(wantedTop);
+    // 修正后的位置就是存档位置：先把 lastIndexRef 对齐，
+    // 避免紧接着的滚动事件把中间值当成新位置写进进度。
+    lastIndexRef.current = expected;
+    setCurrentPara(expected);
+    const ci = chapterIndexForPara(chapters, expected);
+    setChapterIndex((prev) => (prev === ci ? prev : ci));
+    setScrollPercent(getScrollState().percent);
+    // 只记数字，不带正文：日志用于排查「长篇恢复偏移」，不是内容采样。
+    console.warn('[folio] 恢复位置修正', { target, landed });
+  }, [chapters, getIndexAtTop, getLogicalTop, getOffset, getScrollState, getTotal, paragraphs, scrollRef, scrollToOffset]);
 
+  // settled 后按最终高度表落位一次。
+  const locateRestore = useCallback(() => {
+    const r = restoreRef.current;
+    if (r.phase !== 'settled' || r.applied) return;
+    const count = paragraphs.length;
+    if (!count || r.target == null) return;
+    r.applied = true;
+    const target = clampIndex(r.target, count);
+    scrollToOffset(getOffset(target));
+    lastIndexRef.current = target;
+    setCurrentPara(target);
+    const ci = chapterIndexForPara(chapters, target);
+    setChapterIndex((prev) => (prev === ci ? prev : ci));
+    const state = getScrollState();
+    setScrollPercent(state.percent);
+    if (!r.chipShown) {
+      r.chipShown = true;
+      const savedPercent = progress[book.id]?.percent ?? state.percent;
+      setResumeChip({ key: Date.now(), percent: savedPercent });
+      if (resumeTimer.current) clearTimeout(resumeTimer.current);
+      resumeTimer.current = setTimeout(() => {
+        if (mountedRef.current) setResumeChip(null);
+      }, 2800);
+    }
+    // 下一帧再断言：浏览器可能把 scrollTop 夹到合法范围或触发换窗。
+    if (r.raf) cancelAnimationFrame(r.raf);
+    r.raf = requestAnimationFrame(() => {
+      r.raf = 0;
+      assertRestoreLanding();
+    });
+  }, [assertRestoreLanding, chapters, getOffset, getScrollState, paragraphs, progress, book.id, scrollToOffset]);
+  locateRestoreRef.current = locateRestore;
+
+  // 恢复定位请求：测量未结束只记录目标段落，绝不立即滚动。
+  // 引用保持稳定，避免测量用的 layout effect 被新引用反复触发。
+  const requestRestore = useCallback((index) => {
+    const r = restoreRef.current;
+    if (!Number.isFinite(index) || index < 0) return;
+    r.target = index;
+    r.applied = false;
+    r.asserted = false;
+    if (r.phase === 'settled' && locateRestoreRef.current) locateRestoreRef.current();
+  }, []);
+
+  // 测量状态 → 恢复状态机。measuring 期间任何定位都只记账；
+  // settled 的下一帧再落位（此时 offsets / spacer 已经在同一帧同步）。
   useEffect(() => {
-    if (!resume || restoredRef.current || measuring) return undefined;
-    const saved = progress[book.id];
-    if (!saved || typeof saved.paraIndex !== 'number') {
-      restoredRef.current = true;
+    const r = restoreRef.current;
+    if (measuring) {
+      r.phase = 'measuring';
+      r.applied = false;
+      r.asserted = false;
+      if (r.raf) {
+        cancelAnimationFrame(r.raf);
+        r.raf = 0;
+      }
+      // 换字号/换栏宽触发重测时，把「当前阅读位置」当作新的恢复目标。
+      if (r.settledOnce) r.target = lastIndexRef.current;
       return undefined;
     }
-
-    let outer = 0;
-    let inner = 0;
-    // The offset table is already exact (offscreen measurement pass), but the
-    // scroll container still needs a frame before it accepts a scroll position.
-    outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => {
-        restoredRef.current = true;
-        animateScroll(getOffset(saved.paraIndex), 520);
-        setCurrentPara(saved.paraIndex);
-        setChapterIndex(chapterIndexForPara(chapters, saved.paraIndex));
-        setScrollPercent(saved.percent ?? 0);
-        setResumeChip({ key: Date.now(), percent: saved.percent ?? 0 });
-        if (resumeTimer.current) clearTimeout(resumeTimer.current);
-        resumeTimer.current = setTimeout(() => {
-          if (mountedRef.current) setResumeChip(null);
-        }, 2800);
-      });
+    r.phase = 'settled';
+    r.settledOnce = true;
+    const raf = requestAnimationFrame(() => {
+      if (locateRestoreRef.current) locateRestoreRef.current();
     });
-    return () => {
-      cancelAnimationFrame(outer);
-      cancelAnimationFrame(inner);
-    };
-  }, [animateScroll, book.id, chapters, getOffset, measuring, progress, resume]);
+    return () => cancelAnimationFrame(raf);
+  }, [measuring]);
 
   /* --------------- exact heights via an offscreen pass -------------- */
 
@@ -815,9 +891,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
           measureItems(merged);
           measureHeightsRef.current = merged;
           setMeasuring(false);
-          if (restoredRef.current) {
-            requestAnimationFrame(() => scrollToIndex(lastIndexRef.current, { align: 'start' }));
-          }
+          // 测量刚结束：只把目标段落记进状态机，真正的落位在 settled 后统一做。
+          // resume 关闭时首次打开不恢复位置（与旧行为一致），重测才需要保位。
+          if (resume || restoreRef.current.settledOnce) requestRestore(lastIndexRef.current);
           return;
         }
       }
@@ -834,11 +910,9 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     measureItems(store);
     saveHeights(cacheKey, width, store);
     setMeasuring(false);
-    // Typography edits keep the reader on the same paragraph.
-    if (restoredRef.current) {
-      requestAnimationFrame(() => scrollToIndex(lastIndexRef.current, { align: 'start' }));
-    }
-  }, [measuring, measureFrom, measureItems, paragraphs.length, textIndexes.length, scrollToIndex]);
+    // 排版编辑后保持在原段落：同样只记账，落位交给状态机。
+    if (resume || restoreRef.current.settledOnce) requestRestore(lastIndexRef.current);
+  }, [measuring, measureFrom, measureItems, paragraphs.length, requestRestore, resume, textIndexes.length]);
 
   /* --------------------------- navigation --------------------------- */
 
