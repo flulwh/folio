@@ -18,6 +18,7 @@ import { useReaderShortcuts } from '../hooks/useReaderShortcuts.js';
 import { useReaderInteraction } from '../hooks/useReaderInteraction.js';
 import { useReaderScrubber } from '../hooks/useReaderScrubber.js';
 import { useProgressSave } from '../hooks/useProgressSave.js';
+import { useReaderUiVisibility } from '../hooks/useReaderUiVisibility.js';
 import { fontStackFor } from '../hooks/useFontLoader.js';
 import {
   chapterIndexForPara,
@@ -43,8 +44,6 @@ import {
   IconSearch,
   IconType,
 } from './Icons.jsx';
-
-const UI_IDLE_MS = 2500;
 
 export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const settings = useSettings();
@@ -191,7 +190,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const [marksOpen, setMarksOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [selection, setSelection] = useState(null);
-  const [uiVisible, setUiVisible] = useState(true);
   const { autoScroll, autoSpeed, setAutoScroll, setAutoSpeed, autoScrollRef } = useAutoScroll({
     scrollRef,
     getTotal,
@@ -203,7 +201,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const [resumeChip, setResumeChip] = useState(null);
   const [hairline, setHairline] = useState(false);
 
-  const idleTimer = useRef(null);
   const jumpTimer = useRef(null);
   const resumeTimer = useRef(null);
   const hairTimer = useRef(null);
@@ -263,22 +260,11 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
 
   /* ------------------------- UI visibility ------------------------- */
 
-  const wakeUI = useCallback(() => {
-    setUiVisible(true);
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    if (settings.autoHideUI) {
-      idleTimer.current = setTimeout(() => {
-        if (!overlaysOpenRef.current) setUiVisible(false);
-      }, UI_IDLE_MS);
-    }
-  }, [settings.autoHideUI]);
-
-  useEffect(() => {
-    wakeUI();
-    return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current);
-    };
-  }, [wakeUI]);
+  const { uiVisible, setUiVisible, wakeUI } = useReaderUiVisibility({
+    autoHideUI: settings.autoHideUI,
+    panelOpen: tocOpen || settingsOpen || marksOpen || searchOpen,
+    overlaysOpenRef,
+  });
 
   /* 底栏是浮在正文之上的（absolute），正文必须自己让出它的高度，
      否则最后一章的末行会被压掉半截。底栏高度随字号/窄屏断点变化，
@@ -297,27 +283,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     ro.observe(bar);
     return () => ro.disconnect();
   }, []);
-
-  useEffect(() => {
-    let last = 0;
-    const onMove = () => {
-      const now = Date.now();
-      if (now - last < 120) return;
-      last = now;
-      wakeUI();
-    };
-    window.addEventListener('mousemove', onMove, { passive: true });
-    return () => window.removeEventListener('mousemove', onMove);
-  }, [wakeUI]);
-
-  useEffect(() => {
-    if (tocOpen || settingsOpen || marksOpen || searchOpen) {
-      setUiVisible(true);
-      if (idleTimer.current) clearTimeout(idleTimer.current);
-    } else {
-      wakeUI();
-    }
-  }, [tocOpen, settingsOpen, marksOpen, searchOpen, wakeUI]);
 
   /* ------------------------- progress saving ------------------------ */
 
@@ -338,7 +303,6 @@ export default function Reader({ book, onClose, cloud = null, resume = true }) {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (idleTimer.current) clearTimeout(idleTimer.current);
       if (resumeTimer.current) clearTimeout(resumeTimer.current);
       if (hairTimer.current) clearTimeout(hairTimer.current);
     };
