@@ -130,6 +130,8 @@ export default function BookMarket({ onClose, onOpenBook }) {
 
   const inputRef = useRef(null);
   const bodyRef = useRef(null);
+  // 连续搜索/翻页时只认最后一次请求，避免慢响应回来把新结果覆盖掉。
+  const reqSeq = useRef(0);
   const shelfKeys = useMemo(() => new Set(books.map((b) => b.id)), [books]);
 
   // 勾选跨类型保留；切到某一类时，如果这一类一个都没勾就自动全勾上
@@ -197,6 +199,7 @@ export default function BookMarket({ onClose, onOpenBook }) {
         return;
       }
       const nextPage = append ? page + 1 : 1;
+      const seq = ++reqSeq.current;
       if (append) setMoreBusy(true);
       else {
         setBusy(true);
@@ -217,6 +220,8 @@ export default function BookMarket({ onClose, onOpenBook }) {
           ...item,
           key: `cloud::${item.sourceId}::${item.bookUrl}`,
         }));
+        // 期间又发起了新搜索：这次的结果已经过期，直接丢弃。
+        if (seq !== reqSeq.current) return;
         setErrors(res?.errors || []);
         setSkipped(res?.skipped || []);
         setRemaining(res?.remaining || 0);
@@ -231,11 +236,15 @@ export default function BookMarket({ onClose, onOpenBook }) {
           if (!(res?.errors || []).length) notify('没有搜到，换个关键词试试');
         }
       } catch (err) {
+        if (seq !== reqSeq.current) return;
         notify(err.message || '搜索失败', 'error');
         if (!append) setResults([]);
       } finally {
-        setBusy(false);
-        setMoreBusy(false);
+        // 过期请求不能把新搜索的 busy 状态清掉。
+        if (seq === reqSeq.current) {
+          setBusy(false);
+          setMoreBusy(false);
+        }
       }
     },
     [enabled, keyword, kind, notify, page, picked, settings.proxy]

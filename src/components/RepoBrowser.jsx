@@ -138,8 +138,10 @@ export default function RepoBrowser({ onImported }) {
         notify(`本页导入完成：${bits.join('，')}`);
         setFlash(`已导入第 ${from}–${to} 号书源`);
         const marks = {};
-        list.forEach((item) => {
-          marks[item.id] = '已导入';
+        const failedIndexes = new Set((res?.errors || []).map((err) => err.index));
+        list.forEach((item, index) => {
+          // 坏源（errors 里带 index）不要标成「已导入」，否则用户以为存进去了
+          if (!failedIndexes.has(index)) marks[item.id] = '已导入';
         });
         setInstalled((prev) => ({ ...prev, ...marks }));
         onImported?.(res);

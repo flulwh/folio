@@ -2731,7 +2731,14 @@ ipcMain.handle('cloud:search', async (_e, { keyword, sourceIds, page, proxy, lim
       item.enabled !== false &&
       (!Array.isArray(sourceIds) || sourceIds.length === 0 || sourceIds.includes(item.id)),
   );
-  if (!pool.length) return { results: [], errors: [{ sourceId: '', sourceName: '', message: '还没有启用的书源' }] };
+  if (!pool.length) {
+    return {
+      results: [],
+      errors: [{ sourceId: '', sourceName: '', message: '还没有启用的书源' }],
+      searched: 0,
+      remaining: 0,
+    };
+  }
 
   // 按书源健康度排序并降权/跳过：最近试搜失败的源排最后，有活源时直接跳过它们。
   const hasSearch = (source) => Boolean(source.search?.url);
@@ -2741,6 +2748,8 @@ ipcMain.handle('cloud:search', async (_e, { keyword, sourceIds, page, proxy, lim
     return {
       results: [],
       errors: [{ sourceId: '', sourceName: '', message: '启用的书源里没有搜索规则' }],
+      searched: 0,
+      remaining: 0,
       skipped: noSearch.map((source) => ({
         sourceId: source.id,
         sourceName: source.name,

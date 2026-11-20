@@ -31,6 +31,8 @@ export default function CloudBook({ book, onClose }) {
   const partsRef = useRef(parts);
   const aliveRef = useRef(true);
   const allowResumeRef = useRef(true);
+  // 窗口代次：换窗口（首次加载 / 跳章）时 +1，旧窗口的在途请求回来一律丢弃。
+  const genRef = useRef(0);
   // index -> Promise：进行中的抓取（去重，预取与续接共享同一次请求）
   const inflightRef = useRef(new Map());
   // index -> { text, error }：预取已完成、等待续接消费的结果
@@ -108,13 +110,17 @@ export default function CloudBook({ book, onClose }) {
     [fetchChapterText]
   );
 
-  /** 后台预取窗口之后的几章，结果存进 readyRef 供 loadMore 即时消费。 */
-  const prefetchNext = useCallback(() => {
+  /**
+   * 后台预取窗口之后的几章，结果存进 readyRef 供 loadMore 即时消费。
+   * base/list 显式传入：刚 setParts 的那一帧里 partsRef 还是旧值，
+   * 直接读 ref 会把「已经拿到的章」再预取一遍。
+   */
+  const prefetchNext = useCallback((base = baseRef.current, list = partsRef.current) => {
     const chapters = tocRef.current;
     if (!chapters) return;
-    const have = new Set(partsRef.current.map((p) => p.index));
+    const have = new Set(list.map((p) => p.index));
     let scheduled = 0;
-    for (let i = baseRef.current + partsRef.current.length; i < chapters.length; i += 1) {
+    for (let i = base + list.length; i < chapters.length; i += 1) {
       if (scheduled >= PREFETCH_AHEAD) break;
       if (have.has(i) || readyRef.current.has(i) || inflightRef.current.has(i)) continue;
       scheduled += 1;
@@ -124,7 +130,7 @@ export default function CloudBook({ book, onClose }) {
       });
     }
     // 往回也预热一章：重读上一章不用重新等网络
-    for (let i = baseRef.current - 1; i >= 0 && baseRef.current - i <= PREFETCH_BACK; i -= 1) {
+    for (let i = base - 1; i >= 0 && base - i <= PREFETCH_BACK; i -= 1) {
       if (have.has(i) || readyRef.current.has(i) || inflightRef.current.has(i)) continue;
       fetchOne(i).then((r) => {
         readyRef.current.set(i, r);
@@ -148,6 +154,7 @@ export default function CloudBook({ book, onClose }) {
 
   useEffect(() => {
     let cancelled = false;
+    const gen = ++genRef.current;
     readyRef.current.clear();
     (async () => {
       setLoading(true);
@@ -202,12 +209,14 @@ export default function CloudBook({ book, onClose }) {
           throw new Error(batch[0]?.error || '第一章没有抓到正文，检查书源的正文规则');
         }
         const failed = batch.filter((p) => p.error).length;
+        baseRef.current = start;
+        partsRef.current = batch;
         setBase(start);
         setParts(batch);
         if (failed) notify(`${failed} 章暂时没取到，文中已标出，可稍后重试`, 'error');
-        prefetchNext();
+        prefetchNext(start, batch);
       } catch (err) {
-        if (!cancelled) setError(err.message || '加载失败');
+        if (!cancelled && gen === genRef.current) setError(err.message || '加载失败');
       } finally {
         loadingRef.current = false;
         if (!cancelled) setLoading(false);
@@ -231,14 +240,17 @@ export default function CloudBook({ book, onClose }) {
 
       loadingRef.current = true;
       setLoading(true);
+      const gen = genRef.current;
       try {
         const batch = await collect(chapters, start, count);
-        if (!aliveRef.current) return;
+        if (!aliveRef.current || gen !== genRef.current) return;
         if (batch.length) {
           const failed = batch.filter((p) => p.error).length;
-          setParts((prev) => [...prev, ...batch]);
+          const merged = [...partsRef.current, ...batch];
+          partsRef.current = merged;
+          setParts(merged);
           if (failed) notify(`${failed} 章没取到，已标出可重试`, 'error');
-          prefetchNext();
+          prefetchNext(baseRef.current, merged);
         } else {
           notify('这一章没有抓到正文', 'error');
         }
@@ -261,18 +273,19 @@ export default function CloudBook({ book, onClose }) {
 
     loadingRef.current = true;
     setLoading(true);
+    const gen = genRef.current;
     try {
       const results = await Promise.all(
         failed.map(async (p) => ({ index: p.index, ...(await fetchOne(p.index)) }))
       );
-      if (!aliveRef.current) return;
+      if (!aliveRef.current || gen !== genRef.current) return;
       const still = results.filter((r) => r.error).length;
-      setParts((prev) =>
-        prev.map((p) => {
-          const r = results.find((x) => x.index === p.index);
-          return r ? { ...p, text: r.text, error: r.error } : p;
-        })
-      );
+      const merged = partsRef.current.map((p) => {
+        const r = results.find((x) => x.index === p.index);
+        return r ? { ...p, text: r.text, error: r.error } : p;
+      });
+      partsRef.current = merged;
+      setParts(merged);
       if (still) notify(`仍有 ${still} 章没取到`, 'error');
       else {
         notify('失败的章节已补齐');
@@ -288,17 +301,22 @@ export default function CloudBook({ book, onClose }) {
 
   const jumpTo = useCallback(
     async (index) => {
-      if (loadingRef.current) return;
+      // 加载中直接忽略会让点目录「没反应」，这里明确告诉用户。
+      if (loadingRef.current) {
+        notify('正在加载，稍后再试');
+        return;
+      }
       const chapters = tocRef.current;
       if (!chapters?.length) return;
       const start = Math.max(0, Math.min(index, chapters.length - 1));
 
       loadingRef.current = true;
       setLoading(true);
+      const gen = ++genRef.current;
       try {
         const count = Math.min(WINDOW_SIZE, chapters.length - start);
         const batch = await collect(chapters, start, count);
-        if (!aliveRef.current) return;
+        if (!aliveRef.current || gen !== genRef.current) return;
         readyRef.current.clear();
         if (!batch.length || batch[0].error) {
           throw new Error(batch[0]?.error || '这一章没有抓到正文');
@@ -311,13 +329,15 @@ export default function CloudBook({ book, onClose }) {
           windowBase: start,
         });
         allowResumeRef.current = false;
+        baseRef.current = start;
+        partsRef.current = batch;
         setBase(start);
         setParts(batch);
         const failed = batch.filter((p) => p.error).length;
         if (failed) notify(`${failed} 章暂时没取到，文中已标出，可稍后重试`, 'error');
-        prefetchNext();
+        prefetchNext(start, batch);
       } catch (err) {
-        if (aliveRef.current) notify(err.message || '跳转失败', 'error');
+        if (aliveRef.current && gen === genRef.current) notify(err.message || '跳转失败', 'error');
       } finally {
         loadingRef.current = false;
         if (aliveRef.current) setLoading(false);
