@@ -2,12 +2,12 @@
   "updatedAt": "2026-11-21",
   "notices": [
     {
-      "id": "2026-11-21-local-comics",
+      "id": "2026-11-21-1",
       "date": "2026-11-21",
-      "level": "info",
-      "title": "本地漫画上线：CBZ / ZIP 双端可读",
-      "body": "桌面端与安卓端都能直接导入漫画压缩包，并跟随局域网同步整包搬过去。官网也换成了 3D 书本舞台。",
-      "url": "https://flulwh.github.io/folio/"
+      "level": "warn",
+      "title": "测试",
+      "body": "测试",
+      "url": ""
     }
   ]
 }
