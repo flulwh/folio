@@ -5,15 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Folio · 把书架放回你自己的硬盘</title>
 <meta name="description" content="Folio 是本地优先的双端阅读器：Windows 桌面端与原生安卓端各自存书，只在局域网里同步进度、书签与阅读痕迹。免费、无账号、离线可读。" />
-<meta name="theme-color" content="#f2ecdd" />
+<meta name="theme-color" content="#06070a" />
 <meta property="og:title" content="Folio · 本地优先的双端阅读器" />
 <meta property="og:description" content="书架在自己硬盘上，进度只在局域网里走。Windows + Android，免费开源。" />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="https://flulwh.github.io/folio/assets/bookshelf.png" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2315110c'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23f2ecdd'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23b8371f'/%3E%3C/svg%3E" />
-<link rel="preload" href="./fonts/bodoni-moda-400.woff2" as="font" type="font/woff2" crossorigin />
-<link rel="preload" href="./fonts/bodoni-moda-400-italic.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2306070a'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23f3eee3'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23e2542f'/%3E%3C/svg%3E" />
 <link rel="preload" href="./fonts/plex-mono-400.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="./fonts/bodoni-moda-400.woff2" as="font" type="font/woff2" crossorigin />
 <script>document.documentElement.classList.add('js');</script>
 <style>
   @font-face {
@@ -38,40 +37,34 @@
   }
 
   :root {
-    --paper: #f2ecdd;
-    --paper-hi: #faf5e9;
-    --paper-lo: #e5dcc7;
-    --ink: #15110c;
-    --ink-2: #443d31;
-    --ink-3: #877c68;
-    --red: #b8371f;
-    --red-2: #d4694f;
-    --olive: #6d7352;
-    --rule: rgba(21, 17, 12, 0.14);
-    --rule-2: rgba(21, 17, 12, 0.34);
-    --cream: #f2ecdd;
-    --cream-2: rgba(242, 236, 221, 0.66);
-    --cream-3: rgba(242, 236, 221, 0.4);
-    --cream-rule: rgba(242, 236, 221, 0.16);
+    --void: #06070a;
+    --void-2: #0a0c11;
+    --panel: #0d1016;
+    --cream: #f3eee3;
+    --cream-2: rgba(243, 238, 227, 0.68);
+    --cream-3: rgba(243, 238, 227, 0.42);
+    --line: rgba(243, 238, 227, 0.12);
+    --line-2: rgba(243, 238, 227, 0.24);
+    --flare: #e2542f;
+    --flare-2: #ff8a63;
+    --ice: #8fc7d8;
+    --gold: #d9b87c;
 
-    --serif: "Bodoni Moda", "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+    --serif: "Bodoni Moda", Georgia, "Times New Roman", serif;
     --sans: "PingFang SC", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
     --mono: "Plex Mono", "SFMono-Regular", Consolas, "Microsoft YaHei", monospace;
 
-    --gutter: clamp(20px, 4.4vw, 72px);
+    --gutter: clamp(20px, 4.2vw, 64px);
     --maxw: 1320px;
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  html { scroll-behavior: smooth; scroll-padding-top: 88px; -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background:
-      radial-gradient(1100px 700px at 8% -10%, #fbf7ea 0%, rgba(251, 247, 234, 0) 60%),
-      radial-gradient(900px 620px at 100% 2%, #e8dfca 0%, rgba(232, 223, 202, 0) 58%),
-      var(--paper);
-    color: var(--ink);
+    background: var(--void);
+    color: var(--cream);
     font-family: var(--sans);
     font-size: 16px;
     line-height: 1.7;
@@ -85,16 +78,16 @@
     inset: 0;
     z-index: 90;
     pointer-events: none;
-    opacity: 0.42;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.2'/%3E%3C/svg%3E");
-    mix-blend-mode: multiply;
+    opacity: 0.32;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.22'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
   }
   a { color: inherit; text-decoration: none; }
-  img, svg { display: block; }
-  figure, blockquote, h1, h2, h3, p, dl, dd { margin: 0; }
-  ol, ul { margin: 0; padding: 0; list-style: none; }
-  ::selection { background: var(--red); color: var(--paper-hi); }
-  :focus-visible { outline: 2px solid var(--red); outline-offset: 4px; }
+  img, svg, canvas { display: block; }
+  figure, blockquote, h1, h2, h3, p, dl, dd, ol, ul { margin: 0; padding: 0; }
+  ol, ul { list-style: none; }
+  ::selection { background: var(--flare); color: #fff6ee; }
+  :focus-visible { outline: 2px solid var(--flare); outline-offset: 4px; }
 
   .wrap {
     width: 100%;
@@ -102,104 +95,127 @@
     margin: 0 auto;
     padding: 0 var(--gutter);
   }
-  .mono {
+  .skip {
+    position: fixed;
+    left: 16px; top: 16px; z-index: 120;
+    padding: 10px 16px;
+    background: var(--cream);
+    color: var(--void);
+    font-family: var(--mono);
+    font-size: 11px;
+    transform: translateY(-200%);
+    transition: transform 0.25s var(--ease);
+  }
+  .skip:focus { transform: none; }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
     font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  .eyebrow::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--flare);
+    box-shadow: 0 0 12px rgba(226, 84, 47, 0.9);
   }
 
   /* ---------- rail ---------- */
   .rail {
     position: fixed;
     inset: 0 0 auto 0;
-    z-index: 70;
-    height: 70px;
+    z-index: 80;
+    height: 68px;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 30px;
+    gap: clamp(16px, 3vw, 40px);
     padding: 0 var(--gutter);
-    color: var(--ink-2);
-    background: linear-gradient(to bottom, rgba(242, 236, 221, 0.86), rgba(242, 236, 221, 0.62));
-    backdrop-filter: blur(14px) saturate(1.15);
-    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    background: linear-gradient(to bottom, rgba(6, 7, 10, 0.86), rgba(6, 7, 10, 0.4));
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
     border-bottom: 1px solid transparent;
     transition: height 0.4s var(--ease), background 0.4s var(--ease), border-color 0.4s var(--ease);
   }
   .rail.is-stuck {
     height: 58px;
-    background: rgba(242, 236, 221, 0.95);
-    border-bottom-color: var(--rule);
+    background: rgba(6, 7, 10, 0.94);
+    border-bottom-color: var(--line);
   }
   .rail__bar {
     position: absolute;
     left: 0; right: 0; bottom: -1px;
     height: 1px;
-    background: var(--red);
+    background: linear-gradient(90deg, var(--flare), var(--gold));
     transform: scaleX(var(--read, 0));
     transform-origin: left center;
-    opacity: 0.85;
   }
   .brand {
     display: inline-flex;
     align-items: baseline;
-    gap: 2px;
     font-family: var(--serif);
-    font-size: 23px;
+    font-size: 25px;
     letter-spacing: -0.02em;
-    color: var(--ink);
     line-height: 1;
+    color: var(--cream);
   }
-  .brand span { color: var(--red); }
+  .brand span { color: var(--flare); }
   .rail__nav {
     justify-self: center;
     display: flex;
     align-items: center;
-    gap: 26px;
+    gap: clamp(14px, 2vw, 30px);
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: 10px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
   }
   .rail__nav a {
+    position: relative;
     display: inline-flex;
     align-items: baseline;
-    gap: 7px;
+    gap: 6px;
     padding: 6px 0;
-    position: relative;
-    color: var(--ink-3);
+    color: var(--cream-3);
     transition: color 0.25s;
   }
-  .rail__nav a i { font-style: normal; font-size: 9px; color: var(--red); opacity: 0.7; }
+  .rail__nav a i { font-style: normal; font-size: 8.5px; color: var(--flare); opacity: 0.8; }
   .rail__nav a::after {
     content: "";
     position: absolute;
     left: 0; right: 0; bottom: 0;
     height: 1px;
-    background: var(--ink);
+    background: var(--cream);
     transform: scaleX(0);
     transform-origin: left center;
     transition: transform 0.35s var(--ease);
   }
-  .rail__nav a:hover, .rail__nav a.is-active { color: var(--ink); }
-  .rail__nav a.is-active::after, .rail__nav a:hover::after { transform: scaleX(1); }
-  .rail__acts { display: flex; align-items: center; gap: 10px; }
-  .rail__me, .rail__gh {
+  .rail__nav a:hover, .rail__nav a.is-active { color: var(--cream); }
+  .rail__nav a:hover::after, .rail__nav a.is-active::after { transform: scaleX(1); }
+  .rail__acts { display: flex; align-items: center; gap: 8px; }
+  .rail__acts a {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 7px 13px;
+    padding: 8px 14px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
     font-family: var(--mono);
     font-size: 10px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
-    border: 1px solid var(--rule-2);
+    white-space: nowrap;
     transition: background 0.25s, color 0.25s, border-color 0.25s;
   }
-  .rail__me { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-  .rail__me:hover { background: var(--red); border-color: var(--red); }
-  .rail__gh:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .rail__acts .pill { background: var(--cream); border-color: var(--cream); color: var(--void); }
+  .rail__acts .pill:hover { background: var(--flare); border-color: var(--flare); color: #fff6ee; }
+  .rail__acts .ghost:hover { background: rgba(243, 238, 227, 0.08); border-color: var(--cream-3); }
 
   /* ---------- hero ---------- */
   .hero {
@@ -208,1005 +224,984 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: calc(70px + clamp(42px, 7vh, 86px)) 0 0;
-    overflow: hidden;
+    padding: 96px 0 0;
+    overflow: clip;
+    background:
+      radial-gradient(760px 620px at 76% 46%, rgba(180, 63, 37, 0.22), rgba(180, 63, 37, 0) 64%),
+      radial-gradient(620px 520px at 96% 18%, rgba(64, 106, 150, 0.16), rgba(64, 106, 150, 0) 66%),
+      radial-gradient(900px 700px at 20% 110%, rgba(226, 84, 47, 0.08), rgba(226, 84, 47, 0) 70%),
+      var(--void);
   }
   .hero::before {
     content: "";
     position: absolute;
+    inset: 0;
     z-index: 0;
-    right: -8vw;
-    top: 2vh;
-    width: min(58vw, 760px);
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(184, 55, 31, 0.1) 0%, rgba(184, 55, 31, 0) 66%);
+    background-image:
+      linear-gradient(rgba(243, 238, 227, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(243, 238, 227, 0.035) 1px, transparent 1px);
+    background-size: 96px 96px;
+    mask-image: radial-gradient(70% 62% at 72% 46%, #000 0%, transparent 78%);
+    -webkit-mask-image: radial-gradient(70% 62% at 72% 46%, #000 0%, transparent 78%);
     pointer-events: none;
   }
+  .hero__stage {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  .hero__stage canvas {
+    width: 100%;
+    height: 100%;
+  }
+  .stage__fallback {
+    display: none;
+    position: absolute;
+    inset: 0;
+    place-items: center;
+    perspective: 1200px;
+  }
+  .hero__stage[data-webgl="off"] .stage__fallback { display: grid; }
+  .fb-book {
+    position: relative;
+    width: clamp(190px, 22vw, 280px);
+    aspect-ratio: 0.69;
+    transform: rotateY(-22deg) rotateX(4deg);
+    filter: drop-shadow(-30px 40px 50px rgba(0, 0, 0, 0.6));
+  }
+  .fb-book__cover {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 8% 9%;
+    border-radius: 4px 10px 10px 4px;
+    background: linear-gradient(145deg, #6a2218, #3a0f0b 70%);
+    border: 1px solid rgba(243, 238, 227, 0.16);
+    box-shadow: inset 12px 0 26px rgba(0, 0, 0, 0.5);
+  }
+  .fb-book__cover b {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(26px, 3vw, 40px);
+    letter-spacing: 0.16em;
+  }
+  .fb-book__cover i {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 8px;
+    letter-spacing: 0.24em;
+    color: var(--cream-3);
+  }
+  .fb-book__pages {
+    position: absolute;
+    top: 2%; bottom: 2%; right: -9px; width: 12px;
+    border-radius: 0 4px 4px 0;
+    background: repeating-linear-gradient(90deg, #5c503c 0 1px, #e7ddc7 1px 3px);
+  }
+
   .hero__inner {
     position: relative;
     z-index: 2;
-    display: grid;
-    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    align-items: center;
-    gap: clamp(34px, 5vw, 78px);
+    width: 100%;
+    padding-bottom: clamp(28px, 5vh, 60px);
+  }
+  .hero__copy {
+    max-width: min(680px, 54vw);
+    animation: rise 1s var(--ease) both;
   }
   .hero__slug {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 22px;
-    padding-bottom: 16px;
-    margin-bottom: clamp(24px, 4vh, 40px);
-    border-bottom: 1px solid var(--rule);
-    color: var(--ink-3);
+    gap: 6px 20px;
+    margin-bottom: clamp(22px, 3.4vh, 34px);
     font-family: var(--mono);
     font-size: 9.5px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
+    color: var(--cream-3);
   }
-  .hero__slug b { color: var(--red); font-weight: 500; }
+  .hero__slug b { color: var(--flare-2); font-weight: 500; }
   .hero__title {
-    font-size: clamp(44px, 6.3vw, 98px);
-    font-weight: 700;
+    font-size: clamp(42px, 6.2vw, 92px);
+    font-weight: 800;
     line-height: 1.04;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.055em;
     font-feature-settings: "palt" 1;
+    text-wrap: balance;
   }
-  .hero__title .line {
-    display: block;
-    overflow: hidden;
-    padding-bottom: 0.07em;
-    margin-bottom: -0.05em;
-  }
-  .hero__title .line-in {
-    display: inline-block;
+  .hero__title > span { display: block; }
+  .hero__title em {
+    font-style: normal;
+    color: var(--flare);
     position: relative;
-    animation: lineRise 1.05s var(--ease) both;
+    white-space: nowrap;
   }
-  .hero__title .line:nth-child(1) .line-in { animation-delay: 0.06s; }
-  .hero__title .line:nth-child(2) .line-in { animation-delay: 0.15s; }
-  .hero__title .line:nth-child(3) .line-in { animation-delay: 0.24s; }
-  .hero__title em { font-style: normal; color: var(--red); }
-  .hero__title .dot { color: var(--red); }
+  .hero__title em::after {
+    content: "";
+    position: absolute;
+    left: 0.02em; right: 0.06em; bottom: 0.08em;
+    height: 0.09em;
+    background: linear-gradient(90deg, var(--flare), rgba(226, 84, 47, 0));
+    border-radius: 999px;
+    opacity: 0.7;
+  }
+  .hero__title .dot { color: var(--flare); }
   .hero__lede {
-    max-width: 33em;
-    margin-top: clamp(24px, 3.6vh, 38px);
-    font-size: clamp(15px, 1.15vw, 17px);
+    max-width: 30em;
+    margin-top: clamp(22px, 3.2vh, 32px);
+    font-size: clamp(15px, 1.1vw, 17px);
     line-height: 1.85;
-    color: var(--ink-2);
+    color: var(--cream-2);
     text-wrap: pretty;
-    animation: fadeUp 0.9s var(--ease) 0.5s both;
   }
   .hero__cta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    margin-top: clamp(26px, 3.8vh, 40px);
-    animation: fadeUp 0.9s var(--ease) 0.62s both;
+    margin-top: clamp(24px, 3.4vh, 36px);
   }
   .btn {
     display: inline-flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 20px;
-    border: 1px solid var(--ink);
+    gap: 11px;
+    padding: 13px 19px;
+    border-radius: 12px;
+    border: 1px solid var(--line-2);
+    font-family: var(--sans);
     font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.03em;
     line-height: 1.2;
-    background: transparent;
-    color: var(--ink);
-    transition: background 0.3s var(--ease), color 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.3s var(--ease);
+    letter-spacing: 0.01em;
+    transition: transform 0.3s var(--ease), background 0.3s, border-color 0.3s, color 0.3s, box-shadow 0.3s;
   }
   .btn svg { width: 17px; height: 17px; flex: none; }
-  .btn__label { display: block; text-align: left; }
-  .btn .ver {
-    display: block;
-    margin-top: 3px;
+  .btn:hover { transform: translateY(-2px); }
+  .btn--solid {
+    background: var(--cream);
+    border-color: var(--cream);
+    color: var(--void);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.42);
+  }
+  .btn--solid:hover { background: var(--flare); border-color: var(--flare); color: #fff7f1; }
+  .btn--glass { background: rgba(243, 238, 227, 0.055); color: var(--cream); }
+  .btn--glass:hover { background: rgba(243, 238, 227, 0.11); border-color: var(--cream-3); }
+  .btn__label { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+  .btn__label .ver {
     font-family: var(--mono);
     font-size: 9px;
     font-weight: 400;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
+    letter-spacing: 0.09em;
     opacity: 0.58;
   }
-  .btn--ink { background: var(--ink); color: var(--paper); }
-  .btn--ink:hover { background: var(--red); border-color: var(--red); transform: translateY(-2px); }
-  .btn--line:hover { background: var(--ink); color: var(--paper); transform: translateY(-2px); }
   .hero__src {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-left: 6px;
+    margin-left: 4px;
     font-family: var(--mono);
     font-size: 10px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ink-3);
-    border-bottom: 1px solid var(--rule-2);
-    padding-bottom: 2px;
+    color: var(--cream-3);
+    border-bottom: 1px solid transparent;
     transition: color 0.25s, border-color 0.25s;
   }
-  .hero__src:hover { color: var(--red); border-color: var(--red); }
+  .hero__src:hover { color: var(--cream); border-bottom-color: var(--cream-3); }
   .hero__meta {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    max-width: 610px;
-    margin-top: clamp(32px, 5vh, 56px);
-    border-top: 1px solid var(--rule-2);
-    animation: fadeUp 0.9s var(--ease) 0.74s both;
+    grid-template-columns: repeat(3, minmax(0, auto));
+    gap: clamp(22px, 4vw, 54px);
+    width: fit-content;
+    margin-top: clamp(28px, 4.6vh, 48px);
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
   }
-  .hero__meta > div {
-    padding: 14px 16px 0 0;
-    border-right: 1px solid var(--rule);
-  }
-  .hero__meta > div:last-child { border-right: 0; }
   .hero__meta dt {
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--cream-3);
   }
-  .hero__meta dd { margin-top: 7px; font-size: 13.5px; letter-spacing: -0.01em; }
-
-  .hero__plate {
-    position: relative;
-    z-index: 1;
-    margin: 0;
-    transform: rotate(-1.4deg) translate3d(0, var(--py, 0px), 0);
-    animation: plateIn 1.2s var(--ease) 0.2s both;
-  }
-  .hero__print {
-    position: relative;
-    padding: 9px;
-    background: var(--paper-hi);
-    border: 1px solid var(--rule-2);
-    box-shadow: 0 50px 90px -54px rgba(21, 17, 12, 0.55), 0 3px 14px -8px rgba(21, 17, 12, 0.22);
-  }
-  .hero__print img { width: 100%; height: auto; border: 1px solid var(--rule); }
-  .hero__phone {
-    position: absolute;
-    right: -6%;
-    bottom: -42px;
-    width: 130px;
-    padding: 6px;
-    border-radius: 22px;
-    background: var(--ink);
-    border: 1px solid rgba(242, 236, 221, 0.22);
-    box-shadow: 0 30px 50px -24px rgba(21, 17, 12, 0.85);
-    transform: rotate(2.6deg);
-  }
-  .hero__phone img { width: 100%; height: auto; border-radius: 16px; }
-  .hero__plate figcaption {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 12px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .hero__plate figcaption span { color: var(--red); }
-  .seal {
-    position: absolute;
-    left: -30px;
-    top: -34px;
-    z-index: 3;
-    width: 88px;
-    height: 88px;
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: 1px;
-    border: 1.5px solid var(--red);
-    color: var(--red);
-    background: rgba(250, 245, 233, 0.78);
-    box-shadow: inset 0 0 0 3px rgba(184, 55, 31, 0.14), inset 0 0 0 4px var(--red);
-    transform: rotate(-9deg);
-    font-family: var(--mono);
-    font-size: 7.5px;
-    letter-spacing: 0.3em;
-    text-transform: uppercase;
-  }
-  .seal b {
-    font-family: var(--serif);
-    font-size: 23px;
-    font-weight: 400;
-    letter-spacing: 0.02em;
-    line-height: 1;
-    text-indent: 0.02em;
-  }
+  .hero__meta dd { font-size: 14px; color: var(--cream); }
   .hero__foot {
     position: relative;
     z-index: 2;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
     justify-content: space-between;
-    gap: 12px 26px;
-    margin-top: clamp(38px, 7vh, 82px);
-    padding: 14px 0 18px;
-    border-top: 1px solid var(--rule);
+    gap: 20px;
+    padding-top: 18px;
+    padding-bottom: 24px;
+    border-top: 1px solid var(--line);
     font-family: var(--mono);
     font-size: 9.5px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--cream-3);
   }
   .scrollcue { display: inline-flex; align-items: center; gap: 10px; }
   .scrollcue i {
-    position: relative;
-    display: block;
-    width: 56px;
-    height: 1px;
-    background: var(--rule);
+    display: inline-block;
+    width: 42px; height: 1px;
+    background: linear-gradient(90deg, var(--flare), transparent);
+    animation: sweep 2.4s var(--ease) infinite;
+    transform-origin: left center;
+  }
+
+  /* ---------- marquee ---------- */
+  .marquee {
     overflow: hidden;
+    padding: 13px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: rgba(243, 238, 227, 0.018);
   }
-  .scrollcue i::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--red);
-    transform: translateX(-100%);
-    animation: cue 2.6s var(--ease) infinite;
-  }
-
-  /* ---------- contents ---------- */
-  .contents {
-    border-top: 1px solid var(--rule-2);
-    border-bottom: 1px solid var(--rule-2);
-    background: rgba(250, 245, 233, 0.42);
-  }
-  .contents__inner { display: flex; flex-wrap: wrap; align-items: stretch; }
-  .contents__label {
+  .marquee__track {
     display: flex;
-    align-items: center;
-    padding: 17px 30px 17px 0;
-    border-right: 1px solid var(--rule);
+    width: max-content;
+    gap: 0;
+    animation: slide 42s linear infinite;
+  }
+  .marquee__track span {
+    padding: 0 22px;
     font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.2em;
+    font-size: 10px;
+    letter-spacing: 0.24em;
     text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .contents a {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 9px;
-    padding: 17px 26px;
-    border-right: 1px solid var(--rule);
-    font-size: 13px;
-    color: var(--ink-2);
-    transition: background 0.25s, color 0.25s;
-  }
-  .contents a i {
-    font-family: var(--mono);
-    font-style: normal;
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    color: var(--red);
-  }
-  .contents a:hover { background: var(--ink); color: var(--paper); }
-  .contents a:hover i { color: var(--red-2); }
-
-  /* ---------- statement ---------- */
-  .statement { padding: clamp(88px, 13vw, 168px) 0; }
-  .statement__grid {
-    display: grid;
-    grid-template-columns: 168px minmax(0, 1fr);
-    gap: clamp(24px, 5vw, 64px);
-  }
-  .statement__label {
-    padding-top: 12px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .statement blockquote {
-    font-size: clamp(38px, 6.2vw, 88px);
-    font-weight: 700;
-    line-height: 1.06;
-    letter-spacing: -0.045em;
-    font-feature-settings: "palt" 1;
-  }
-  .statement blockquote em { font-style: normal; color: var(--red); }
-  .statement__note {
-    max-width: 42em;
-    margin-top: clamp(24px, 3.4vw, 38px);
-    padding-left: 22px;
-    border-left: 1px solid var(--red);
-    font-size: 15.5px;
-    line-height: 1.9;
-    color: var(--ink-2);
-  }
-
-  /* ---------- chapter ---------- */
-  .chapter { padding: clamp(72px, 10vw, 132px) 0; border-top: 1px solid var(--rule); }
-  .chapter__grid {
-    display: grid;
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: clamp(34px, 6vw, 92px);
-  }
-  .chapter__head { position: sticky; top: 96px; align-self: start; }
-  .chapter__no {
-    display: block;
-    font-family: var(--serif);
-    font-size: clamp(62px, 8.6vw, 124px);
-    line-height: 0.78;
-    letter-spacing: -0.04em;
-    color: var(--red);
-  }
-  .chapter__label {
-    margin-top: 20px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .chapter h2 {
-    margin-top: 14px;
-    font-size: clamp(30px, 4.2vw, 58px);
-    font-weight: 700;
-    line-height: 1.06;
-    letter-spacing: -0.04em;
-    font-feature-settings: "palt" 1;
-  }
-  .chapter__body { padding-top: 4px; }
-  .chapter__lead {
-    max-width: 30em;
-    margin-bottom: 22px;
-    font-size: clamp(18px, 1.55vw, 22px);
-    line-height: 1.75;
-    letter-spacing: -0.015em;
-  }
-  .chapter__body p {
-    max-width: 36em;
-    margin-bottom: 18px;
-    font-size: 15.5px;
-    line-height: 1.9;
-    color: var(--ink-2);
-    text-wrap: pretty;
-  }
-  .chapter__body strong { color: var(--ink); font-weight: 600; }
-
-  .schematic {
-    position: relative;
-    margin-top: 42px;
-    padding: clamp(24px, 4vw, 44px);
-    border: 1px solid var(--rule-2);
-    background: var(--paper-hi);
-  }
-  .schematic__row { display: flex; align-items: center; gap: 12px; }
-  .device { flex: 1; min-width: 0; text-align: center; }
-  .device__icon {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 13px;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--rule-2);
-    background: var(--paper);
-    color: var(--ink-2);
-  }
-  .device__icon svg { width: 21px; height: 21px; }
-  .device b { display: block; font-size: 13.5px; font-weight: 600; }
-  .device small {
-    display: block;
-    margin-top: 4px;
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .wire {
-    position: relative;
-    flex: 1.25;
-    height: 1px;
-    margin-bottom: 34px;
-    border-top: 1px dashed var(--rule-2);
-  }
-  .wire span {
-    position: absolute;
-    left: 50%;
-    top: -22px;
-    transform: translateX(-50%);
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--cream-3);
     white-space: nowrap;
   }
-  .wire i {
-    position: absolute;
-    top: -3px;
-    left: 0;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--red);
-    animation: travel 2.8s var(--ease) infinite;
+  .marquee__track span:nth-child(2n) { color: var(--flare); }
+
+  /* ---------- sections ---------- */
+  .statement { padding: clamp(76px, 12vh, 150px) 0; }
+  .statement__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+    gap: clamp(26px, 5vw, 80px);
   }
-  .schematic figcaption {
+  .statement__label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+    line-height: 2;
+  }
+  .statement__quote {
+    font-size: clamp(34px, 5.2vw, 76px);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.05em;
+  }
+  .statement__quote span { color: var(--flare); display: block; }
+  .statement__body {
+    max-width: 42em;
+    margin-top: clamp(22px, 3.4vh, 34px);
+    color: var(--cream-2);
+    font-size: clamp(15px, 1.05vw, 16.5px);
+    line-height: 1.9;
+  }
+
+  .chapter { padding: clamp(70px, 11vh, 132px) 0; border-top: 1px solid var(--line); }
+  .chapter__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 330px) minmax(0, 1fr);
+    gap: clamp(28px, 6vw, 96px);
+  }
+  .chapter__head { align-self: start; position: sticky; top: 108px; }
+  .chapter__head h2 { font-size: clamp(28px, 2.9vw, 42px); }
+  .chapter__no {
+    display: inline-block;
+    font-family: var(--serif);
+    font-size: clamp(46px, 5vw, 74px);
+    line-height: 0.86;
+    color: rgba(243, 238, 227, 0.14);
+    margin-bottom: 14px;
+  }
+  .chapter__label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  h2 {
+    margin-top: 12px;
+    font-size: clamp(30px, 4vw, 56px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.045em;
+    text-wrap: balance;
+  }
+  .chapter__body { max-width: 40em; }
+  .chapter__body p { color: var(--cream-2); line-height: 1.9; }
+  .chapter__body p + p { margin-top: 16px; }
+  .chapter__body strong { color: var(--cream); font-weight: 600; }
+  .chapter__lead {
+    font-size: clamp(18px, 1.5vw, 21px);
+    color: var(--cream) !important;
+    line-height: 1.75 !important;
+  }
+
+  /* sync panel */
+  .sync-panel {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 0.9fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+    margin-top: 30px;
+    padding: clamp(20px, 3vw, 34px);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background:
+      radial-gradient(420px 260px at 50% 0%, rgba(226, 84, 47, 0.13), transparent 70%),
+      linear-gradient(160deg, rgba(243, 238, 227, 0.05), rgba(243, 238, 227, 0.012));
+    overflow: hidden;
+  }
+  .sync-node {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(6, 7, 10, 0.55);
+    min-width: 0;
+  }
+  .sync-node b { font-size: 14px; font-weight: 600; }
+  .sync-node small {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--cream-3);
+    overflow-wrap: anywhere;
+  }
+  .sync-node--phone { text-align: right; }
+  .sync-wire {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-top: 28px;
-    padding-top: 14px;
-    border-top: 1px solid var(--rule);
-    font-family: var(--mono);
-    font-size: 9px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--ink-3);
+    justify-content: center;
+    min-width: 0;
   }
-  .schematic figcaption span { color: var(--red); }
+  .sync-wire::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: repeating-linear-gradient(90deg, var(--line-2) 0 6px, transparent 6px 12px);
+  }
+  .sync-wire i {
+    position: relative;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--flare);
+    box-shadow: 0 0 16px rgba(226, 84, 47, 0.9);
+    animation: pulse 2.2s var(--ease) infinite;
+  }
+  .sync-wire span {
+    position: absolute;
+    top: calc(50% + 14px);
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.12em;
+    color: var(--cream-3);
+    white-space: nowrap;
+  }
   .steps {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-top: 34px;
-    border-top: 1px solid var(--rule);
-  }
-  .steps li { padding: 16px 20px 0 0; border-right: 1px solid var(--rule); }
-  .steps li:last-child { border-right: 0; }
-  .steps i { font-style: normal; font-family: var(--mono); font-size: 9.5px; color: var(--red); }
-  .steps b { display: block; margin: 7px 0 3px; font-size: 13.5px; font-weight: 600; }
-  .steps span { font-size: 12px; line-height: 1.7; color: var(--ink-3); }
-
-  /* ---------- features ---------- */
-  .chapter--ink {
-    background: var(--ink);
-    color: var(--paper);
-    border-top: 0;
-  }
-  .chapter--ink .chapter__grid { display: block; }
-  .chapter--ink .chapter__head { position: static; display: block; max-width: 900px; }
-  .chapter--ink .chapter__head .chapter__no { color: var(--red-2); }
-  .chapter--ink .chapter__label { color: var(--cream-3); }
-  .chapter--ink h2 { color: var(--paper); }
-  .chapter--ink .chapter__body { max-width: 760px; margin-top: 26px; }
-  .chapter--ink .chapter__body p { color: var(--cream-2); }
-  .ledger { margin-top: clamp(36px, 5vw, 60px); border-top: 1px solid var(--cream-rule); }
-  .ledger li {
-    display: grid;
-    grid-template-columns: 58px minmax(140px, 0.8fr) minmax(0, 2fr) 110px;
-    gap: 22px;
-    align-items: start;
-    padding: 25px 6px;
-    border-bottom: 1px solid var(--cream-rule);
-    transition: background 0.4s, padding-left 0.5s var(--ease);
-  }
-  .ledger li:hover { background: rgba(242, 236, 221, 0.045); padding-left: 16px; }
-  .ledger__no { padding-top: 3px; font-family: var(--mono); font-size: 10.5px; color: var(--red-2); }
-  .ledger h3 { font-size: clamp(17px, 1.9vw, 23px); font-weight: 600; letter-spacing: -0.02em; }
-  .ledger p { max-width: 48em; font-size: 13.5px; line-height: 1.8; color: var(--cream-2); }
-  .ledger__tag {
-    justify-self: end;
-    padding: 4px 8px;
-    border: 1px solid var(--cream-rule);
-    font-family: var(--mono);
-    font-size: 8.5px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--cream-3);
-    white-space: nowrap;
-  }
-
-  /* ---------- gallery ---------- */
-  .gallery { position: relative; background: var(--ink); color: var(--paper); border-top: 1px solid var(--cream-rule); }
-  .gallery__track { height: 205vh; }
-  .gallery__pin {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-    overflow: hidden;
-    padding-top: 88px;
-  }
-  .gallery__head { position: absolute; top: 88px; left: 0; right: 0; z-index: 4; }
-  .gallery__head .chapter__label { color: var(--cream-3); }
-  .gallery__head h2 {
-    margin-top: 10px;
-    font-size: clamp(30px, 4vw, 54px);
-    font-weight: 700;
-    line-height: 1.05;
-    letter-spacing: -0.04em;
-    color: var(--paper);
-  }
-  .gallery__head p { max-width: 38em; margin-top: 12px; font-size: 14px; line-height: 1.8; color: var(--cream-2); }
-  .gallery__stage {
-    position: absolute;
-    inset: 88px 0 0;
-    display: grid;
-    place-items: center;
-    perspective: 1600px;
-    transform-style: preserve-3d;
-  }
-  .gallery__stage .dust {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    -webkit-mask-image: radial-gradient(ellipse 60% 62% at 50% 56%, transparent 20%, #000 78%);
-    mask-image: radial-gradient(ellipse 60% 62% at 50% 56%, transparent 20%, #000 78%);
-  }
-  .gallery__glow {
-    position: absolute;
-    left: 50%;
-    top: 52%;
-    width: 70vw;
-    height: 56vh;
-    transform: translate(-50%, -50%);
-    background: radial-gradient(closest-side, rgba(184, 55, 31, 0.16), transparent 72%);
-    pointer-events: none;
-  }
-  .shot {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: min(38vw, 560px);
-    transform: translate(-50%, -50%);
-    border: 1px solid rgba(242, 236, 221, 0.24);
-    background: #0f0d09;
-    box-shadow: 0 60px 120px -50px rgba(0, 0, 0, 0.95), 0 0 60px -20px rgba(184, 55, 31, 0.14);
-    will-change: transform;
-  }
-  .shot img { width: 100%; height: auto; }
-  .shot--main { width: min(44vw, 650px); z-index: 3; }
-  .shot--phone { width: min(16vw, 232px); border-radius: 20px; z-index: 4; }
-  .shot--phone img { border-radius: 15px; }
-  .gallery__hint {
-    position: absolute;
-    right: var(--gutter);
-    bottom: 30px;
-    z-index: 5;
-    display: flex;
-    align-items: center;
     gap: 12px;
+    margin-top: 26px;
+  }
+  .steps li {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 18px;
+    border-top: 1px solid var(--line-2);
+    min-width: 0;
+  }
+  .steps i {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    color: var(--flare);
+  }
+  .steps b { font-size: 14px; font-weight: 600; }
+  .steps span { font-size: 13px; color: var(--cream-3); line-height: 1.75; }
+
+  /* bento */
+  .bento {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(12px, 1.4vw, 18px);
+    margin-top: clamp(30px, 4vw, 48px);
+  }
+  .card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+    padding: clamp(22px, 2.4vw, 32px);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: linear-gradient(165deg, rgba(243, 238, 227, 0.055), rgba(243, 238, 227, 0.012));
+    overflow: hidden;
+    transition: transform 0.45s var(--ease), border-color 0.45s, background 0.45s;
+  }
+  .card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    background: radial-gradient(300px 220px at 20% 0%, rgba(226, 84, 47, 0.18), transparent 72%);
+    opacity: 0;
+    transition: opacity 0.45s var(--ease);
+    pointer-events: none;
+  }
+  .card:hover { transform: translateY(-4px); border-color: var(--line-2); }
+  .card:hover::before { opacity: 1; }
+  .card__no {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    color: var(--flare);
+  }
+  .card h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .card p { font-size: 13.5px; line-height: 1.8; color: var(--cream-3); }
+  .card__tag {
+    margin-top: auto;
+    padding-top: 14px;
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.2em;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(243, 238, 227, 0.26);
+  }
+  .card--hot { border-color: rgba(226, 84, 47, 0.34); }
+
+  /* gallery */
+  .gallery { padding: clamp(70px, 11vh, 132px) 0; border-top: 1px solid var(--line); }
+  .gallery__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr);
+    align-items: end;
+    gap: clamp(20px, 4vw, 60px);
+    margin-bottom: clamp(30px, 4vw, 48px);
+  }
+  .gallery__head p { color: var(--cream-2); font-size: 14.5px; line-height: 1.85; max-width: 30em; }
+  .gallery__grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: clamp(12px, 1.5vw, 20px);
+  }
+  .shot {
+    position: relative;
+    min-width: 0;
+    margin: 0;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    overflow: hidden;
+    transition: transform 0.5s var(--ease), border-color 0.5s, box-shadow 0.5s;
+  }
+  .shot:hover {
+    transform: translateY(-5px);
+    border-color: var(--line-2);
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.5);
+  }
+  .shot img { width: 100%; height: auto; }
+  .shot figcaption {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--cream-3);
   }
-  .gallery__hint i { display: block; width: 70px; height: 1px; background: var(--cream-rule); position: relative; overflow: hidden; }
-  .gallery__hint i::after { content: ""; position: absolute; inset: 0; background: var(--red-2); transform: scaleX(var(--gp, 0)); transform-origin: left center; }
+  .shot figcaption b { color: var(--flare); font-weight: 400; }
+  .shot--desk { grid-column: span 8; }
+  .shot--phone { grid-column: span 4; grid-row: span 2; align-self: start; padding: 10px; background: #0a0c11; }
+  .shot--shelf { grid-column: span 8; }
+  .shot--phone img { width: 100%; height: auto; border-radius: 8px; }
 
-  /* ---------- typography ---------- */
+  /* type */
   .type__grid {
     display: grid;
-    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    gap: clamp(34px, 5vw, 70px);
+    grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+    gap: clamp(30px, 5vw, 70px);
     align-items: start;
   }
   .type__list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 30px;
-    border-top: 1px solid var(--rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 26px;
   }
   .type__list li {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 11px 14px 11px 0;
-    border-bottom: 1px solid var(--rule);
-    font-size: 12.5px;
-    color: var(--ink-2);
+    padding: 7px 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    color: var(--cream-2);
   }
-  .type__list li::before { content: ""; width: 5px; height: 5px; background: var(--red); flex: none; }
-  .type__list li:nth-child(odd) { border-right: 1px solid var(--rule); }
-  .type__list li:nth-child(even) { padding-left: 14px; }
-
   .specimen {
-    border: 1px solid var(--rule-2);
-    background: var(--paper-hi);
-    box-shadow: 0 44px 90px -60px rgba(21, 17, 12, 0.5);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: linear-gradient(165deg, rgba(243, 238, 227, 0.06), rgba(243, 238, 227, 0.015));
+    overflow: hidden;
+    min-width: 0;
   }
   .specimen__bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 12px 18px;
-    padding: 13px 15px;
-    border-bottom: 1px solid var(--rule);
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(6, 7, 10, 0.5);
+  }
+  .seg button {
+    padding: 5px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--cream-3);
+    font-family: var(--sans);
+    font-size: 11.5px;
+    cursor: pointer;
+    transition: background 0.25s, color 0.25s;
+  }
+  .seg button.is-on { background: var(--cream); color: var(--void); }
+  .specimen__bar label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  .specimen__bar input[type="range"] {
+    width: 72px;
+    accent-color: var(--flare);
+    cursor: pointer;
+  }
+  .specimen__bar b { color: var(--cream); font-weight: 500; }
+  .specimen__theme {
+    margin-left: auto;
+    padding: 6px 13px;
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--cream-2);
     font-family: var(--mono);
     font-size: 9px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--ink-3);
-  }
-  .seg { display: inline-flex; border: 1px solid var(--rule-2); }
-  .seg button {
-    padding: 5px 10px;
-    border: 0;
-    border-right: 1px solid var(--rule);
-    background: transparent;
-    color: var(--ink-2);
-    font: inherit;
     cursor: pointer;
-    transition: background 0.2s, color 0.2s;
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
   }
-  .seg button:last-child { border-right: 0; }
-  .seg button.is-on { background: var(--ink); color: var(--paper); }
-  .specimen__bar label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
-  .specimen__bar input[type="range"] {
-    width: 76px;
-    height: 14px;
-    accent-color: var(--red);
-    cursor: pointer;
-  }
-  .specimen__bar b { font-weight: 500; color: var(--ink); min-width: 1.6em; }
-  .specimen__theme {
-    margin-left: auto;
-    padding: 5px 10px;
-    border: 1px solid var(--rule-2);
-    background: transparent;
-    color: var(--ink-2);
-    font: inherit;
-    cursor: pointer;
-    transition: background 0.2s, color 0.2s;
-  }
-  .specimen__theme:hover { background: var(--ink); color: var(--paper); }
+  .specimen__theme:hover { background: rgba(243, 238, 227, 0.1); color: var(--cream); }
   .specimen__page {
-    --spec-bg: var(--paper-hi);
-    --spec-ink: var(--ink);
-    --spec-ff: var(--serif);
-    --spec-fs: 20px;
-    --spec-lh: 1.9;
-    padding: clamp(26px, 4.2vw, 50px);
-    background: var(--spec-bg);
-    transition: background 0.45s var(--ease), color 0.45s var(--ease);
+    padding: clamp(28px, 4.4vw, 54px) clamp(24px, 4vw, 50px);
+    background: #ece2cc;
+    color: #221a11;
+    transition: background 0.5s var(--ease), color 0.5s var(--ease);
   }
-  .specimen__page.is-night { --spec-bg: #16130d; --spec-ink: #e9e2d1; }
+  .specimen__page.is-night { background: #15161a; color: #d9d2c4; }
   .specimen__text {
-    margin: 0;
-    font-family: var(--spec-ff);
-    font-size: var(--spec-fs);
-    line-height: var(--spec-lh);
-    color: var(--spec-ink);
+    font-family: var(--spec-ff, "Songti SC", "Noto Serif SC", "Source Han Serif SC", serif);
+    font-size: var(--spec-fs, 20px);
+    line-height: var(--spec-lh, 1.9);
+    text-indent: 2em;
     text-align: justify;
-    font-feature-settings: "palt" 1;
-    transition: font-size 0.2s var(--ease), line-height 0.2s var(--ease);
+    letter-spacing: 0.01em;
+    transition: font-size 0.15s, line-height 0.15s;
   }
   .specimen__meta {
     display: flex;
-    align-items: center;
     gap: 10px;
-    padding: 12px 15px;
-    border-top: 1px solid var(--rule);
+    padding: 12px 18px;
+    border-top: 1px solid var(--line);
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--cream-3);
   }
-  .specimen__meta span { color: var(--red); }
-  .type__plate { margin-top: 34px; }
-  .type__plate img { width: 100%; border: 1px solid var(--rule-2); box-shadow: 0 40px 80px -60px rgba(21, 17, 12, 0.5); }
+  .specimen__meta span:first-child { color: var(--flare); }
+  .type__plate {
+    margin-top: clamp(16px, 2vw, 24px);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .type__plate img { width: 100%; height: auto; }
   .type__plate figcaption {
     display: flex;
     gap: 10px;
-    margin-top: 11px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--line);
     font-family: var(--mono);
     font-size: 9px;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--ink-3);
+    color: var(--cream-3);
   }
-  .type__plate figcaption span { color: var(--red); }
+  .type__plate figcaption span { color: var(--flare); }
 
-  /* ---------- download ---------- */
-  .download { padding: clamp(80px, 11vw, 150px) 0; border-top: 1px solid var(--rule); }
-  .download__title {
-    margin-top: 14px;
-    font-size: clamp(44px, 7vw, 96px);
-    font-weight: 700;
-    line-height: 0.98;
-    letter-spacing: -0.05em;
-    font-feature-settings: "palt" 1;
+  /* download */
+  .download {
+    padding: clamp(76px, 12vh, 150px) 0 clamp(60px, 9vh, 110px);
+    border-top: 1px solid var(--line);
+    background:
+      radial-gradient(700px 460px at 50% 0%, rgba(226, 84, 47, 0.12), transparent 68%),
+      var(--void);
   }
-  .download__title em { font-style: normal; color: var(--red); }
+  .download__title {
+    margin-top: 10px;
+    font-size: clamp(40px, 6.4vw, 96px);
+    font-weight: 800;
+    line-height: 1.04;
+    letter-spacing: -0.055em;
+  }
+  .download__title em { font-style: normal; color: var(--flare); }
   .download__grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    margin-top: clamp(34px, 5vw, 56px);
+    gap: clamp(12px, 1.6vw, 20px);
+    margin-top: clamp(32px, 4vw, 52px);
   }
   .dlc {
     position: relative;
-    display: block;
-    padding: 24px 24px 22px;
-    border: 1px solid var(--rule-2);
-    background: var(--paper-hi);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: clamp(24px, 3vw, 40px);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: linear-gradient(160deg, rgba(243, 238, 227, 0.06), rgba(243, 238, 227, 0.012));
     overflow: hidden;
-    transition: transform 0.45s var(--ease), box-shadow 0.45s var(--ease), border-color 0.3s;
+    transition: transform 0.45s var(--ease), border-color 0.45s, background 0.45s;
   }
   .dlc::after {
     content: "";
     position: absolute;
-    left: 0; right: 0; bottom: 0;
-    height: 3px;
-    background: var(--red);
-    transform: scaleX(0);
-    transform-origin: left center;
-    transition: transform 0.55s var(--ease);
+    right: -40px; top: -40px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(226, 84, 47, 0.22), transparent 68%);
+    opacity: 0;
+    transition: opacity 0.45s;
   }
-  .dlc:hover { transform: translateY(-3px); border-color: var(--ink); box-shadow: 0 28px 50px -34px rgba(21, 17, 12, 0.5); }
-  .dlc:hover::after { transform: scaleX(1); }
-  .dlc__os { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--red); }
-  .dlc__name { display: block; margin-top: 10px; font-size: clamp(24px, 2.6vw, 34px); font-weight: 700; letter-spacing: -0.035em; }
-  .dlc__ver { display: block; margin-top: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
-  .dlc__go {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 22px;
-    padding-top: 13px;
-    border-top: 1px solid var(--rule);
-    width: 100%;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--ink-2);
-  }
-  .dlc__go i { margin-left: auto; font-style: normal; color: var(--red); transition: transform 0.35s var(--ease); }
-  .dlc:hover .dlc__go i { transform: translate(3px, -3px); }
-  .download__note { max-width: 40em; margin-top: 22px; font-size: 12.5px; line-height: 1.8; color: var(--ink-3); }
-  .req {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-top: 46px;
-    border-top: 1px solid var(--rule-2);
-  }
-  .req > div { padding: 15px 18px 0 0; border-right: 1px solid var(--rule); }
-  .req > div:last-child { border-right: 0; }
-  .req dt { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
-  .req dd { margin-top: 7px; font-size: 13px; line-height: 1.6; }
-
-  /* ---------- footer ---------- */
-  .colophon {
-    padding: 40px 0 30px;
-    background: var(--ink);
-    color: var(--cream-3);
+  .dlc:hover { transform: translateY(-4px); border-color: rgba(226, 84, 47, 0.5); }
+  .dlc:hover::after { opacity: 1; }
+  .dlc__os {
     font-family: var(--mono);
     font-size: 9.5px;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
+    color: var(--flare);
   }
-  .colophon__top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 26px; }
-  .colophon .brand { font-size: 26px; letter-spacing: -0.02em; color: var(--paper); text-transform: none; }
-  .colophon__meta { max-width: 30em; line-height: 1.9; }
-  .colophon nav { display: flex; flex-wrap: wrap; gap: 20px; }
-  .colophon nav a { transition: color 0.2s; }
-  .colophon nav a:hover { color: var(--paper); }
+  .dlc__name {
+    font-size: clamp(24px, 2.4vw, 32px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .dlc__ver {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    color: var(--cream-3);
+    overflow-wrap: anywhere;
+  }
+  .dlc__go {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--cream-2);
+    transition: color 0.3s;
+  }
+  .dlc__go i { font-style: normal; margin-left: auto; color: var(--flare); transition: transform 0.3s var(--ease); }
+  .dlc:hover .dlc__go { color: var(--cream); }
+  .dlc:hover .dlc__go i { transform: translate(3px, -3px); }
+  .download__note {
+    margin-top: 22px;
+    font-size: 13.5px;
+    color: var(--cream-3);
+    line-height: 1.8;
+  }
+  .req {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px clamp(24px, 4vw, 56px);
+    margin-top: 30px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+  .req div { min-width: 0; }
+  .req dt {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  .req dd { font-size: 13px; color: var(--cream-2); }
+
+  /* footer */
+  .colophon {
+    border-top: 1px solid var(--line);
+    padding: clamp(40px, 6vh, 64px) 0 26px;
+    background: var(--void-2);
+  }
+  .colophon__top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 30px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--line);
+  }
+  .colophon__meta {
+    margin-top: 12px;
+    font-size: 12.5px;
+    line-height: 1.8;
+    color: var(--cream-3);
+  }
+  .colophon nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 26px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  .colophon nav a { transition: color 0.25s; }
+  .colophon nav a:hover { color: var(--cream); }
   .colophon__bottom {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    gap: 12px 24px;
-    margin-top: 30px;
-    padding-top: 15px;
-    border-top: 1px solid var(--cream-rule);
-    color: rgba(242, 236, 221, 0.3);
+    gap: 10px;
+    padding-top: 20px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(243, 238, 227, 0.28);
   }
 
-  /* ---------- motion ---------- */
-  .js .reveal {
+  /* reveal */
+  html.js .reveal {
     opacity: 0;
-    transform: translateY(26px);
-    transition: opacity 0.9s var(--ease), transform 0.9s var(--ease);
+    transform: translateY(20px);
+    transition: opacity 0.85s var(--ease) var(--d, 0ms), transform 0.85s var(--ease) var(--d, 0ms);
   }
-  .js .reveal.is-in { opacity: 1; transform: none; }
-  .reveal[data-delay="1"] { transition-delay: 90ms; }
-  .reveal[data-delay="2"] { transition-delay: 180ms; }
-  .reveal[data-delay="3"] { transition-delay: 270ms; }
+  html.js .reveal.is-in { opacity: 1; transform: none; }
 
-  @keyframes lineRise { from { transform: translateY(112%); } to { transform: translateY(0); } }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
-  @keyframes plateIn { from { opacity: 0; transform: rotate(-1.4deg) translateY(36px); } to { opacity: 1; transform: rotate(-1.4deg) translateY(0); } }
-  @keyframes cue { 0% { transform: translateX(-100%); } 55% { transform: translateX(0); } 100% { transform: translateX(100%); } }
-  @keyframes travel { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes sweep {
+    0% { transform: scaleX(0.2); opacity: 0.2; }
+    50% { transform: scaleX(1); opacity: 1; }
+    100% { transform: scaleX(0.2); opacity: 0.2; }
+  }
+  @keyframes slide {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.55; }
+  }
 
-  /* ---------- responsive ---------- */
-  @media (max-width: 1120px) {
-    .rail__nav { gap: 18px; }
+  @media (max-width: 900px) {
+    .rail__nav { gap: 16px; }
     .rail__nav a span { display: none; }
-    .hero__inner { grid-template-columns: minmax(0, 1fr); gap: 52px; }
-    .hero { padding-bottom: 10px; }
-    .hero__plate { width: min(620px, 92%); margin-inline: auto; }
-    .hero__phone { right: 2%; }
-    .hero__meta { max-width: 100%; }
-    .chapter__grid { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+    .rail__nav a i { font-size: 10px; }
+  }
+  @media (max-width: 1120px) {
+    .hero__copy { max-width: min(620px, 56vw); }
+  }
+  @media (max-width: 980px) {
+    .rail__acts .ghost { display: none; }
+    .chapter__grid { grid-template-columns: minmax(0, 1fr); }
     .chapter__head { position: static; }
-    .chapter__no { font-size: 74px; }
-    .type__grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
-    .ledger li { grid-template-columns: 50px minmax(120px, 0.7fr) minmax(0, 2fr); }
-    .ledger__tag { display: none; }
+    .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .gallery__head { grid-template-columns: minmax(0, 1fr); align-items: start; }
+    .type__grid { grid-template-columns: minmax(0, 1fr); }
+    .statement__grid { grid-template-columns: minmax(0, 1fr); }
+    .statement__label { margin-bottom: 18px; }
   }
-
   @media (max-width: 860px) {
-    .rail { grid-template-columns: 1fr auto; gap: 16px; height: 62px; }
-    .rail__nav { display: none; }
-    .rail__gh { display: none; }
-    .hero { min-height: auto; padding-top: 118px; }
-    .hero__title { font-size: clamp(40px, 8.6vw, 68px); }
-    .hero__foot { margin-top: 44px; }
-    .statement__grid { grid-template-columns: 1fr; gap: 16px; }
-    .statement__label { padding-top: 0; }
-    .contents__label { display: none; }
-    .contents a { padding: 14px 18px; }
-    .gallery__track { height: auto; }
-    .gallery__pin { position: static; height: auto; padding: 76px 0 64px; }
-    .gallery__head { position: static; padding-bottom: 6px; }
-    .gallery__stage { position: static; inset: auto; display: flex; flex-direction: column; gap: 14px; padding: 26px var(--gutter) 0; perspective: none; }
-    .gallery__stage .dust, .gallery__glow, .gallery__hint { display: none; }
-    .shot, .shot--main, .shot--phone {
-      position: static;
-      width: 100%;
-      transform: none;
-      left: auto; top: auto;
-    }
-    .shot--phone { width: min(58%, 230px); align-self: center; }
-    .download__grid { grid-template-columns: 1fr; }
-    .req { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .req > div:nth-child(2) { border-right: 0; }
-    .req > div:nth-child(n + 3) { margin-top: 16px; }
-    .colophon__top { flex-direction: column; align-items: flex-start; }
+    .hero__copy { max-width: 100%; }
+    .hero__inner { padding-bottom: 10px; }
+    .hero__stage { position: relative; inset: auto; order: 2; height: 44vh; min-height: 300px; margin-top: 4px; }
+    .hero { justify-content: flex-start; padding-top: 96px; }
+    .hero__copy { order: 1; }
+    .hero__foot { order: 3; margin-top: 6px; }
+    .shot--desk, .shot--shelf { grid-column: span 12; }
+    .shot--phone { grid-column: span 12; grid-row: auto; max-width: 320px; margin: 0 auto; }
   }
-
-  @media (max-width: 620px) {
-    .hero__slug { gap: 6px 14px; font-size: 8.5px; }
-    .hero__title { letter-spacing: -0.05em; }
-    .hero__title .line { padding-bottom: 0.1em; }
+  @media (max-width: 720px) {
+    .rail { height: 60px; }
+    .rail__acts a { padding: 7px 12px; font-size: 9px; }
+    .hero { padding-top: 84px; }
+    .hero__title { font-size: clamp(38px, 10.4vw, 56px); }
     .hero__lede { font-size: 14.5px; }
-    .btn { padding: 12px 15px; font-size: 12.5px; }
-    .hero__src { display: none; }
-    .hero__meta { grid-template-columns: 1fr; border-top: 1px solid var(--rule-2); }
-    .hero__meta > div { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 0; border-right: 0; border-bottom: 1px solid var(--rule); }
-    .hero__meta dd { margin-top: 0; }
-    .hero__phone { width: 98px; bottom: -30px; }
-    .seal { width: 68px; height: 68px; left: -14px; top: -20px; font-size: 6.5px; }
-    .seal b { font-size: 18px; }
-    .statement blockquote { font-size: clamp(34px, 11vw, 48px); }
-    .chapter { padding: 68px 0; }
-    .chapter__no { font-size: 58px; }
-    .schematic { padding: 22px 14px; }
-    .device__icon { width: 46px; height: 46px; }
-    .wire { flex: 0.7; }
-    .wire span { font-size: 8px; }
-    .steps { grid-template-columns: 1fr; border-top: 0; }
-    .steps li { padding: 14px 0; border-right: 0; border-top: 1px solid var(--rule); }
-    .ledger li { grid-template-columns: 38px minmax(0, 1fr); gap: 8px 14px; }
-    .ledger p { grid-column: 2; }
-    .type__list { grid-template-columns: 1fr; }
-    .type__list li:nth-child(odd) { border-right: 0; }
-    .type__list li:nth-child(even) { padding-left: 0; }
-    .specimen__bar { gap: 10px 12px; }
+    .hero__meta { gap: 20px; width: 100%; justify-content: space-between; }
+    .hero__foot { font-size: 8.5px; gap: 10px; flex-wrap: wrap; }
+    .bento { grid-template-columns: minmax(0, 1fr); }
+    .steps { grid-template-columns: minmax(0, 1fr); }
+    .download__grid { grid-template-columns: minmax(0, 1fr); }
+    .sync-panel { grid-template-columns: minmax(0, 1fr); }
+    .sync-wire { height: 40px; }
+    .sync-wire::before { left: 50%; right: 50%; top: 0; bottom: 0; width: 1px; height: auto; background: repeating-linear-gradient(180deg, var(--line-2) 0 6px, transparent 6px 12px); }
+    .sync-wire span { top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 4px 10px; background: var(--void); }
+    .sync-node--phone { text-align: left; }
+    .specimen__bar { gap: 10px; }
     .specimen__theme { margin-left: 0; }
-    .download__title { font-size: clamp(40px, 12vw, 60px); }
-    .req { grid-template-columns: 1fr; }
-    .req > div { border-right: 0; padding-top: 12px; }
-    .req > div + div { border-top: 1px solid var(--rule); margin-top: 0; }
-    .colophon__bottom { flex-direction: column; }
+    .colophon nav { gap: 8px 18px; }
+  }
+  @media (max-width: 520px) {
+    .rail { padding: 0 16px; gap: 12px; }
+    .brand { font-size: 21px; }
+    .hero__cta .btn { padding: 12px 14px; font-size: 12px; }
+    .hero__src { display: none; }
+    .hero__meta dd { font-size: 13px; }
+    .statement { padding: 64px 0; }
+    .gallery__grid { gap: 12px; }
+    .specimen__bar label { gap: 5px; }
+    .specimen__bar input[type="range"] { width: 58px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
-    .js .reveal { opacity: 1; transform: none; }
-    .hero__title .line-in { transform: none; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    html.js .reveal { opacity: 1; transform: none; }
   }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">跳到正文</a>
 
 <header class="rail" id="rail">
   <a class="brand" href="#top" aria-label="Folio 首页">Folio<span>.</span></a>
   <nav class="rail__nav" aria-label="章节导航">
     <a href="#sync" aria-label="01 同步"><i>01</i><span>同步</span></a>
-    <a href="#features" aria-label="02 功能"><i>02</i><span>功能</span></a>
+    <a href="#capabilities" aria-label="02 功能"><i>02</i><span>功能</span></a>
     <a href="#gallery" aria-label="03 界面"><i>03</i><span>界面</span></a>
     <a href="#type" aria-label="04 排版"><i>04</i><span>排版</span></a>
     <a href="#download" aria-label="05 下载"><i>05</i><span>下载</span></a>
   </nav>
   <div class="rail__acts">
-    <a class="rail__me" href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页<span aria-hidden="true">↗</span></a>
-    <a class="rail__gh" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub<span aria-hidden="true">↗</span></a>
+    <a class="ghost" href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页<span aria-hidden="true">↗</span></a>
+    <a class="pill" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub<span aria-hidden="true">↗</span></a>
   </div>
   <span class="rail__bar" aria-hidden="true"></span>
 </header>
 
-<main id="top">
+<main id="main">
 
-  <!-- HERO -->
-  <section class="hero" id="hero">
-    <div class="wrap">
-      <div class="hero__inner">
-        <div class="hero__copy">
-          <p class="hero__slug">
-            <span>Folio — 本地优先阅读系统</span>
-            <span>Edition <b>2026</b></span>
-            <span>Windows / Android</span>
-          </p>
-          <h1 class="hero__title">
-            <span class="line"><span class="line-in">把书架，</span></span>
-            <span class="line"><span class="line-in">放回</span></span>
-            <span class="line"><span class="line-in"><em>你自己的硬盘</em><span class="dot">。</span></span></span>
-          </h1>
-          <p class="hero__lede">一台 Windows 阅读器，一个独立的安卓阅读器。两端各自存书，只在同一个 Wi-Fi 里交换进度、书签和阅读痕迹。没有账号，没有云端，没有后台。</p>
-          <div class="hero__cta">
-            <a class="btn btn--ink" id="dl-win" href="https://github.com/flulwh/folio/releases">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6 10.4 4.6v7.1H3V5.6Zm0 12.8 7.4 1V12.4H3v6Zm8.6-13.9L21 3.3v8.4h-9.4V4.5Zm0 8.9H21v8.4l-9.4-1.3V13.4Z"/></svg>
-              <span class="btn__label">下载 Windows 版<span class="ver" id="win-ver">Windows 10 / 11</span></span>
-            </a>
-            <a class="btn btn--line" id="dl-android" href="https://github.com/flulwh/folio/releases">
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 9.4h11.6c.4 0 .7.3.7.7v6.2a2.6 2.6 0 0 1-2.6 2.6H8.1a2.6 2.6 0 0 1-2.6-2.6v-6.2c0-.4.3-.7.7-.7Zm-2 1.2c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1Zm15.6 0c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1ZM8.4 8.2c.2-1.7 1.4-3.1 3.1-3.7l-.8-1.5a.4.4 0 0 1 .7-.4l.9 1.6a5.9 5.9 0 0 1 3.4 0l.9-1.6a.4.4 0 0 1 .7.4l-.8 1.5a4.6 4.6 0 0 1 3.1 3.7H8.4Zm2.8-2.3a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm6 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Z"/></svg>
-              <span class="btn__label">下载 Android 版<span class="ver" id="android-ver">Android 8.0+</span></span>
-            </a>
-            <a class="hero__src" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">源码 ↗</a>
-          </div>
-          <dl class="hero__meta">
-            <div><dt>形态</dt><dd>桌面 + 安卓</dd></div>
-            <div><dt>同步</dt><dd>局域网直连</dd></div>
-            <div><dt>授权</dt><dd>MIT · 免费</dd></div>
-          </dl>
+  <section class="hero" id="top">
+    <div class="hero__stage" id="stage">
+      <canvas id="stage-canvas" aria-hidden="true"></canvas>
+      <div class="stage__fallback" aria-hidden="true">
+        <div class="fb-book">
+          <span class="fb-book__pages"></span>
+          <span class="fb-book__cover"><b>FOLIO</b><i>LOCAL EDITION · 2026</i></span>
         </div>
-
-        <figure class="hero__plate">
-          <div class="seal" aria-hidden="true"><span>Local</span><b>F.</b><span>2026</span></div>
-          <div class="hero__print">
-            <img src="./assets/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架界面" fetchpriority="high" />
-          </div>
-          <figure class="hero__phone">
-            <img src="./assets/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面" />
-          </figure>
-          <figcaption><span>Fig. 01</span>桌面端 / 书架 · 实际运行截图</figcaption>
-        </figure>
       </div>
     </div>
-    <div class="wrap">
-      <div class="hero__foot">
-        <span>Windows 10 / 11 · Android 8.0+</span>
-        <span class="scrollcue">向下展开<i></i></span>
-        <span>数据只留在本机</span>
+
+    <div class="hero__inner wrap">
+      <div class="hero__copy">
+        <p class="hero__slug">
+          <span>Local-first reading system</span>
+          <span>Edition <b>2026</b></span>
+          <span>Windows / Android</span>
+        </p>
+        <h1 class="hero__title">
+          <span>把书架</span>
+          <span>放回你的<em>硬盘</em><span class="dot">。</span></span>
+        </h1>
+        <p class="hero__lede">一台 Windows 阅读器，一个独立的安卓阅读器。两端各自存书，只在同一个 Wi-Fi 里交换进度、书签和阅读痕迹。没有账号，没有云端，没有后台。</p>
+        <div class="hero__cta">
+          <a class="btn btn--solid" id="dl-win" href="https://github.com/flulwh/folio/releases">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6 10.4 4.6v7.1H3V5.6Zm0 12.8 7.4 1V12.4H3v6Zm8.6-13.9L21 3.3v8.4h-9.4V4.5Zm0 8.9H21v8.4l-9.4-1.3V13.4Z"/></svg>
+            <span class="btn__label">下载 Windows 版<span class="ver" id="win-ver">Windows 10 / 11</span></span>
+          </a>
+          <a class="btn btn--glass" id="dl-android" href="https://github.com/flulwh/folio/releases">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 9.4h11.6c.4 0 .7.3.7.7v6.2a2.6 2.6 0 0 1-2.6 2.6H8.1a2.6 2.6 0 0 1-2.6-2.6v-6.2c0-.4.3-.7.7-.7Zm-2 1.2c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1Zm15.6 0c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1ZM8.4 8.2c.2-1.7 1.4-3.1 3.1-3.7l-.8-1.5a.4.4 0 0 1 .7-.4l.9 1.6a5.9 5.9 0 0 1 3.4 0l.9-1.6a.4.4 0 0 1 .7.4l-.8 1.5a4.6 4.6 0 0 1 3.1 3.7H8.4Zm2.8-2.3a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm6 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Z"/></svg>
+            <span class="btn__label">下载 Android 版<span class="ver" id="android-ver">Android 8.0+</span></span>
+          </a>
+          <a class="hero__src" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">源码 ↗</a>
+        </div>
+        <dl class="hero__meta">
+          <div><dt>形态</dt><dd>桌面 + 安卓</dd></div>
+          <div><dt>同步</dt><dd>局域网直连</dd></div>
+          <div><dt>授权</dt><dd>MIT · 免费</dd></div>
+        </dl>
       </div>
+    </div>
+
+    <div class="hero__foot wrap">
+      <span>Windows 10 / 11 · Android 8.0+</span>
+      <span class="scrollcue">向下展开<i aria-hidden="true"></i></span>
+      <span>数据只留在本机</span>
     </div>
   </section>
 
-  <!-- CONTENTS -->
-  <nav class="contents" aria-label="目录">
-    <div class="wrap contents__inner">
-      <span class="contents__label">Contents / 目录</span>
-      <a href="#sync"><i>01</i>同步</a>
-      <a href="#features"><i>02</i>功能</a>
-      <a href="#gallery"><i>03</i>界面</a>
-      <a href="#type"><i>04</i>排版</a>
-      <a href="#download"><i>05</i>下载</a>
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__track">
+      <span>Local first</span><span>·</span><span>Your books stay yours</span><span>·</span><span>LAN sync</span><span>·</span><span>No account</span><span>·</span><span>Windows + Android</span><span>·</span><span>MIT license</span><span>·</span>
+      <span>Local first</span><span>·</span><span>Your books stay yours</span><span>·</span><span>LAN sync</span><span>·</span><span>No account</span><span>·</span><span>Windows + Android</span><span>·</span><span>MIT license</span><span>·</span>
     </div>
-  </nav>
+  </div>
 
-  <!-- STATEMENT -->
   <section class="statement">
     <div class="wrap statement__grid">
-      <p class="statement__label">00 — 立场<br />Statement</p>
-      <div>
-        <blockquote class="reveal">书是你的。<br /><em>进度也是。</em></blockquote>
-        <p class="statement__note reveal" data-delay="1">没有信息流，没有推荐算法，没有会员等级。打开 Folio 就是书架，读完合上就是书架。所有记录写成你能直接打开、备份、搬走的本地文件。</p>
+      <p class="statement__label">00 — 立场<br />Manifesto</p>
+      <div class="reveal">
+        <p class="statement__quote">书是你的。<span>进度也是。</span></p>
+        <p class="statement__body">没有信息流，没有推荐算法，没有会员等级。打开 Folio 就是书架，读完合上还是书架。所有记录都写成你能直接打开、备份、搬走的本地文件。</p>
       </div>
     </div>
   </section>
 
-  <!-- 01 SYNC -->
   <section class="chapter" id="sync">
     <div class="wrap chapter__grid">
       <header class="chapter__head">
@@ -1216,132 +1211,126 @@
       </header>
       <div class="chapter__body">
         <p class="chapter__lead reveal">没有云、没有账号、没有上传。手机和电脑在同一个 Wi-Fi 下，进度自己走。</p>
-        <p class="reveal" data-delay="1">桌面端开一个局域网面板，手机上填一次地址和访问码。<strong>之后每次连上同一个网络，书架、进度、书签都会对齐。</strong></p>
-        <p class="reveal" data-delay="1">书本身不强制同步：桌面端可以把书推到手机，手机也能把书拉回电脑。想各读各的，就只同步进度。</p>
-        <p class="reveal" data-delay="2">所有数据都落在本机磁盘，换设备时带走数据目录即可，不依赖任何第三方服务活着。</p>
+        <p class="reveal" style="--d: 80ms">桌面端开一个局域网面板，手机上填一次地址和访问码。<strong>之后每次连上同一个网络，书架、进度、书签都会对齐。</strong></p>
+        <p class="reveal" style="--d: 140ms">书本身不强制同步：桌面端可以把书推到手机，手机也能把书拉回电脑。想各读各的，就只同步进度。所有数据都落在本机磁盘，换设备时带走数据目录即可。</p>
 
-        <figure class="schematic reveal" data-delay="2">
-          <div class="schematic__row">
-            <div class="device">
-              <div class="device__icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.6"/><path d="M8 20h8M12 16.5V20"/></svg>
-              </div>
-              <b>桌面端</b>
-              <small>书架 · 128 本</small>
-            </div>
-            <div class="wire" aria-hidden="true"><i></i><span>同一 Wi-Fi · 直连</span></div>
-            <div class="device">
-              <div class="device__icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.4"/><path d="M10.5 18.5h3"/></svg>
-              </div>
-              <b>安卓端</b>
-              <small>进度 · 已对齐</small>
-            </div>
+        <figure class="sync-panel reveal" style="--d: 200ms">
+          <div class="sync-node">
+            <b>桌面端</b>
+            <small>书架 · 128 本 · 本地</small>
           </div>
-          <figcaption><span>Fig. 02</span>局域网直连 / 无中转服务器</figcaption>
+          <div class="sync-wire" aria-hidden="true">
+            <i></i>
+            <span>同一 Wi-Fi · 直连</span>
+          </div>
+          <div class="sync-node sync-node--phone">
+            <b>安卓端</b>
+            <small>进度 · 书签 · 已对齐</small>
+          </div>
         </figure>
 
-        <ol class="steps reveal" data-delay="3">
+        <ol class="steps reveal" style="--d: 260ms">
           <li><i>01</i><b>开启面板</b><span>设置 → 网络 → 开启面板，记下地址与访问码。</span></li>
           <li><i>02</i><b>填一次地址</b><span>手机端输入地址和访问码，或点「搜索桌面端」。</span></li>
-          <li><i>03</i><b>自动对齐</b><span>同一网络下，进度、书签与阅读痕迹按更新时间合并。</span></li>
+          <li><i>03</i><b>自动对齐</b><span>同一网络下，按更新时间合并进度、书签与阅读痕迹。</span></li>
         </ol>
       </div>
     </div>
   </section>
 
-  <!-- 02 FEATURES -->
-  <section class="chapter chapter--ink" id="features">
+  <section class="chapter" id="capabilities">
     <div class="wrap">
-      <div class="chapter__head">
-        <span class="chapter__no reveal">02</span>
-        <p class="chapter__label">Capabilities / 功能</p>
-        <h2 class="reveal" data-delay="1">小工具该有的样子。</h2>
+      <div class="chapter__grid">
+        <header class="chapter__head">
+          <span class="chapter__no">02</span>
+          <p class="chapter__label">Capabilities / 功能</p>
+          <h2>小工具，<br />该有的样子。</h2>
+        </header>
         <div class="chapter__body">
-          <p class="reveal" data-delay="2">没有信息流，没有推荐，没有会员。打开就是书架，读完合上就是书架。</p>
+          <p class="chapter__lead reveal">没有信息流，没有推荐，没有会员。打开就是书架，读完合上就是书架。</p>
         </div>
       </div>
-      <ol class="ledger">
-        <li class="reveal">
-          <span class="ledger__no">01</span>
+
+      <div class="bento">
+        <article class="card card--hot reveal">
+          <span class="card__no">01 / LOCAL</span>
           <h3>本地优先</h3>
           <p>书在磁盘上，索引在本地。断网、关服务器、换电脑，都不影响你接着读。</p>
-          <span class="ledger__tag">Local</span>
-        </li>
-        <li class="reveal">
-          <span class="ledger__no">02</span>
+          <span class="card__tag">Books on disk</span>
+        </article>
+        <article class="card reveal" style="--d: 60ms">
+          <span class="card__no">02 / TYPE</span>
           <h3>字体商店</h3>
           <p>几款开源中文字体，一键装到本机。正文、标题、预览分别选，不联网也能用。</p>
-          <span class="ledger__tag">Type</span>
-        </li>
-        <li class="reveal">
-          <span class="ledger__no">03</span>
+          <span class="card__tag">Load once, read offline</span>
+        </article>
+        <article class="card reveal" style="--d: 120ms">
+          <span class="card__no">03 / NATIVE</span>
           <h3>双端独立</h3>
           <p>安卓端不是遥控器：没有桌面端也能导入、阅读、做笔记，连上后再对齐。</p>
-          <span class="ledger__tag">Native</span>
-        </li>
-        <li class="reveal">
-          <span class="ledger__no">04</span>
+          <span class="card__tag">Two real readers</span>
+        </article>
+        <article class="card reveal">
+          <span class="card__no">04 / SANDBOX</span>
           <h3>书源在沙箱里</h3>
           <p>网页书源跑在独立进程，解析失败不会拖垮主界面；返回的文本只当内容，不当代码。</p>
-          <span class="ledger__tag">Sandbox</span>
-        </li>
-        <li class="reveal">
-          <span class="ledger__no">05</span>
+          <span class="card__tag">Content, not commands</span>
+        </article>
+        <article class="card reveal" style="--d: 60ms">
+          <span class="card__no">05 / COMIC</span>
           <h3>漫画也能读</h3>
           <p>竖向、横向两种翻页，长图不断行；桌面与手机的记忆位置各自保留。</p>
-          <span class="ledger__tag">Comic</span>
-        </li>
-        <li class="reveal">
-          <span class="ledger__no">06</span>
+          <span class="card__tag">CBZ · vertical &amp; horizontal</span>
+        </article>
+        <article class="card reveal" style="--d: 120ms">
+          <span class="card__no">06 / PRIVATE</span>
           <h3>没有账号</h3>
           <p>不登录、不订阅、不埋点。设置、书签、进度都是本地 JSON，随时能看、能备份。</p>
-          <span class="ledger__tag">Private</span>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <!-- 03 GALLERY -->
-  <section class="gallery" id="gallery">
-    <div class="gallery__track" id="deck-track">
-      <div class="gallery__pin">
-        <div class="wrap gallery__head">
-          <p class="chapter__label">03 — Interface / 界面</p>
-          <h2>就是它在跑，<br />不是效果图。</h2>
-          <p>桌面书架、沉浸阅读、安卓端，三张都是实际运行时的截图。往下滚，它们会在三维里退开。</p>
-        </div>
-        <div class="gallery__stage" id="deck">
-          <canvas class="dust" id="gallery-dust" aria-hidden="true"></canvas>
-          <div class="gallery__glow" aria-hidden="true"></div>
-          <figure class="shot shot--side" id="deck-left">
-            <img src="./assets/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架截图" decoding="async" />
-          </figure>
-          <figure class="shot shot--main" id="deck-main">
-            <img src="./assets/reader.png" width="1583" height="922" alt="Folio 桌面端沉浸阅读截图" decoding="async" />
-          </figure>
-          <figure class="shot shot--phone" id="deck-phone">
-            <img src="./assets/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面截图" decoding="async" />
-          </figure>
-        </div>
-        <div class="gallery__hint" aria-hidden="true"><span>Scroll</span><i id="gallery-progress"></i></div>
+          <span class="card__tag">Nothing to sign up for</span>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- 04 TYPOGRAPHY -->
+  <section class="gallery" id="gallery">
+    <div class="wrap">
+      <div class="gallery__head">
+        <div>
+          <p class="chapter__label">03 — Interface / 界面</p>
+          <h2>就是它在跑，<br />不是效果图。</h2>
+        </div>
+        <p>桌面书架、沉浸阅读、安卓端，三张都是实际运行时的截图。没有重绘，没有补光，所见即所得。</p>
+      </div>
+
+      <div class="gallery__grid">
+        <figure class="shot shot--desk reveal">
+          <img src="./assets/reader.png" width="1583" height="922" alt="Folio 桌面端沉浸阅读界面：纸色页面上排着正文" loading="lazy" decoding="async" />
+          <figcaption><span>Fig. 01</span><b>沉浸阅读</b><span>Desktop</span></figcaption>
+        </figure>
+        <figure class="shot shot--phone reveal" style="--d: 80ms">
+          <img src="./assets/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面" loading="lazy" decoding="async" />
+          <figcaption><span>Fig. 02</span><b>安卓端</b><span>Android</span></figcaption>
+        </figure>
+        <figure class="shot shot--shelf reveal" style="--d: 140ms">
+          <img src="./assets/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架界面：正在阅读的书与六本渐变封面" loading="lazy" decoding="async" />
+          <figcaption><span>Fig. 03</span><b>书架</b><span>Desktop</span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
   <section class="chapter" id="type">
     <div class="wrap">
       <div class="type__grid">
         <div>
           <span class="chapter__no reveal">04</span>
           <p class="chapter__label">Typography / 排版</p>
-          <h2 class="reveal" data-delay="1">排版，<br />是阅读的一部分。</h2>
-          <div class="chapter__body" style="margin-top: 24px;">
-            <p class="reveal" data-delay="2">字号、行距、页边距、背景纸色，逐项可调；中英文混排的字距与缩进也按中文习惯处理。</p>
-            <p class="reveal" data-delay="2">装进本机的字体立刻出现在正文里，不经过网页渲染，翻页时不会闪一下。</p>
+          <h2 class="reveal" style="--d: 60ms">排版，<br />是阅读的一部分。</h2>
+          <div class="chapter__body" style="margin-top: 22px;">
+            <p class="reveal" style="--d: 120ms">字号、行距、页边距、背景纸色，逐项可调；中英文混排的字距与缩进也按中文习惯处理。</p>
+            <p class="reveal" style="--d: 160ms">装进本机的字体立刻出现在正文里，不经过网页渲染，翻页时不会闪一下。</p>
           </div>
-          <ul class="type__list reveal" data-delay="3">
+          <ul class="type__list reveal" style="--d: 220ms">
             <li>字号与行距</li>
             <li>页边距与栏宽</li>
             <li>纸色与夜间</li>
@@ -1352,7 +1341,7 @@
         </div>
 
         <div>
-          <figure class="specimen reveal" data-spec data-delay="1">
+          <figure class="specimen reveal" data-spec>
             <div class="specimen__bar">
               <div class="seg" role="group" aria-label="预览字体">
                 <button type="button" data-face="serif" class="is-on">宋</button>
@@ -1366,41 +1355,40 @@
             <div class="specimen__page" data-page>
               <p class="specimen__text" data-text>山里的夜来得早。他把灯芯挑亮一点，书页便从暗处浮出来。风穿过窗纸，像有人在极远的地方翻动同一本书。读到第三页，他忽然忘了时间——这大概就是阅读本来的样子。</p>
             </div>
-            <p class="specimen__meta"><span>Fig. 03</span>排版设置 / 实时预览</p>
+            <p class="specimen__meta"><span>Fig. 04</span><span>排版设置 / 实时预览</span></p>
           </figure>
-          <figure class="type__plate reveal" data-delay="2">
+          <figure class="type__plate reveal" style="--d: 80ms">
             <img src="./assets/themes-appearance.png" width="1583" height="922" alt="Folio 外观与阅读排版设置界面" loading="lazy" decoding="async" />
-            <figcaption><span>Fig. 04</span>外观 / 主题与字体</figcaption>
+            <figcaption><span>Fig. 05</span>外观 / 主题与字体</figcaption>
           </figure>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- 05 DOWNLOAD -->
   <section class="download" id="download">
     <div class="wrap">
       <p class="chapter__label">05 — Download / 下载</p>
-      <h2 class="download__title reveal">现在<em>开始读</em>。</h2>
+      <h2 class="download__title reveal">现在，<em>开始读</em>。</h2>
       <div class="download__grid">
-        <a class="dlc reveal" id="dl-win-2" href="https://github.com/flulwh/folio/releases" data-delay="1">
+        <a class="dlc reveal" id="dl-win-2" href="https://github.com/flulwh/folio/releases">
           <span class="dlc__os">01 / Windows</span>
           <span class="dlc__name">桌面端</span>
-          <span class="dlc__ver" id="win-ver-2">Windows 10 / 11 · x64</span>
-          <span class="dlc__go">安装包 / 便携版 / ZIP<i aria-hidden="true">↗</i></span>
+          <span class="dlc__ver" id="win-ver-2">Windows 10 / 11 · x64 · 安装包 / 便携版 / ZIP</span>
+          <span class="dlc__go">前往 Releases<i aria-hidden="true">↗</i></span>
         </a>
-        <a class="dlc reveal" id="dl-android-2" href="https://github.com/flulwh/folio/releases" data-delay="2">
+        <a class="dlc reveal" id="dl-android-2" href="https://github.com/flulwh/folio/releases" style="--d: 80ms">
           <span class="dlc__os">02 / Android</span>
           <span class="dlc__name">安卓端</span>
-          <span class="dlc__ver" id="android-ver-2">Android 8.0+ · APK</span>
-          <span class="dlc__go">直接安装 APK<i aria-hidden="true">↗</i></span>
+          <span class="dlc__ver" id="android-ver-2">Android 8.0+ · APK · 直接安装</span>
+          <span class="dlc__go">前往 Releases<i aria-hidden="true">↗</i></span>
         </a>
       </div>
-      <p class="download__note reveal" data-delay="2">免费开源，MIT 许可。升级不丢数据：应用标识与包名不变，书架、进度、书签与设置保持兼容。</p>
-      <dl class="req reveal" data-delay="3">
+      <p class="download__note reveal">免费开源，MIT 许可。升级不丢数据：应用标识与包名不变，书架、进度、书签与设置保持兼容。</p>
+      <dl class="req reveal" style="--d: 60ms">
         <div><dt>Windows</dt><dd>10 / 11 · x64</dd></div>
         <div><dt>Android</dt><dd>8.0 及以上</dd></div>
-        <div><dt>体积</dt><dd>APK 约 11 MB</dd></div>
+        <div><dt>同步</dt><dd>局域网 · 无服务器</dd></div>
         <div><dt>许可</dt><dd>MIT · 开源</dd></div>
       </dl>
     </div>
@@ -1412,7 +1400,7 @@
     <div class="colophon__top">
       <div>
         <a class="brand" href="#top">Folio<span>.</span></a>
-        <p class="colophon__meta" style="margin-top: 14px;">本地优先的双端阅读器<br />Windows + Android · 局域网同步</p>
+        <p class="colophon__meta">本地优先的双端阅读器<br />Windows + Android · 局域网同步</p>
       </div>
       <nav aria-label="页脚">
         <a href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页</a>
@@ -1429,12 +1417,26 @@
   </div>
 </footer>
 
+<script type="module">
+  import { mountBookStage } from './scene.js';
+  const canvas = document.getElementById('stage-canvas');
+  if (canvas) {
+    mountBookStage(canvas, {
+      title: 'FOLIO',
+      kicker: 'Local first reading system',
+      tagline: 'Read anywhere · sync locally',
+      author: 'FLULWH',
+      year: 'MMXXVI',
+      record: 'Edition 01',
+      cover: '#4d1712',
+      accent: '#c9502f',
+    });
+  }
+</script>
+
 <script>
   (function () {
-    var doc = document.documentElement;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var clamp01 = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
-
     document.getElementById('year').textContent = new Date().getFullYear();
 
     /* ---------- 版本号与直链 ---------- */
@@ -1478,7 +1480,11 @@
       var size = spec.querySelector('[data-size]');
       var lead = spec.querySelector('[data-leading]');
       var out = spec.querySelector('[data-size-out]');
-      var faces = { serif: 'var(--serif)', sans: 'var(--sans)', mono: 'var(--mono)' };
+      var faces = {
+        serif: '"Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif',
+        sans: '"PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", system-ui, sans-serif',
+        mono: '"Plex Mono", Consolas, monospace'
+      };
       var syncSpec = function () {
         page.style.setProperty('--spec-fs', size.value + 'px');
         page.style.setProperty('--spec-lh', lead.value);
@@ -1503,61 +1509,41 @@
 
     /* ---------- 滚动 / 章节高亮 ---------- */
     var rail = document.getElementById('rail');
-    var track = document.getElementById('deck-track');
-    var deck = document.getElementById('deck');
-    var dLeft = document.getElementById('deck-left');
-    var dMain = document.getElementById('deck-main');
-    var dPhone = document.getElementById('deck-phone');
-    var gProgress = document.getElementById('gallery-progress');
     var links = Array.prototype.slice.call(document.querySelectorAll('.rail__nav a'));
     var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
-    var galleryDust;
-    var deckP = 0;
     var ticking = false;
-
-    function setDeck(p) {
-      if (!deck || window.innerWidth <= 860) return;
-      deck.style.transform = 'rotateY(' + (-12 + p * 24).toFixed(2) + 'deg) rotateX(' + (4 - p * 7).toFixed(2) + 'deg)';
-      if (dLeft) dLeft.style.transform = 'translate(-50%,-50%) translate3d(' + (-58 + p * 8).toFixed(2) + '%, ' + (44 - p * 54).toFixed(1) + 'px, ' + (-430 + p * 210).toFixed(0) + 'px) rotateY(' + (30 - p * 12).toFixed(1) + 'deg)';
-      if (dMain) dMain.style.transform = 'translate(-50%,-50%) translate3d(0,' + (34 - p * 56).toFixed(1) + 'px,' + (-30 + p * 150).toFixed(0) + 'px) scale(' + (0.91 + p * 0.09).toFixed(3) + ')';
-      if (dPhone) dPhone.style.transform = 'translate(-50%,-50%) translate3d(' + (300 - p * 70).toFixed(0) + 'px,' + (56 - p * 76).toFixed(0) + 'px,' + (120 + p * 80).toFixed(0) + 'px) rotateY(-14deg) rotate(' + (3 - p * 3).toFixed(1) + 'deg)';
-      if (gProgress) gProgress.style.setProperty('--gp', p.toFixed(3));
-      if (galleryDust) galleryDust.setProgress(p);
-    }
 
     function onScroll() {
       var y = window.scrollY;
       var vh = window.innerHeight;
       rail.classList.toggle('is-stuck', y > 16);
       var max = document.body.scrollHeight - vh;
-      rail.style.setProperty('--read', max > 0 ? (y / max).toFixed(4) : '0');
+      rail.style.setProperty('--read', max > 0 ? Math.min(1, y / max).toFixed(4) : '0');
 
-      var current = sections[0];
+      var current = null;
       sections.forEach(function (s) {
         if (s && s.getBoundingClientRect().top <= vh * 0.42) current = s;
       });
       links.forEach(function (a) {
-        a.classList.toggle('is-active', current && a.getAttribute('href') === '#' + current.id);
+        a.classList.toggle('is-active', !!current && a.getAttribute('href') === '#' + current.id);
       });
-
-      if (track && window.innerWidth > 860) {
-        var r = track.getBoundingClientRect();
-        deckP = clamp01((-r.top) / (r.height - vh));
-        setDeck(deckP);
-      }
-
       ticking = false;
     }
 
     window.addEventListener('scroll', function () {
-      if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(onScroll);
+      }
     }, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
     onScroll();
 
-    /* ---------- 入场 ---------- */
-    var revealItems = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
-    if (!reduce && 'IntersectionObserver' in window) {
+    /* ---------- 出现动画 ---------- */
+    var items = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+    if (reduce || !('IntersectionObserver' in window)) {
+      items.forEach(function (n) { n.classList.add('is-in'); });
+    } else {
       var io = new IntersectionObserver(function (entries) {
         entries.forEach(function (entry) {
           if (entry.isIntersecting) {
@@ -1565,168 +1551,9 @@
             io.unobserve(entry.target);
           }
         });
-      }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
-      revealItems.forEach(function (el) { io.observe(el); });
-    } else {
-      revealItems.forEach(function (el) { el.classList.add('is-in'); });
+      }, { threshold: 0.08, rootMargin: '0px 0px -5% 0px' });
+      items.forEach(function (n) { io.observe(n); });
     }
-
-    /* ---------- 粒子尘埃 ---------- */
-    function Dust(canvas, cfg) {
-      if (!canvas || !canvas.getContext) return { setProgress: function () {} };
-      var ctx = canvas.getContext('2d');
-      var dpr = Math.min(window.devicePixelRatio || 1, 2);
-      var W = 0, H = 0, cx = 0, cy = 0, pts = [];
-      var yaw = cfg.yaw || 0, aim = 0, progress = 0, mx = 0, my = 0;
-      var raf = 0, last = 0;
-
-      function makeSprite(rgb) {
-        var c = document.createElement('canvas');
-        c.width = c.height = 64;
-        var g = c.getContext('2d');
-        var grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-        grad.addColorStop(0, 'rgba(' + rgb + ',0.95)');
-        grad.addColorStop(0.4, 'rgba(' + rgb + ',0.3)');
-        grad.addColorStop(1, 'rgba(' + rgb + ',0)');
-        g.fillStyle = grad;
-        g.fillRect(0, 0, 64, 64);
-        return c;
-      }
-      var sprites = {
-        cream: makeSprite('242,236,221'),
-        clay: makeSprite('184,55,31'),
-        olive: makeSprite('109,115,82')
-      };
-
-      function build() {
-        var count = window.innerWidth < 700 ? Math.round(cfg.count * 0.45) : cfg.count;
-        var R = (cfg.rMin + cfg.rMax) / 2;
-        var tube = (cfg.rMax - cfg.rMin) / 2;
-        pts = [];
-        for (var i = 0; i < count; i++) {
-          var x, y, z;
-          if (Math.random() < (cfg.loose || 0.16)) {
-            x = (Math.random() - 0.5) * 1500;
-            z = (Math.random() - 0.5) * 1500;
-            y = (Math.random() - 0.5) * 900;
-          } else {
-            var u = Math.random() * Math.PI * 2;
-            var v = Math.random() * Math.PI * 2;
-            var rv = R + tube * Math.cos(v);
-            x = rv * Math.cos(u);
-            z = rv * Math.sin(u);
-            y = tube * Math.sin(v) * 0.62;
-          }
-          var tone = Math.random();
-          pts.push({
-            x: x, y: y, z: z,
-            r: 0.7 + Math.random() * 2.4,
-            a: 0.2 + Math.random() * 0.6,
-            g: Math.random() < 0.18,
-            c: tone > 0.92 ? 'clay' : tone > 0.84 ? 'olive' : 'cream',
-            rgb: tone > 0.92 ? '184,55,31' : tone > 0.84 ? '109,115,82' : '242,236,221'
-          });
-        }
-      }
-
-      function resize() {
-        var rect = canvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        W = rect.width;
-        H = rect.height;
-        canvas.width = Math.round(W * dpr);
-        canvas.height = Math.round(H * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        cx = W * (cfg.cx || 0.5);
-        cy = H / 2;
-        render(0);
-      }
-
-      function render(dt) {
-        progress += (aim - progress) * Math.min(1, dt * 2.4);
-        yaw += (cfg.spin + progress * cfg.scrollSpin) * dt;
-        var yawT = yaw + mx * 0.24;
-        var tilt = cfg.tilt + my * 0.12 + progress * cfg.scrollTilt;
-        var cosY = Math.cos(yawT), sinY = Math.sin(yawT);
-        var cosX = Math.cos(tilt), sinX = Math.sin(tilt);
-        var dolly = progress * cfg.dolly;
-
-        ctx.clearRect(0, 0, W, H);
-        ctx.globalCompositeOperation = 'lighter';
-        for (var i = 0; i < pts.length; i++) {
-          var p = pts[i];
-          var x1 = p.x * cosY - p.z * sinY;
-          var z1 = p.x * sinY + p.z * cosY;
-          var y1 = p.y * cosX - z1 * sinX;
-          var z2 = p.y * sinX + z1 * cosX + cfg.camZ + dolly;
-          if (z2 < 80) continue;
-          var s = (cfg.perspective || 1000) / z2;
-          var sx = cx + x1 * s;
-          var sy = cy + y1 * s;
-          if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) continue;
-          var rad = p.r * s * 1.1;
-          if (rad < 0.3) continue;
-          var alpha = Math.min(0.92, p.a * s * 1.2);
-          if (p.g) {
-            var gs = rad * 5.5;
-            ctx.globalAlpha = alpha * 0.4;
-            ctx.drawImage(sprites[p.c], sx - gs, sy - gs, gs * 2, gs * 2);
-            ctx.globalAlpha = 1;
-          }
-          ctx.beginPath();
-          ctx.arc(sx, sy, Math.max(0.35, rad * 0.55), 0, 6.2832);
-          ctx.fillStyle = 'rgba(' + p.rgb + ',' + alpha.toFixed(3) + ')';
-          ctx.fill();
-        }
-      }
-
-      function loop(t) {
-        raf = requestAnimationFrame(loop);
-        if (!last) last = t;
-        var dt = Math.min((t - last) / 1000, 0.05);
-        last = t;
-        render(dt);
-      }
-      function start() {
-        if (reduce) { render(0); return; }
-        if (raf) return;
-        last = 0;
-        raf = requestAnimationFrame(loop);
-      }
-      function stop() {
-        if (!raf) return;
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-
-      build();
-      resize();
-      if ('IntersectionObserver' in window) {
-        new IntersectionObserver(function (entries) {
-          entries[0].isIntersecting ? start() : stop();
-        }, { rootMargin: '120px' }).observe(canvas);
-      } else {
-        start();
-      }
-      window.addEventListener('resize', function () { build(); resize(); if (reduce) render(0); }, { passive: true });
-      document.addEventListener('pointermove', function (e) {
-        mx = (e.clientX / window.innerWidth - 0.5) * 2;
-        my = (e.clientY / window.innerHeight - 0.5) * 2;
-      }, { passive: true });
-
-      return {
-        setProgress: function (v) { aim = Math.max(0, Math.min(1, v)); },
-        refresh: resize
-      };
-    }
-
-    galleryDust = Dust(document.getElementById('gallery-dust'), {
-      count: 620, rMin: 400, rMax: 540, loose: 0.12, cx: 0.5,
-      perspective: 1000, camZ: 1100, yaw: 1.1,
-      spin: 0.035, scrollSpin: 1.7, dolly: 620,
-      tilt: 0.3, scrollTilt: -0.1
-    });
-    galleryDust.setProgress(deckP);
   })();
 </script>
 </body>

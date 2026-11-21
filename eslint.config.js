@@ -27,6 +27,8 @@ export default [
       // blog 是独立的 Vite + Worker 子项目，有自己的 package.json / 构建流程，
       // 不归桌面端阅读器的 lint 护栏管。
       'blog/**',
+      // 官网的第三方运行时（Three.js 压缩产物）不参与 lint。
+      'site/vendor/**',
     ],
   },
   {
