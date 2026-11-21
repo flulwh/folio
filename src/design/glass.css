@@ -1,0 +1,96 @@
+@layer base {
+/* ==========================================================================
+   Folio — 液态玻璃材质层（Apple Liquid Glass）
+   --------------------------------------------------------------------------
+   全站最后一张样式表，只做三件事：
+     1. 给窗口铺一层氛围光 —— 玻璃必须有东西可折射，纯色底上看不出折射；
+     2. 把"离地"的层（阅读器顶栏、面板、弹窗、提示）换成同一套玻璃材质；
+     3. 把抽屉/弹窗的遮罩改成"压暗 + 失焦"，让玻璃边缘的高光读得出来。
+   颜色、圆角、阴影全部取 tokens 的 --glass-*，不在这里写死色值。
+   ========================================================================== */
+
+/* ------------------------------ 1. 氛围底 -------------------------------- */
+
+.app {
+  background:
+    radial-gradient(56% 46% at 14% -6%, var(--ambient-a), transparent 72%),
+    radial-gradient(44% 40% at 88% -2%, var(--ambient-b), transparent 74%),
+    radial-gradient(64% 54% at 50% 108%, var(--ambient-c), transparent 72%),
+    var(--bg);
+}
+
+/* index.css 的氛围层只留一点强度：两层叠满会把玻璃压成雾 */
+.app::before {
+  opacity: 0.55;
+}
+
+/* --------------------------- 2. 阅读器浮动顶栏 ---------------------------- */
+
+/* 从"贴边的渐变条"改成"离窗口边缘的玻璃胶囊"：正文从它下面滚过去 */
+.reader-header {
+  top: var(--sp-2);
+  left: var(--sp-3);
+  right: var(--sp-3);
+  height: 52px;
+  padding: 0 var(--sp-3) 0 var(--sp-4);
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--r-pill);
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+}
+
+.reader-bottom {
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: var(--sp-3);
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--r-2xl);
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+}
+
+/* ----------------------------- 3. 抽屉与面板 ------------------------------ */
+
+.panel {
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  backdrop-filter: blur(32px) saturate(180%);
+  border-color: var(--glass-stroke);
+  box-shadow: var(--glass-shadow);
+}
+
+.panel-backdrop {
+  background: color-mix(in srgb, var(--scrim) 62%, transparent);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* ------------------------------- 4. 弹窗 --------------------------------- */
+
+.modal {
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--r-3xl);
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+}
+
+.modal-backdrop {
+  background: color-mix(in srgb, var(--scrim) 58%, transparent);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+  backdrop-filter: blur(8px) saturate(120%);
+}
+
+/* ------------------------------- 5. 提示 --------------------------------- */
+
+/* 提示条只在底部浮一小会儿：药丸形、压在玻璃层之上 */
+.toast {
+  border-radius: var(--r-pill);
+  box-shadow: var(--glass-shadow);
+}
+}

@@ -47,7 +47,6 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
@@ -113,7 +112,7 @@ fun SettingsScreen(
         topBar = { SettingsTopBar(onBack = onBack) },
         bottomBar = bottomBar,
         containerColor = scheme.systemBackground,
-        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyColumn(
@@ -123,12 +122,6 @@ fun SettingsScreen(
                 bottom = padding.calculateBottomPadding() + 24.dp,
             ),
         ) {
-            item("nav-title") {
-                SettingsTitle(
-                    appVersion = state.appVersion,
-                    serverVersion = state.serverVersion,
-                )
-            }
             /* ---------------- 连接 ---------------- */
             item("connect") {
                 Reveal(index = 0) {
@@ -212,7 +205,7 @@ fun SettingsScreen(
                                 Spacer(Modifier.height(10.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     val dotColor by animateColorAsState(
-                                        targetValue = if (state.connection.healthy) BrandPositive else BrandNegative,
+                                        targetValue = if (state.connection.healthy) scheme.accent else scheme.secondaryLabel,
                                         animationSpec = tween(FolioMotion.Normal, easing = FolioMotion.Easing),
                                         label = "connection-dot",
                                     )
@@ -548,13 +541,14 @@ fun SettingsScreen(
 
 /* ---------------- 页头 ---------------- */
 
-/** 内联顶栏：大标题滚出屏幕后出现；从设置页 push 进来时才画返回箭头。 */
+/** 顶栏：实色底、标题常显；从设置页 push 进来时才画返回箭头。 */
 @OptIn(ExperimentalCupertinoApi::class)
 @Composable
 private fun SettingsTopBar(onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
     CupertinoTopAppBar(
         title = { CupertinoText(text = "设置", maxLines = 1) },
+        colors = folioTopBarColors(),
         navigationIcon = {
             if (onBack != null) {
                 val source = remember { MutableInteractionSource() }
@@ -576,24 +570,6 @@ private fun SettingsTopBar(onBack: (() -> Unit)?) {
             }
         },
     )
-}
-
-@Composable
-private fun SettingsTitle(appVersion: String, serverVersion: String) {
-    val scheme = CupertinoTheme.colorScheme
-    CupertinoNavigationTitle(
-        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 4.dp),
-    ) {
-        Column {
-            CupertinoText(text = "设置")
-            Spacer(Modifier.height(4.dp))
-            CupertinoText(
-                text = "FOLIO $appVersion · 桌面端 ${serverVersion.ifBlank { "未连接" }}",
-                style = CupertinoTheme.typography.footnote,
-                color = scheme.secondaryLabel,
-            )
-        }
-    }
 }
 
 /* ---------------- Section 内的行 ---------------- */

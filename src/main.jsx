@@ -3,24 +3,21 @@ import ReactDOM from 'react-dom/client';
 import { MotionGlobalConfig } from 'motion/react';
 import App from './App.jsx';
 import { AppProvider } from './store/AppStore.jsx';
+/* 液态玻璃引擎的底座（@vepando/liquid-glass-react）在 index.css 里以
+   @import ... layer(vendor) 引入：它必须落在 vendor 层，base 层才能接管
+   玻璃的 tint 与亮边，否则未分层的库样式会压过我们所有设计层。 */
 import './index.css';
 import './apple.css';
-import './skin-miui.css';
 import './design/tokens.css';
 import './design/base.css';
 import './design/shelf.css';
 import './design/reader.css';
 import './design/library.css';
-/* Radix 原语的外观层：只补交互态与定位，皮肤变量全部来自 tokens。
-   放在通用层之后、皮肤层之前，皮肤仍能覆盖形态。 */
+/* Radix 原语的外观层：只补交互态与定位，皮肤变量全部来自 tokens。 */
 import './ui/primitives.css';
-/* 黑曜皮肤放在 design/ 之后：它要改的是"材质与纵深"，而通用层负责排版骨架，
-   顺序在后才能用同级选择器覆盖，不必动用 !important。 */
-import './skin-obsidian.css';
-/* MIUI 的手感层必须最后加载：它要和 design/ 抢同一批控件的形态与反馈，
-   放在最后才不必用 !important 硬顶。作用域仍限定在 [data-skin='miui']，
-   Apple 皮肤完全不受影响。见文件头注释。 */
-import './miui-motion.css';
+/* 液态玻璃材质层：全站最后一张样式表。它要改的是「玻璃的折射、边缘高光与浮动栏」，
+   放在所有结构层之后才能用同级选择器覆盖，不必动用 !important。 */
+import './design/glass.css';
 
 /* 截图/回归用的确定性开关：?static=1 让 Motion 的补间一律瞬时完成。
    没有它，headless 下 AnimatePresence mode="wait" 的退场动画可能永远不结束，

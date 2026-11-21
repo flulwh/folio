@@ -1,4 +1,5 @@
-// 用系统 Edge 的 headless 模式截取 dist/ 页面，注入种子数据后出图。
+// 用系统 Edge 的 headless 模式截取渲染层产物，注入种子数据后出图。
+// 产物目录优先 electron-vite 的 out/renderer，旧 dist/ 仍兼容。
 // 用法：node tools/_snap.mjs --out=x.png [--w=1280] [--h=800] [--theme=night] [--route=shelf]
 import http from 'node:http';
 import fs from 'node:fs';
@@ -9,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..', 'dist');
+const REPO = path.join(__dirname, '..');
+const ROOT = fs.existsSync(path.join(REPO, 'out', 'renderer', 'index.html'))
+  ? path.join(REPO, 'out', 'renderer')
+  : path.join(REPO, 'dist');
 
 const argv = process.argv.slice(2).reduce((acc, cur) => {
   const m = /^--([^=]+)=(.*)$/.exec(cur);
@@ -55,7 +59,7 @@ function startServer() {
       const url = decodeURIComponent((req.url || '/').split('?')[0]);
       if (url === '/seed.html') {
         // 同源空白页：先写 localStorage，再跳应用，避免污染 dist/
-        const seed = seedFactory(ROUTE, THEME, '', argv.skin || 'apple');
+        const seed = seedFactory(ROUTE, THEME, '');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(`<!doctype html><meta charset="utf-8"><script>${seed}</script><script>
           location.replace('/index.html?static=1');

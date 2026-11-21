@@ -1,45 +1,24 @@
 # 动效系统
 
-动效分**三套语言**，跟着皮肤走，不是一套参数换数字。`src/design/motion.js` 是唯一的取用入口：
-组件不再直接 import 某个变体，而是 `const kit = useMotionKit()`，由当前皮肤决定拿到哪套。
+动效只有**一套语言**：Apple 的「沉降」。`src/design/motion.js` 是唯一的取用入口，
+组件不直接 import 变体，而是 `const kit = useMotionKit()`。
 
 引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`）。它此前叫
-framer-motion，12 版起换了包名、重写了内核，API 基本兼容；三套皮肤共用这一个引擎。
+framer-motion，12 版起换了包名、重写了内核，API 基本兼容。
 
 ```
-src/design/motion.js  三套套件 + 皮肤映射 + useMotionKit() / motionKitFor(skin)
-src/ui/primitives.css Radix 原语的交互态与定位（颜色全部取 tokens）
-src/miui-motion.css   MIUI 的按下 / 悬停 / 拖动（CSS 层，最后加载）
-src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容器的样式）
+src/design/motion.js   Apple 套件 + useMotionKit() / motionKitFor()
+src/ui/primitives.css  Radix 原语的交互态与定位（颜色全部取 tokens）
+src/design/glass.css   液态玻璃材质（折射、亮边、浮动栏），最后加载
 ```
 
-## 三套手感差在哪
+## 一套手感的原则
 
-| 维度 | Apple（沉降） | MIUI（回弹 + 推进） | 黑曜（纵深） |
-| --- | --- | --- | --- |
-| 转场 | 交叉淡化 + 0.992→1 缩放 | 从右侧推入 34px，旧页向左让位 | 旧层下沉、新层从 -140px 推上来，带 9° 微转 |
-| 入书 | 缩放 1.012→1，几乎看不出位移 | 0.94→1 的「长出来」，弹簧过冲 | 从 -240px 逼近，像把书抽出来 |
-| 弹簧阻尼比 | 0.88–1.0（临界阻尼，不晃） | 0.70–0.93（刻意欠阻尼，收尾有回弹） | 0.78–0.93（比 MIUI 稳，比 Apple 有重量） |
-| 列表级联 | 20ms 一拍 | 26ms 一拍，能看出「一列列亮起来」 | 30ms 一拍，每项还差 60px 景深 |
-| 亮度 | 悬停抬起 3–5px | 悬停不位移，只有按压才位移 | 悬停交给封面 3D 倾斜，位移只在按压 |
-| 按压 | 0.97，140ms 平滑 | 0.96，按下 80ms 直线、松手 260ms 弹簧 | 0.98 + 1px 下沉，收尾快 |
-
-### 三条原则（黑曜侧）
-
-1. **转场必须有透视。** 所有页面级变体都写成 `perspective(1600px) rotateX(…) rotateY(…) translateZ(…) scale(…)`，
-   五个函数的顺序在三个状态间完全一致 —— Motion 才能逐项插值，否则整段跳变。
-2. **旋转不超过 12°。** 它只负责暗示体积；再大就变成 PPT 翻页，正文也会跟着糊。
-3. **玻璃要有重量。** ζ 压在 0.80–0.88：落定后允许一下极轻的呼吸，不能晃。
-
-### 三条原则（MIUI 侧）
-
-1. **按下是瞬时的，回弹才是弹簧。** 按下 80ms 到位（用户要的是「我按到了」），松手走
-   `cubic-bezier(0.34, 1.56, 0.64, 1)`，过冲 1–2%。这一对不对称就是 MIUI 手感的来源；
-   两个方向都做 140ms 补间，读起来只是「淡了一下」。
-2. **层级越深，位移越大。** 同级推进 34px，入书是「生长」而非平移，弹窗从中心弹出。
-   距离本身在解释信息结构。
-3. **悬停不位移，只有按压位移。** 一屏 20 张封面同时上飘会让界面显得在抖；
-   悬停用底色和阴影说话，位移留给真正的动作。
+1. **大面位移，小面淡化。** 页面、抽屉、阅读器工具栏用 `EASE`（`cubic-bezier(0.32, 0.72, 0, 1)`）
+   走位移；悬停、按压、颜色只用 `EASE_SOFT` 的短补间。
+2. **临界阻尼，落定不晃。** 弹簧阻尼比压在 0.82–0.99：可以有一点点收尾，但不能来回摆。
+3. **玻璃的过渡只改阴影与位移。** 折射是 `backdrop-filter` 与 SVG 位移图算出来的，
+   不参与逐帧动画；对玻璃做 scale 会让折射边缘抖动。
 
 ## Token
 
@@ -50,48 +29,14 @@ src/skin-obsidian.css 黑曜的材质层（玻璃、辉光、封面 3D 倾斜容
 | `EASE` | `cubic-bezier(0.32, 0.72, 0, 1)` | 大表面位移（视图、抽屉、阅读器） |
 | `EASE_SOFT` | `cubic-bezier(0.4, 0, 0.2, 1)` | 悬停、按压、颜色 |
 | `DUR.page / slow / base / fast / instant` | 360 / 320 / 240 / 180 / 120ms | 页面、遮罩、控件、退场、即时反馈 |
-| `SPRING.panel` | k320 / c34 / m0.92（ζ≈0.99） | 侧边面板 |
+| `SPRING.panel` | k320 / c34 / m0.92（ζ≈0.99） | 侧边面板、底部浮动栏入场 |
 | `SPRING.card` | k280 / c25 / m0.90（ζ≈0.91） | 卡片、列表项、主视觉 |
 | `SPRING.modal` | k400 / c28 / m0.85（ζ≈0.95） | 对话框 |
 | `SPRING.toast` | k460 / c26 / m0.80（ζ≈0.82） | 提示条 |
+| `SPRING.control` | k520 / c38 / m0.60（ζ≈1.07） | 分段控件的滑动拇指 |
 
-### MIUI（`MOTION_KITS.miui`）
-
-| Token | 值 | 用途 |
-| --- | --- | --- |
-| `MI_EASE` | `cubic-bezier(0.2, 0, 0, 1)` | 「standard」：起步极快、尾巴很长 |
-| `MI_EASE_IN` | `cubic-bezier(0.4, 0, 1, 1)` | 退场，不拖尾 |
-| `MI_DUR.page / slow / base / fast / instant` | 340 / 300 / 220 / 160 / 80ms | 页面、遮罩、控件、颜色、按下 |
-| `MI_SPRING.tap` | k700 / c34 / m0.55（ζ≈0.86） | 按压回弹 |
-| `MI_SPRING.control` | k520 / c30 / m0.70（ζ≈0.79） | 分段滑块、开关 |
-| `MI_SPRING.surface` | k380 / c32 / m0.85（ζ≈0.89） | 面板、整页推进 |
-| `MI_SPRING.pop` | k620 / c27 / m0.60（ζ≈0.70） | 弹窗、提示条 |
-| `MI_SPRING.chrome` | k420 / c34 / m0.80（ζ≈0.93） | 阅读器上下工具栏 |
-
-### 黑曜（`MOTION_KITS.obsidian`）
-
-| Token | 值 | 用途 |
-| --- | --- | --- |
-| `EASE` | `cubic-bezier(0.16, 1, 0.3, 1)` | 长尾收束：玻璃滑到位后还要「贴住」底 |
-| `EASE_IN` | `cubic-bezier(0.4, 0, 1, 1)` | 退场，多一帧都显得迟疑 |
-| `DUR.page / slow / base / fast / instant` | 420 / 360 / 260 / 180 / 100ms | 页面、遮罩、控件、退场、即时 |
-| `SPRING.surface` | k260 / c30 / m0.90（ζ≈0.88） | 面板 |
-| `SPRING.card` | k300 / c27 / m0.85（ζ≈0.84） | 封面、列表项 |
-| `SPRING.pop` | k380 / c24 / m0.80（ζ≈0.80） | 弹窗，一次轻微过冲 |
-| `SPRING.toast` | k460 / c24 / m0.70（ζ≈0.78） | 提示条 |
-| `SPRING.chrome` | k420 / c34 / m0.85（ζ≈0.93） | 阅读器上下工具栏 |
-
-三套的键名完全一致（`page / zoom / sheet / backdrop / modal / toast / stagger / rise /
-settle / spring / dur / ease / chrome / section`），缺一个切皮肤时就会漏动画。
-
-## 封面 3D（只属于黑曜）
-
-`react-parallax-tilt` 负责指针跟随的倾斜与紫光 glare，参数在 `Bookshelf.jsx` 的 `BookCard`：
-最大 7°/9°、`scale 1.03`、`transitionSpeed 900`。只包在 `kit.id === 'obsidian'` 时启用——
-另两套的封面语言是平的，加倾斜会打架。
-
-CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴影、`cover-shine` 扫光。
-透视由 Tilt 自己给，所以 `.book-grid` 上**不能**再写 `perspective`，否则双重透视会变形。
+套件必须提供固定形状的键（`page / zoom / sheet / backdrop / modal / toast / stagger /
+rise / settle / spring / dur / ease / chrome / section`），少一个调用处就会漏动画。
 
 ## 组件映射
 
@@ -106,29 +51,17 @@ CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴
 | `chrome` | 阅读器工具栏显隐 |
 | `section(dir)` | 设置页分区切换（按导航方向推拉） |
 
-## 为什么 MIUI 的手感单独一个 CSS 层
+## 为什么书架底部栏用弹簧入场
 
-样式表按 `@layer base, skin, motion` 分三层（顺序在 `src/index.css` 顶部声明）：
-`design/` 那套编辑排版在 `base`，皮肤长相在 `skin`，皮肤手感在 `motion`。
-层序比加载顺序和特异性都硬，手感层的按压、滑块、开关动效不会被通用层或视觉层盖回去，
-也不必比 `!important`。它整套规则仍挂在 `[data-skin='miui']` 下，Apple 不受影响。
-
-高频交互（按下、悬停、拖动）必须是 CSS：按下到变色之间不能有一次 React 渲染的延迟。
-位移和转场才交给 Motion。
+底部胶囊是「从屏幕外升起来」的：`y: 26 → 0`，`delay: 0.15s`，`SPRING.panel`。
+它比页面内容晚 150ms，读起来像玻璃先落位、内容再出现在它后面 —— 这正是液态玻璃的方向感。
 
 ## 降低动效
 
 - 设置里的「减少动效」→ `document.documentElement.dataset.motion = off`，`design/base.css`
   统一把动画/过渡压到 0.01ms；
 - `<MotionConfig reducedMotion>` 让 Motion 只保留透明度动画（所以每个变体都带 opacity 通道）；
-- `@media (prefers-reduced-motion: reduce)` 兜底系统级偏好；
-- 橡皮筋开关是靠 `width` 变形的，压掉时长仍会留一个静态宽度，`miui-motion.css` 里单独锁死。
-
-## 改动的文件
-
-`src/design/motion.js`、`src/ui/primitives.css`、
-`src/skin-obsidian.css`、`src/miui-motion.css`、`src/main.jsx`、`src/App.jsx`、
-`src/components/{Bookshelf,BookMarket,Segmented,Reader,SettingsPage,SettingsPanel,TocPanel,ShortcutHelp,SourcePanel,LogPanel}.jsx`
+- `@media (prefers-reduced-motion: reduce)` 兜底系统级偏好。
 
 ## 实测数据（脚本测得，非目测）
 
@@ -139,16 +72,11 @@ CSS 侧只做材质（`skin-obsidian.css`）：书脊、边缘高光、景深阴
 |---|---|---|---|
 | 主按钮 `.btn` | `1 → 0.96`，约 90ms 到位 | 冲到 `1.004`（+0.39%），约 350ms | ≈430ms |
 | 开关 `.switch::after` | `24 → 30px`（+25%），右边缘不动 | 无（宽度走 ease-out，设计如此） | ≈780ms |
-| 分段滑块 | — | — | 见下方「已知问题」 |
-
-主按钮那条曲线（`scale` 随时间）就是「按下不对称」原则的直接证据：
-`1 → 0.97 → 0.96（保持）→ 松手 → 0.977 → 0.989 → 0.998 → 1.002 → 1.004 → 回落 → 1`。
-按压段是瞬时的，回弹段是弹簧并越过 1 —— 两个方向都做对称补间的话，这条曲线会是一条平滑的 S 形，
-读起来只是「淡了一下」。
+| 分段滑块 | 拇指用 `x / width` 弹簧跟随，不再瞬移 | — | 见 `SPRING.control` |
 
 ## 已知问题
 
-**1. 冷启动偶发白屏（已修）**
+**冷启动偶发白屏（已修）**
 
 窗口在后台或被遮挡时，Chromium 会把该窗口的 `requestAnimationFrame` 压到约 1Hz 甚至 0。
 framer 的入场动画全靠 rAF 推进：挂载瞬间写下的首帧 `opacity: 0` 之后再也没有下一帧，
@@ -160,18 +88,3 @@ framer 的入场动画全靠 rAF 推进：挂载瞬间写下的首帧 `opacity: 
 
 > 顺带暴露了一个检查盲区：截图与视觉回归全部带 `?static=1`（`MotionGlobalConfig.skipAnimations`），
 > 入场动画被整体跳过，所以 8 张图全绿也发现不了白屏。需要回归时用 `_boot-race.cjs`，它不跳过动画。
-
-**2. 分段控件的拇指是「瞬移」而不是「滑过去」（未修，两套皮肤都如此）**
-
-`Segmented.jsx` 用的是 `{active && <motion.span layoutId=…/>}`，设计意图是共用布局动画。
-逐帧采样内联 `transform` 得到的序列是 `79.27 → 79.03 → 79.03 → 3`：两帧之间直接跳完，
-中间没有任何过渡帧（生产构建同样，不只是 dev 的 StrictMode 现象）。
-即 framer 的 layoutId 投影在这套结构里从未生效，之前文档里「会滑的白色药丸」的说法不成立。
-
-另有一处独立缺陷：`motion.js` 的 `SPRING` 里没有 `control` 键，而 `Segmented` 取的是
-`kit.spring.control`，Apple 皮肤拿到的是 `undefined`（MIUI 有）。
-
-修法不能只改 JS：书架的拇指在设计层里是 `1px` 下划线（`design/shelf.css` 的
-`.shelf-tools .segmented-thumb { inset: auto 0 0 0; height: 1px }`），设置页是胶囊，
-两处语义不同。把拇指从选中项提到容器层统一驱动位移，会把下划线变成一个 26px 高的实色块。
-需要先在设计层把两种形态显式区分，再改组件，因此留作单独一轮处理。

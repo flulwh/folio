@@ -65,17 +65,15 @@ src/                渲染层（React）
 ├── App.jsx            路由（书架 / 书籍市场 / 设置 / 本地阅读 / 云端阅读）、主题注入、Toast
 ├── store/AppStore.jsx 全局状态与持久化适配器
 ├── design/            设计令牌与分区样式（整份包在 @layer base）
-│   ├── tokens.css     主题令牌的唯一真相来源
+│   ├── tokens.css     主题令牌 + 液态玻璃材质的唯一真相来源
 │   ├── base.css       基础层
-│   ├── shelf.css      书架
+│   ├── shelf.css      书架：顶部品牌胶囊、底部浮动玻璃栏、书封、主视觉
 │   ├── library.css    书市 / 书源 / 设置
-│   └── reader.css     阅读器
-├── design/motion.js   三套动效套件（Apple / MIUI / 黑曜）+ 皮肤映射
-├── index.css          Apple 皮肤（兼声明 @layer base, skin, motion 层序）
-├── miui.css           MIUI 皮肤源文件
-├── skin-miui.css      由 miui.css 作用域化生成的产物（勿直接改，落在 @layer skin）
-├── miui-motion.css    MIUI 的按下 / 悬停 / 拖动（@layer motion）
-├── skin-obsidian.css  黑曜皮肤：深空玻璃、紫电、封面 3D（作用域 html[data-skin='obsidian']）
+│   ├── reader.css     阅读器
+│   └── glass.css      液态玻璃材质层（全站最后加载）
+├── design/motion.js   动效套件（Apple 沉降）+ useMotionKit()
+├── index.css          基础样式（声明 @layer vendor, base；玻璃库进 vendor 层）
+├── apple.css          Apple 观感的基础覆盖
 ├── themes.js          主题令牌副本（设置页预览卡 + 运行时注入）
 ├── ui/                Radix 原语封装：Dialog / Menu / Popover / Tooltip / Tabs /
 │                      Form / Toast / VirtualList，及 primitives.css 交互态
@@ -101,7 +99,7 @@ tools/               回归与验证脚本（见 performance.md）
 
 | 决定 | 原因 |
 | --- | --- |
-| **只收纯文本** | EPUB 本质是 ZIP 容器，需要额外的解析与内联资源处理。本项目把「正则章节匹配」作为核心，纯文本更能把这套机制做透。导入二进制文件会给出明确提示 |
+| **纯文本走章节正则，电子书走成熟库** | TXT / Markdown 用正则章节匹配，段落索引就是进度锚点。EPUB 是 ZIP 容器、PDF 是分页描述文件，自研解析成本高且易错，因此分别交给 foliate-js 与 pdf.js，渲染层只做外壳（进度、目录、翻页）；`progress.json` 额外写 `location`（EPUB CFI）/ `page`（PDF 页码），原有字段语义不变 |
 | **进度锚在段落而非像素** | 字号与栏宽随时可调，段落索引是唯一稳定的坐标 |
 | **段落间距用 `padding`** | 虚拟滚动是绝对定位的，`margin` 不计入 `offsetHeight`，会让相邻段落重叠 |
 | **自动滚动用浮点游标 + 绝对赋值** | Chromium 会丢弃 `scrollTop += 0.02` 这类亚像素增量，逐帧累加只会原地不动；内部维护浮点游标，每帧把 `cursor + speed × dt` 直接赋给 `scrollTop` |
@@ -148,10 +146,8 @@ dataDir/
 
 改 `tokens.css` 后要同步 `src/themes.js`，并跑 `npm run check:theme` 核对。
 
-皮肤管**形态**（圆角、阴影、动效语言），主题管**颜色**。两者正交：
-MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`。
-唯一的例外是黑曜：它的玻璃与纵深是按深空底色设计的，所以选中皮肤会连带切到同名主题
-（`obsidian`），切走时回到 `night`。
+形态只有一套（Liquid Glass），主题只管**颜色**：玻璃的 tint、描边与阴影取
+`--glass-*`，深色主题由 `[data-theme-tone='dark']` 整组覆盖；主色始终来自主题的 `accent`。
 
 扩展方式见 [themes.md](themes.md)。
 
@@ -159,8 +155,8 @@ MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`
 
 ## 六、动效系统
 
-动效分三套语言，跟着皮肤走，不是一套参数换数字。`src/design/motion.js` 是唯一的取用入口。
+动效只有一套 Apple 沉降语言。`src/design/motion.js` 是唯一的取用入口。
 底层引擎是 [Motion](https://github.com/motiondivision/motion)（`motion/react`，
-framer-motion 的官方继任包）；三套皮肤共用引擎，差在令牌与变体，不重复引库。
+framer-motion 的官方继任包）。
 
 细节见 [motion.md](motion.md)。

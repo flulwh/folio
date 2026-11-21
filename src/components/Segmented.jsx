@@ -11,10 +11,7 @@ import { useMotionKit } from '../design/motion.js';
  * - 文字颜色交叉淡化，选中项与未选中项同时在场，切换时亮度渐变
  * - 交互与 aria 交给 Radix ToggleGroup（单选）：radiogroup 语义、方向键、
  *   roving tabindex 都由它管，拇指只负责画动画
- * - 皮肤差异：两套皮肤都用这块拇指，但弹簧不同 —— Apple 近乎临界阻尼
- *   （panel），MIUI 刻意欠阻尼（control），滑动末尾能看见一点过冲。
- *   MIUI 版本以前是"隐藏拇指、硬切底色"，那是效果最少的一种做法；
- *   改成滑动的白色药丸后，切换的连续性才和 MIUI 的手感对上。
+ * - 选中项用文字色（选中 = 更黑），拇指走 Apple 的临界阻尼弹簧，滑动末尾不晃
  *
  * 为什么不用 layoutId：framer-motion 11 的 presence 记账在
  * 「带 layoutId 的元素在 AnimatePresence 子树里卸载」时会留下永不结束的退出项，
@@ -22,12 +19,9 @@ import { useMotionKit } from '../design/motion.js';
  */
 export default function Segmented({ options, value, onChange, full = false, className = '', style, ariaLabel }) {
   const kit = useMotionKit();
-  /* 选中项的字色由皮肤决定：Apple 用文字色（选中=更黑），MIUI 用主色
-     （选中=更蓝）。夜间用 --mi-seg-active —— 它就是为此准备的一档更亮的蓝，
-     直接拿 --accent 在近黑底上对比度不够。
-     这个颜色必须写在这里：framer 的内联样式优先级高于 CSS，
-     否则 miui-motion.css 里那条 active 颜色规则永远不生效。 */
-  const activeInk = kit.id === 'miui' ? 'var(--mi-seg-active, var(--accent))' : 'var(--text)';
+  /* 选中项的字色必须写在内联样式里：framer 的内联优先级高于 CSS，
+     皮肤层想改 active 颜色也压不过它。 */
+  const activeInk = 'var(--text)';
   const items = Array.isArray(options) ? options : [];
   const wrapRef = useRef(null);
   const [thumb, setThumb] = useState(null);

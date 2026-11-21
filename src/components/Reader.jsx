@@ -48,8 +48,8 @@ import {
 
 export default function Reader({ book, onClose, cloud = null, resume = true }) {
   const settings = useSettings();
-  // 阅读器已经订阅了 settings，直接按皮肤取套件，不再多挂一个 hook
-  const kit = motionKitFor(settings.skin);
+  // 动效只有一套 Apple 沉降曲线
+  const kit = motionKitFor();
   const progress = useProgress();
   const marksMap = useMarks();
   const fonts = useFonts();

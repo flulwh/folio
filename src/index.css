@@ -1,6 +1,10 @@
-/* 层叠顺序：@layer 先声明者优先级低。base 放通用骨架，skin 放皮肤长相，
-   motion 放皮肤手感；皮肤层总在通用层之后，不再需要 !important 硬顶。 */
-@layer base, skin, motion;
+/* 玻璃库的样式放 vendor 层：未分层的外部样式会压过所有 @layer，
+   包进 vendor（低于 base）之后，design/*.css 才能接管 --lg-tint 与亮边。 */
+@import '@vepando/liquid-glass-react/style.css' layer(vendor);
+
+/* 层叠顺序：vendor 放第三方结构，base 放我们全部样式（按加载顺序决定优先级）。
+   最后加载的 design/glass.css 负责液态玻璃材质。 */
+@layer vendor, base;
 
 @layer base {
 /* ==========================================================================

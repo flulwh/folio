@@ -135,7 +135,6 @@ app.whenReady().then(async () => {
     indent: false,
     reduceMotion: true,
     autoHideUI: false,
-    skin: 'apple',
   }));
   ipcMain.handle('store:set-settings', () => {});
   ipcMain.handle('app:info', () => ({ version: '2.0.0' }));
@@ -157,7 +156,10 @@ app.whenReady().then(async () => {
   win.showInactive();
   await new Promise((r) => setTimeout(r, 600));
 
-  await win.loadFile(path.join(ROOT, 'dist', 'index.html'));
+  const rendererIndex = fs.existsSync(path.join(ROOT, 'out', 'renderer', 'index.html'))
+    ? path.join(ROOT, 'out', 'renderer', 'index.html')
+    : path.join(ROOT, 'dist', 'index.html');
+  await win.loadFile(rendererIndex);
   await new Promise((r) => setTimeout(r, 2500));
 
   // 进入设置页

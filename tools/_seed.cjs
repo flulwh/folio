@@ -74,11 +74,10 @@ const SETTINGS = {
   showProgress: true,
   autoHideUI: false, // 截图关掉：headless 无鼠标移动，chrome 会自动隐藏，看不到顶栏底栏
   reduceMotion: true,  // 截图默认关动效：布局动画截在半途会让画面错乱，不可复现
-  skin: 'apple',
   comicFit: 'width',
 };
 
-module.exports = function seedScript(name, theme, route, skin) {
+module.exports = function seedScript(name, theme, route) {
   const books = BOOKS.map((b) => ({
     id: b.id,
     name: b.name,
@@ -102,7 +101,6 @@ module.exports = function seedScript(name, theme, route, skin) {
     }
   }
   const settings = { ...SETTINGS, ...(theme ? { theme } : {}) };
-  if (skin) settings.skin = skin;
   return `(() => {
     const L = ${JSON.stringify(PREFIX)};
     localStorage.setItem(L + 'books', ${JSON.stringify(JSON.stringify(books))});

@@ -42,7 +42,6 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
@@ -79,7 +78,7 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
         modifier = Modifier.fillMaxSize(),
         topBar = { FontStoreTopBar(onBack = onBack) },
         containerColor = scheme.systemGroupedBackground,
-        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         Column(
@@ -91,7 +90,12 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
                     bottom = padding.calculateBottomPadding() + 24.dp,
                 ),
         ) {
-            FontStoreTitle()
+            CupertinoText(
+                text = "与桌面端同一份目录 · 装好即用",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 10.dp),
+                fontSize = 13.sp,
+                color = scheme.secondaryLabel,
+            )
             IosGroup(title = "已安装") {
                 // 「系统字体」永远在第一位：选它等于清空商店字体
                 SystemFontRow(
@@ -188,6 +192,7 @@ private fun FontStoreTopBar(onBack: () -> Unit) {
     val scheme = CupertinoTheme.colorScheme
     CupertinoTopAppBar(
         title = { CupertinoText(text = "字体", maxLines = 1) },
+        colors = folioTopBarColors(),
         navigationIcon = {
             val source = remember { MutableInteractionSource() }
             Box(
@@ -207,24 +212,6 @@ private fun FontStoreTopBar(onBack: () -> Unit) {
             }
         },
     )
-}
-
-@Composable
-private fun FontStoreTitle() {
-    val scheme = CupertinoTheme.colorScheme
-    CupertinoNavigationTitle(
-        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 12.dp),
-    ) {
-        Column {
-            CupertinoText(text = "字体")
-            Spacer(Modifier.height(4.dp))
-            CupertinoText(
-                text = "与桌面端同一份目录 · 装好即用",
-                style = CupertinoTheme.typography.footnote,
-                color = scheme.secondaryLabel,
-            )
-        }
-    }
 }
 
 /** iOS inset grouped 卡片，带可选的分组标题与右侧动作。 */
@@ -416,7 +403,7 @@ private fun CatalogFontRow(
                     CupertinoText(
                         text = "已安装",
                         fontSize = 13.sp,
-                        color = BrandPositive,
+                        color = scheme.accent,
                     )
                     Spacer(Modifier.width(8.dp))
                     PlainAction(text = "使用", onClick = onSelect)

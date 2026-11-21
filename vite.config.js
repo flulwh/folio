@@ -24,18 +24,22 @@ const pkg = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'))
 // file: 是生产页面的加载方式（loadFile），Chromium 对 file:// 的 'self'
 // 判定不可靠，必须显式列出；folio-cover / folio-font 是本地封面与字体协议，
 // 对应 registerSchemesAsPrivileged 里已经去掉的 bypassCSP。
+//
+// blob: 是给 EPUB 阅读器留的口子：foliate-js 把每一节正文和插图都转成
+// blob URL，塞进 <iframe src="blob:…">；不放开 frame-src，整本书会是空白。
+// 只放开 blob:，不放开 http(s)，书的远程资源仍然进不来。
 const CSP = [
   "default-src 'self' file:",
   "script-src 'self' file:",
-  "style-src 'self' 'unsafe-inline' file:",
-  "font-src 'self' file: data: folio-font:",
+  "style-src 'self' 'unsafe-inline' file: blob:",
+  "font-src 'self' file: data: blob: folio-font:",
   "img-src 'self' file: data: blob: https: folio-cover:",
   "media-src 'self' file: data: blob:",
   "connect-src 'self' file:",
+  "frame-src 'self' file: blob:",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-  "frame-src 'none'",
 ].join('; ');
 
 function cspPlugin() {
@@ -78,6 +82,9 @@ export default defineConfig({
           // 注意匹配顺序：react-dom 的路径里也含 'react'，先判更具体的
           if (/node_modules[\\/](react-dom|react|scheduler)[\\/]/.test(id)) return 'react';
           if (/node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'motion';
+          // EPUB / PDF 阅读器（foliate-js + pdf.js）只在打开这类书时才 import，
+          // 单独成块才能保持懒加载，否则会被并进 vendor 拖慢首屏
+          if (/node_modules[\\/](pdfjs-dist|foliate-js)[\\/]/.test(id)) return 'doc-reader';
           return 'vendor';
         },
         entryFileNames: 'assets/[name]-[hash].js',

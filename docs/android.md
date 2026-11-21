@@ -253,7 +253,7 @@ EPUB 的阅读位置单独存 `epub-progress.json`；
 | `ui/reader/ReaderPager.kt` | 翻页模式：按章用 `TextMeasurer` 分页，超长段落按行切分，页脚显示页码 |
 | `ui/reader/*Sheet.kt` | 目录 / 搜索 / 痕迹 / 排版四套面板 |
 | `ui/book/EpubReaderScreen.kt` | EPUB：Compose 外壳 + Readium Fragment |
-| `ui/ShelfScreen.kt` | 书架：大标题、胶囊筛选、圆角书卡、底部浮动工具条 |
+| `ui/ShelfScreen.kt` | 书架：实色顶栏 + 常显标题、胶囊筛选、圆角书卡 |
 | `ui/SettingsScreen.kt` | 设置：分组卡片 + 开关 / 滑杆 / 分段 |
 | `ui/SyncStatusScreen.kt` | 同步报告：状态卡、逐本账本、等宽诊断 |
 | `ui/FontStoreScreen.kt` | 字体商店：已安装列表 + 目录卡片、下载进度、真字形预览 |
@@ -268,5 +268,5 @@ EPUB 的阅读位置单独存 `epub-progress.json`；
 - **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。
 - **云端书必须连着桌面端**：想整本离线请用本机导入（云端书不做离线副本）。
 - **超过 30MB 的书不同步**，只在本机读；封面取不到时退回首字色块。
-- **EPUB 只在本机**：不参与桌面端同步，阅读位置也只存在本机；桌面端没有对应阅读器。
+- **EPUB 只在本机**：不参与桌面端同步，阅读位置也只存在本机；桌面端虽然能读 EPUB / PDF（foliate-js + pdf.js），但两端的电子书进度互不同步。
 - **字体下载要能连上 GitHub 或桌面端**：两条都不通时商店能开（缓存目录）但装不了；已装字体不受影响。

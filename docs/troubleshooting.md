@@ -98,42 +98,13 @@ webPreferences: {
 
 ---
 
-## 8. 切换皮肤后再点其他设置分区，内容空白
-
-**症状**：在设置页把皮肤从 Apple 切到 MIUI（或反过来），再点「阅读 / 书源 / 存储」，分区内容整块消失。
-
-**根因**：`AnimatePresence mode="wait"` 下，旧区块的退出动画与新区块的 presence key 冲突 —— 切皮肤时 key 没变，`mode="wait"` 一直等旧区块退场，而旧区块的退出动画此时已经不存在了。
-
-**修法**：给 presence 树加一个随皮肤变化的 key，强制重建：
-
-```jsx
-<AnimatePresence key={settings.skin} mode="wait" initial={false}>
-```
-
-回归脚本：`tools/_settings-blank.cjs`。
-
----
-
-## 9. MIUI 皮肤下主题颜色和设置里描述的不一致
-
-**根因**：`src/miui.css` 里硬编码了蓝色主色，覆盖了主题注入的 `var(--accent)`。
-
-**修法**：删掉硬编码色值，一律读 `var(--accent)`；并按 `data-theme-tone='light' / 'dark'` 分别处理明暗两套阴影与描边。
-根节点上要挂上 tone：
-
-```jsx
-<div data-theme-tone={activeTheme?.tone} />
-```
-
----
-
-## 10. 局域网面板相关
+## 8. 局域网面板相关
 
 面板本身的排障（防火墙、虚拟网卡、端口顺延、访问码失效）在 [lan-panel.md](lan-panel.md#排障) 里，这里不重复。
 
 ---
 
-## 11. 开发环境的两个常见怪象
+## 9. 开发环境的两个常见怪象
 
 | 现象 | 原因 / 处理 |
 | --- | --- |

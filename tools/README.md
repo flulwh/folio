@@ -35,8 +35,8 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `_shot.cjs` | 用 Electron 离屏托管 `dist/` 并注入种子数据截图（`--out/--w/--h/--theme/--skin/--wait`） |
-| `_snap.mjs` | 用系统 Edge headless 截 `dist/` 页面，机制与 `_shot.cjs` 相同（`--out/--route/--theme`） |
+| `_shot.cjs` | 用 Electron 离屏托管渲染层产物（优先 `out/renderer/`）并注入种子数据截图（`--out/--w/--h/--theme/--wait`） |
+| `_snap.mjs` | 用系统 Edge headless 截渲染层产物（优先 `out/renderer/`），机制与 `_shot.cjs` 相同（`--out/--route/--theme`） |
 | `_probe.mjs` | 读指定选择器的计算样式，诊断 CSS 层叠结果（`--sel/--props/--click`） |
 | `_audit.mjs` | 批量验收：一次截出所有表面 × 主题，并做对比度检查 |
 | `_vreg.mjs` | 视觉回归：`--save` 保存基线、`--diff` 统计像素差异，不引第三方依赖 |
@@ -54,9 +54,7 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `_settings-blank.cjs` | 复现「设置页切皮肤后点其他分区变空白」，采样子节点数 / opacity / 可见文字 / 导航高亮 |
 | `_boot-race.cjs` | 冷启动竞态复现：连续 reload，按固定时刻采样 `.view` 的 opacity 判断白屏 |
-| `_scope-skin.mjs` | 把 `src/miui.css` 的规则作用域化到 `[data-skin='miui']`，生成 `src/skin-miui.css` |
 | `_strip-important.mjs` | 一次性剥离 `src/apple.css` 里的 `!important` |
 | `_push-via-api.mjs` | git 协议被代理挡掉时，改走 GitHub git data API 推送提交（只打 `api.github.com`） |
 | `apply-patch.mjs` | Windows 上编辑器偶发 `ReplaceFileW EIO` 时，按「原文/新文」分块补丁文件做精确替换 |

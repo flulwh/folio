@@ -1,410 +1,177 @@
-// 轻量 HTML 解析 + CSS 选择器子集（书源规则引擎用）。
-// 不做完整 HTML5 容错：真实书源页面绝大多数是结构良好的服务端渲染 HTML，
-// 一个「标签扫描 + 栈」的解析器足够，且没有任何第三方依赖，打包体积为零。
+// HTML 解析与选择器的兼容层。
 //
-// 性能策略：沿用 fb55/entities（BSD-2-Clause, github.com/fb55/entities）的
-// 码点快速路径与「无实体则零分配」原则，以及 fb55/css-select 的
-// 「选择器编译一次、反复复用」思路；领域语义（Legado 伪类、宽松容错）保留。
+// 解析交给 htmlparser2，选择器交给 css-select，序列化交给 dom-serializer；
+// 本文件只保留三件必须自己做的事：
+//   1) 把 domhandler 节点补成引擎使用的 `tag / attrs / children / parent` 形状；
+//   2) 把 Legado 的私有写法翻译成标准 CSS（`[a~=x|y]`、`:eq/:lt/:gt`、`:first/:last`）；
+//   3) 阅读域语义的纯函数（textOf / htmlOf / attrOf / absUrl）。
 
-const VOID_TAGS = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'param',
-  'source',
-  'track',
-  'wbr',
-]);
+import { parseDocument } from 'htmlparser2';
+import { selectAll as cssSelectAll } from 'css-select';
+import render from 'dom-serializer';
+import { decodeHTML } from 'entities';
 
-const NAMED_ENTITIES = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-  ldquo: '“',
-  rdquo: '”',
-  lsquo: '‘',
-  rsquo: '’',
-  hellip: '…',
-  mdash: '—',
-  ndash: '–',
-  middot: '·',
-  times: '×',
-  copy: '©',
-};
+const EMPTY_ATTRS = Object.freeze({});
+const WHITESPACE_ONLY = /^\s*$/;
+const SET_PSEUDO_RE = /:(eq|lt|gt)\(\s*(-?\d+)\s*\)/g;
 
-const MAX_CODE_POINT = 0x10ffff;
-const ENTITY_RE = /&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g;
-const ATTR_RE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g;
-const TAG_RE = /<(\/?)([a-zA-Z][\w:.-]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>/g;
-const HAS_COMMENT = /<!--/;
-const HAS_SCRIPT = /<(script|style|noscript)\b/i;
-const HAS_DOCTYPE = /<!DOCTYPE/i;
-const NON_WHITESPACE_RE = /\S/;
-const SELF_CLOSING_RE = /\/\s*$/;
+const ELEMENT_TYPES = new Set(['tag', 'script', 'style']);
 
+/** 解码 HTML 实体；失败时原样返回，绝不抛错。 */
 export function decodeEntities(input) {
-  if (!input || input.indexOf('&') === -1) return input || '';
-  return input.replace(ENTITY_RE, (whole, body) => {
-    if (body[0] === '#') {
-      const code =
-        body[1] === 'x' || body[1] === 'X'
-          ? parseInt(body.slice(2), 16)
-          : parseInt(body.slice(1), 10);
-      // String.fromCodePoint throws for non-integers / negatives / > 0x10FFFF.
-      // Checking up front gives the same "leave it untouched" result without
-      // paying for exception setup on every numeric entity.
-      if (!Number.isInteger(code) || code < 0 || code > MAX_CODE_POINT) return whole;
-      return String.fromCodePoint(code);
-    }
-    const named = NAMED_ENTITIES[body.toLowerCase()];
-    return named === undefined ? whole : named;
-  });
-}
-
-function parseAttrs(raw) {
-  const attrs = {};
-  if (!raw) return attrs;
-  // Shared global regexp: exec() resets lastIndex to 0 on a null match, and we
-  // also reset explicitly so an aborted parse cannot leak state.
-  ATTR_RE.lastIndex = 0;
-  let m = ATTR_RE.exec(raw);
-  while (m) {
-    const name = m[1].toLowerCase();
-    const value = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4] !== undefined ? m[4] : '';
-    if (name && !(name in attrs)) attrs[name] = decodeEntities(value);
-    m = ATTR_RE.exec(raw);
+  const text = String(input ?? '');
+  if (!text || text.indexOf('&') === -1) return text;
+  try {
+    return decodeHTML(text);
+  } catch {
+    return text;
   }
-  return attrs;
-}
-
-function makeTextNode(text, parent) {
-  return { tag: '#text', text, attrs: {}, children: [], parent };
 }
 
 /**
- * Strip comments / script-style / doctype. Each replace only runs when a cheap
- * probe says it can match, so ordinary content HTML allocates zero full-text
- * copies instead of three — identical output, since replace() is a no-op when
- * there is no match.
+ * 把 domhandler 树补成引擎认识的形状，并清掉注释、脚本、样式与纯空白文本。
+ * 纯空白文本在旧解析器里本来就被丢弃，这里保持同样的可见结果。
  */
-function preprocess(html) {
-  let source = String(html || '');
-  if (HAS_COMMENT.test(source)) source = source.replace(/<!--[\s\S]*?-->/g, '');
-  if (HAS_SCRIPT.test(source)) {
-    source = source.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+function normalizeTree(root) {
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+
+    if (node.type === 'root' || node.type === 'document') {
+      node.tag = '#root';
+      node.attrs = EMPTY_ATTRS;
+    } else if (node.type === 'text') {
+      node.tag = '#text';
+      node.attrs = EMPTY_ATTRS;
+      node.text = node.data;
+    } else if (ELEMENT_TYPES.has(node.type)) {
+      node.tag = String(node.name || '').toLowerCase();
+      node.attrs = node.attribs || EMPTY_ATTRS;
+    } else {
+      node.tag = `#${node.type}`;
+      node.attrs = EMPTY_ATTRS;
+      continue;
+    }
+
+    const children = node.children;
+    if (!Array.isArray(children) || !children.length) continue;
+
+    const kept = [];
+    for (const child of children) {
+      const type = child.type;
+      if (type === 'comment' || type === 'directive' || type === 'cdata') continue;
+      if (type === 'text' && WHITESPACE_ONLY.test(child.data || '')) continue;
+      if (type === 'script' || type === 'style') continue;
+      if (type === 'tag' && String(child.name).toLowerCase() === 'noscript') continue;
+      kept.push(child);
+    }
+
+    if (kept.length !== children.length) {
+      node.children = kept;
+      for (let i = 0; i < kept.length; i += 1) {
+        kept[i].parent = node;
+        kept[i].prev = kept[i - 1] || null;
+        kept[i].next = kept[i + 1] || null;
+      }
+    }
+
+    for (let i = kept.length - 1; i >= 0; i -= 1) stack.push(kept[i]);
   }
-  if (HAS_DOCTYPE.test(source)) source = source.replace(/<!DOCTYPE[^>]*>/gi, '');
-  return source;
 }
 
 /** 解析 HTML 字符串，返回文档根节点（tag === '#root'）。 */
 export function parseHtml(html) {
-  const source = preprocess(html);
-
-  const root = { tag: '#root', attrs: {}, children: [], parent: null };
-  const stack = [root];
-  TAG_RE.lastIndex = 0;
-  let cursor = 0;
-  let match = TAG_RE.exec(source);
-
-  const pushText = (chunk) => {
-    if (!chunk) return;
-    const text = decodeEntities(chunk);
-    if (!NON_WHITESPACE_RE.test(text)) return;
-    const parent = stack[stack.length - 1];
-    parent.children.push(makeTextNode(text, parent));
-  };
-
-  while (match) {
-    if (match.index > cursor) pushText(source.slice(cursor, match.index));
-    cursor = TAG_RE.lastIndex;
-
-    const closing = match[1] === '/';
-    const tag = match[2].toLowerCase();
-    const rawAttrs = match[3] || '';
-
-    if (closing) {
-      for (let i = stack.length - 1; i > 0; i -= 1) {
-        if (stack[i].tag === tag) {
-          stack.length = i;
-          break;
-        }
-      }
-    } else {
-      const parent = stack[stack.length - 1];
-      const node = { tag, attrs: parseAttrs(rawAttrs), children: [], parent };
-      parent.children.push(node);
-      const selfClosing = SELF_CLOSING_RE.test(rawAttrs) || VOID_TAGS.has(tag);
-      if (!selfClosing) stack.push(node);
-    }
-
-    match = TAG_RE.exec(source);
-  }
-
-  if (cursor < source.length) pushText(source.slice(cursor));
+  const root = parseDocument(String(html || ''));
+  normalizeTree(root);
   return root;
 }
 
 /* ------------------------------------------------------------------ */
-/* 选择器：tag / .class / #id / [attr] / [attr=~^$*|=v] / :first :last
-/*         :nth-child(n) :eq(n) :lt(n) :gt(n)，支持空格与 > */
+/* 选择器：标准 CSS 交给 css-select，Legado 私有写法在这里翻译          */
 /* ------------------------------------------------------------------ */
 
-function parseAttrBody(body) {
-  const m = /^\s*([\w:.-]+)\s*(?:([~^$*|]?=)\s*([\s\S]*))?$/.exec(body);
-  if (!m) return { name: String(body).trim().toLowerCase(), op: null, value: null };
-  let value = m[3];
-  if (value !== undefined) value = value.trim();
-  if (
-    value &&
-    ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
-  ) {
-    value = value.slice(1, -1);
+/** 按顶层逗号切分选择器组，忽略引号/括号/方括号里的逗号。 */
+function splitGroups(selector) {
+  const groups = [];
+  let depth = 0;
+  let quote = null;
+  let start = 0;
+  for (let i = 0; i < selector.length; i += 1) {
+    const ch = selector[i];
+    if (quote) {
+      if (ch === quote && selector[i - 1] !== '\\') quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '(' || ch === '[') depth += 1;
+    else if (ch === ')' || ch === ']') depth -= 1;
+    else if (ch === ',' && depth === 0) {
+      groups.push(selector.slice(start, i));
+      start = i + 1;
+    }
   }
-  return { name: m[1].toLowerCase(), op: m[2] || null, value: value === undefined ? null : value };
-}
-
-function parseSimple(token) {
-  const simple = { tag: null, classes: [], id: null, attrs: [], pseudos: [] };
-  const text = String(token || '');
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    if (ch === '.') {
-      let j = i + 1;
-      while (j < text.length && /[\w-]/.test(text[j])) j += 1;
-      if (j > i + 1) simple.classes.push(text.slice(i + 1, j));
-      i = j;
-      continue;
-    }
-    if (ch === '#') {
-      let j = i + 1;
-      while (j < text.length && /[\w-]/.test(text[j])) j += 1;
-      if (j > i + 1) simple.id = text.slice(i + 1, j);
-      i = j;
-      continue;
-    }
-    if (ch === '[') {
-      const end = text.indexOf(']', i);
-      const body = text.slice(i + 1, end === -1 ? text.length : end);
-      simple.attrs.push(parseAttrBody(body));
-      i = end === -1 ? text.length : end + 1;
-      continue;
-    }
-    if (ch === ':') {
-      let j = i + 1;
-      while (j < text.length && /\w/.test(text[j])) j += 1;
-      const name = text.slice(i + 1, j).toLowerCase();
-      let arg = null;
-      if (text[j] === '(') {
-        const end = text.indexOf(')', j);
-        arg = text.slice(j + 1, end === -1 ? text.length : end).trim();
-        j = end === -1 ? text.length : end + 1;
-      }
-      if (name) simple.pseudos.push({ name, arg });
-      i = j;
-      continue;
-    }
-    let j = i;
-    while (j < text.length && !'.#[:'.includes(text[j])) j += 1;
-    const name = text.slice(i, j).trim();
-    if (name && name !== '*') simple.tag = name.toLowerCase();
-    i = j;
-  }
-  return simple;
-}
-
-function parseSelector(selector) {
-  return String(selector || '')
-    .split(',')
-    .map((group) => {
-      const steps = [];
-      const tokens = group.trim().split(/\s*(>)\s*|\s+/).filter((t) => t !== undefined && t !== '');
-      let comb = ' ';
-      for (const token of tokens) {
-        if (token === '>') {
-          comb = '>';
-          continue;
-        }
-        steps.push({ simple: parseSimple(token), comb });
-        comb = ' ';
-      }
-      return steps;
-    })
-    .filter((steps) => steps.length > 0);
-}
-
-// css-select style compile cache: a source rule reuses the same selector text
-// on every chapter, so parsing it once removes all per-call regex work.
-const SELECTOR_CACHE = new Map();
-const SELECTOR_CACHE_MAX = 256;
-
-function compileSelector(selector) {
-  const key = String(selector || '');
-  const cached = SELECTOR_CACHE.get(key);
-  if (cached) return cached;
-  const groups = parseSelector(key);
-  if (SELECTOR_CACHE.size >= SELECTOR_CACHE_MAX) SELECTOR_CACHE.clear();
-  SELECTOR_CACHE.set(key, groups);
+  groups.push(selector.slice(start));
   return groups;
 }
 
 /**
- * Position among element siblings, computed in one pass. Replaces
- * `children.filter(...).indexOf(node)` — the same index/count, no array.
+ * Legado 的 `[property~=a|b|c]` 表示「任意一个命中」，标准 CSS 没有这个语义：
+ * 展开成 `:is([property~="a"],[property="a"],[property~="b"],[property="b"],…)`。
  */
-function elementPosition(node) {
-  const parent = node.parent;
-  if (!parent) return { index: 0, count: 1 };
-  const children = parent.children || [];
-  let index = -1;
-  let count = 0;
-  for (const child of children) {
-    if (child.tag === '#text') continue;
-    if (child === node) index = count;
-    count += 1;
-  }
-  return { index, count };
+function expandMultiValueAttrs(group) {
+  return group.replace(/\[([\w:.-]+)~=([^\]]+)\]/g, (whole, name, raw) => {
+    if (!raw.includes('|')) return whole;
+    const parts = raw
+      .split('|')
+      .map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
+      .filter(Boolean);
+    if (!parts.length) return whole;
+    const alts = parts.map((part) => `[${name}~="${part}"],[${name}="${part}"]`).join(',');
+    return `:is(${alts})`;
+  });
 }
 
-function matchAttr(node, attr) {
-  const raw = node.attrs[attr.name];
-  if (attr.op === null) return raw !== undefined;
-  const value = raw === undefined ? '' : String(raw);
-  const want = attr.value === null ? '' : String(attr.value);
-  switch (attr.op) {
-    case '=':
-      return value === want;
-    case '~=': {
-      // Legado 常用 `[property~=category|status|update_time]`：命中任意一个即可
-      const wanted = want.split('|');
-      const words = value.split(/\s+/);
-      return wanted.some((item) => words.includes(item) || value === item);
-    }
-    case '|=':
-      return value === want || value.startsWith(`${want}-`);
-    case '^=':
-      return value.startsWith(want);
-    case '$=':
-      return value.endsWith(want);
-    case '*=':
-      return value.includes(want);
-    default:
-      return false;
-  }
+/** 把 Legado / jQuery 的简写伪类换成 css-select 支持的标准写法。 */
+function prepareSelector(group) {
+  const base = group
+    .replace(SET_PSEUDO_RE, '')
+    .replace(/:first(?!-child)/g, ':first-child')
+    .replace(/:last(?!-child)/g, ':last-child')
+    .replace(/:nth\(\s*(\d+)\s*\)/g, ':nth-child($1)');
+  return expandMultiValueAttrs(base);
 }
 
-function matchSimple(node, simple) {
-  if (!node || node.tag === '#text') return false;
-  if (simple.tag && node.tag !== simple.tag) return false;
-  if (simple.id && node.attrs.id !== simple.id) return false;
-  if (simple.classes.length) {
-    const cls = (node.attrs.class || '').split(/\s+/);
-    for (const want of simple.classes) if (!cls.includes(want)) return false;
+/** `:eq(n)` / `:lt(n)` / `:gt(n)` 作用在整组结果上，与旧实现一致。 */
+function sliceSet(list, kind, n) {
+  if (kind === 'eq') {
+    const at = n < 0 ? list.length + n : n;
+    return Number.isFinite(at) && list[at] ? [list[at]] : [];
   }
-  for (const attr of simple.attrs) if (!matchAttr(node, attr)) return false;
-
-  let position = null;
-  for (const pseudo of simple.pseudos) {
-    const name = pseudo.name;
-    if (name === 'eq' || name === 'lt' || name === 'gt') continue; // 集合级，交给 selectAll
-    if (position === null) position = elementPosition(node);
-    const { index, count } = position;
-    if (name === 'first' || name === 'first-child') {
-      if (index !== 0) return false;
-    } else if (name === 'last' || name === 'last-child') {
-      if (index !== count - 1) return false;
-    } else if (name === 'nth-child' || name === 'nth') {
-      const n = Number(pseudo.arg);
-      if (!Number.isFinite(n) || index + 1 !== n) return false;
-    }
-  }
-  return true;
+  if (kind === 'lt') return list.slice(0, Math.max(0, Number.isFinite(n) ? n : 0));
+  return list.slice(Math.max(0, (Number.isFinite(n) ? n : 0) + 1));
 }
 
-function matchChain(node, steps) {
-  let idx = steps.length - 1;
-  if (!matchSimple(node, steps[idx].simple)) return false;
-  while (idx > 0) {
-    const comb = steps[idx].comb;
-    const prev = steps[idx - 1].simple;
-    if (comb === '>') {
-      node = node.parent;
-      if (!node || !matchSimple(node, prev)) return false;
-    } else {
-      let p = node.parent;
-      let found = false;
-      while (p && p.tag !== '#root') {
-        if (matchSimple(p, prev)) {
-          node = p;
-          found = true;
-          break;
-        }
-        p = p.parent;
-      }
-      if (!found) return false;
-    }
-    idx -= 1;
-  }
-  return true;
-}
-
-/** Iterative pre-order walk: same document order, no recursion depth limit. */
-function walk(root, visit) {
-  if (!root || !Array.isArray(root.children)) return;
-  const stack = [];
-  const pushChildren = (node) => {
-    const children = node.children || [];
-    for (let i = children.length - 1; i >= 0; i -= 1) {
-      const child = children[i];
-      if (child.tag === '#text') continue;
-      stack.push(child);
-    }
-  };
-  pushChildren(root);
-  while (stack.length) {
-    const node = stack.pop();
-    visit(node);
-    pushChildren(node);
-  }
-}
-
-/** 返回匹配节点数组（文档顺序）。`:eq(n)` / `:lt(n)` / `:gt(n)` 作用在该组结果上。 */
+/** 返回匹配节点数组（文档顺序）。单组选择器出错只丢掉该组，不影响其它组。 */
 export function selectAll(root, selector) {
-  const groups = compileSelector(selector);
-  if (!groups.length) return [];
+  if (!root) return [];
+  const source = String(selector || '');
+  if (!source.trim()) return [];
+
   const hits = [];
   const seen = new Set();
-  for (const steps of groups) {
-    const matched = [];
-    walk(root, (node) => {
-      if (!seen.has(node) && matchChain(node, steps)) matched.push(node);
-    });
-    const last = steps[steps.length - 1].simple;
-    const setPseudo = last.pseudos.find((item) => item.name === 'eq' || item.name === 'lt' || item.name === 'gt');
-    let list = matched;
-    if (setPseudo) {
-      const n = Number(setPseudo.arg);
-      if (setPseudo.name === 'eq') {
-        const at = n < 0 ? matched.length + n : n;
-        list = Number.isFinite(at) && matched[at] ? [matched[at]] : [];
-      } else if (setPseudo.name === 'lt') {
-        list = matched.slice(0, Math.max(0, Number.isFinite(n) ? n : 0));
-      } else {
-        list = matched.slice(Math.max(0, (Number.isFinite(n) ? n : 0) + 1));
-      }
+  for (const raw of splitGroups(source)) {
+    const group = raw.trim();
+    if (!group) continue;
+
+    const pseudo = [...group.matchAll(SET_PSEUDO_RE)].pop();
+    let matched;
+    try {
+      matched = cssSelectAll(prepareSelector(group), root);
+    } catch {
+      continue;
     }
-    for (const node of list) {
+    if (pseudo) matched = sliceSet(matched, pseudo[1], Number(pseudo[2]));
+    for (const node of matched) {
       if (!seen.has(node)) {
         seen.add(node);
         hits.push(node);
@@ -418,13 +185,13 @@ export function selectFirst(root, selector) {
   return selectAll(root, selector)[0] || null;
 }
 
-/** 节点内纯文本（保留 <br> 换行，压缩空白）。 */
+/** 节点内纯文本（保留 <br> 换行，块级元素前后加换行，压缩空白）。 */
 export function textOf(node, { raw = false } = {}) {
   if (!node) return '';
   const parts = [];
   const visit = (current) => {
-    for (const child of current.children) {
-      if (child.tag === '#text') parts.push(child.text);
+    for (const child of current.children || []) {
+      if (child.tag === '#text') parts.push(child.text ?? child.data ?? '');
       else if (child.tag === 'br') parts.push('\n');
       else if (child.tag === 'p' || child.tag === 'div') {
         parts.push('\n');
@@ -447,24 +214,15 @@ export function textOf(node, { raw = false } = {}) {
 /** 节点 outerHTML（用于 @html 规则）。 */
 export function htmlOf(node) {
   if (!node) return '';
-  const render = (current) => {
-    if (current.tag === '#text') return current.text;
-    if (current.tag === '#root') return current.children.map(render).join('');
-    let attrs = '';
-    const keys = Object.keys(current.attrs);
-    for (const k of keys) attrs += ` ${k}="${String(current.attrs[k]).replace(/"/g, '&quot;')}"`;
-    const inner = current.children.map(render).join('');
-    if (VOID_TAGS.has(current.tag)) return `<${current.tag}${attrs}>`;
-    return `<${current.tag}${attrs}>${inner}</${current.tag}>`;
-  };
-  return render(node);
+  if (node.tag === '#text') return node.text ?? node.data ?? '';
+  return render(node, { encodeEntities: false });
 }
 
 /** 取属性，兼容 href/src 的相对地址。 */
 export function attrOf(node, name, baseUrl) {
   if (!node) return '';
   const key = String(name || '').toLowerCase();
-  const value = key === 'text' ? textOf(node) : key === 'html' ? htmlOf(node) : node.attrs[key] || '';
+  const value = key === 'text' ? textOf(node) : key === 'html' ? htmlOf(node) : node.attrs?.[key] || '';
   if (baseUrl && (key === 'href' || key === 'src' || key === 'content')) return absUrl(baseUrl, value);
   return value;
 }

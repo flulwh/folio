@@ -18,6 +18,7 @@ import { applyTheme } from './themes.js';
 /* ------------------------------------------------------------------ */
 const CloudBook = lazy(() => import('./components/CloudBook.jsx'));
 const ComicReader = lazy(() => import('./components/ComicReader.jsx'));
+const DocumentReader = lazy(() => import('./components/DocumentReader.jsx'));
 const BookMarket = lazy(() => import('./components/BookMarket.jsx'));
 const SettingsPage = lazy(() => import('./components/SettingsPage.jsx'));
 
@@ -46,7 +47,7 @@ function Splash() {
   );
 }
 export default function App() {
-  // 动效词汇随皮肤切换：Apple 沉降 / MIUI 回弹推进（见 design/motion.js）
+  // 动效词汇只有一套：Apple 的沉降曲线（见 design/motion.js）
   const kit = useMotionKit();
   // 只订阅 App 自己真正需要的状态。注意这里刻意不订阅 progress：
   // 阅读进度每滚动一次就变一次，App 一旦订阅它，整个组件树都会跟着重渲染。
@@ -67,10 +68,12 @@ export default function App() {
   );
 
   // 正文不在 books.json 里：打开时按 filePath 从 books/ 目录读一次
+  // EPUB / PDF 不走文本通道，由 DocumentReader 自己读二进制并解析
   useEffect(() => {
     if (!activeBook) return undefined;
-    const { id, kind, content, filePath } = activeBook;
+    const { id, kind, content, filePath, format } = activeBook;
     if (kind !== 'local' || content || !filePath) return undefined;
+    if (format === 'epub' || format === 'pdf') return undefined;
     if (texts[id] !== undefined || readingIds.current.has(id)) return undefined;
     readingIds.current.add(id);
     let cancelled = false;
@@ -100,6 +103,8 @@ export default function App() {
   const bookForReader = useMemo(() => {
     if (!activeBook) return null;
     if (activeBook.kind !== 'local') return activeBook;
+    // EPUB / PDF 不需要预读正文，直接交给文档阅读器
+    if (activeBook.format === 'epub' || activeBook.format === 'pdf') return activeBook;
     if (activeBook.content) return activeBook;
     const cached = texts[activeBook.id];
     return cached ? { ...activeBook, content: cached } : null;
@@ -207,12 +212,6 @@ export default function App() {
     document.documentElement.dataset.motion = settings.reduceMotion ? 'off' : 'on';
   }, [settings.reduceMotion]);
 
-  // 界面风格：apple.css / skin-miui.css / skin-obsidian.css 并存，靠 html[data-skin] 切换
-  useEffect(() => {
-    const skin = settings.skin === 'miui' || settings.skin === 'obsidian' ? settings.skin : 'apple';
-    document.documentElement.dataset.skin = skin;
-  }, [settings.skin]);
-
   // 全局「?」打开快捷键说明；输入框里不拦截
   useEffect(() => {
     const onKey = (event) => {
@@ -232,7 +231,7 @@ export default function App() {
       reducedMotion={settings.reduceMotion ? 'always' : 'never'}
       transition={{ duration: kit.dur.base, ease: kit.ease }}
     >
-    {/* data-theme-tone 是皮肤（尤其 MIUI）分深浅灰阶的依据，必须挂在 .app 上：
+    {/* data-theme-tone 是主题分深浅灰阶的依据，必须挂在 .app 上：
         applyTheme 只写到 html / body，而主题令牌（--bg 等）是在 .app 上覆盖的，
         放在 html 上会被 .app 的同名令牌压回去。 */}
     <div
@@ -264,7 +263,13 @@ export default function App() {
                 )}
               </Suspense>
             ) : (
-              <Reader book={bookForReader} onClose={() => setActiveBookId(null)} />
+              <Suspense fallback={<LazyFallback />}>
+                {bookForReader.format === 'epub' || bookForReader.format === 'pdf' ? (
+                  <DocumentReader book={bookForReader} onClose={() => setActiveBookId(null)} />
+                ) : (
+                  <Reader book={bookForReader} onClose={() => setActiveBookId(null)} />
+                )}
+              </Suspense>
             )}
           </motion.div>
         ) : view === 'market' ? (

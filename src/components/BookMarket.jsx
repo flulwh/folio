@@ -101,7 +101,7 @@ export default function BookMarket({ onClose, onOpenBook }) {
   const sources = useSources();
   const books = useBooks();
   const settings = useSettings();
-  const kit = motionKitFor(settings.skin);
+  const kit = motionKitFor();
   const { notify, addCloudBook, toggleSource } = useAppActions();
   const cached = marketCache;
 

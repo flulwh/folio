@@ -12,14 +12,15 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.4.0：顶栏 / Tab Bar 改不透明实色，去掉折叠大标题与毛玻璃（versionCode 26）。
         // 4.3.0：毛玻璃半径减半、去掉重复全屏背景、封面菜单按需组合，降功耗（versionCode 25）。
         // 4.2.0：顶栏改 iOS 原生折叠大标题，顶栏 / Tab Bar 改毛玻璃（versionCode 24）。
         // 4.1.0：整体换 iOS 配色与排版，首页改大标题 + 分段控件 + 三列封面墙，
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 25
-        versionName = "4.3.0"
+        versionCode = 26
+        versionName = "4.4.0"
         vectorDrawables.useSupportLibrary = true
     }
 

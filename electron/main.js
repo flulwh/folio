@@ -14,6 +14,7 @@ import { createBooksStore } from './lan-books.js';
 import { createDeviceStore } from './devicestore.js';
 import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
 import { configureBookFile } from './bookfile.js';
+import { createJsonStore } from './json-store.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
 import { createFontStore } from './font-store.js';
@@ -235,7 +236,7 @@ function ensureDataDir() {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 }
 
-function readJson(file, fallback) {
+function readJsonFile(file, fallback) {
   ensureDataDir();
   // books.json / progress.json 读坏时不能拦启动，但至少要留一条 debug 痕迹；
   // 文件名用 basename，别把整条本机路径写进日志。
@@ -271,7 +272,7 @@ let writeWarned = false;
  * 1. tmp+rename 失败 → 清掉半截 tmp，直接写目标文件再试一次；
  * 2. 还是失败 → 记下来、通知用户一次，返回 {ok:false}，内存里的状态照旧。
  */
-function writeJson(file, data) {
+function writeJsonFile(file, data) {
   const payload = JSON.stringify(data);
   const tmp = `${file}.tmp`;
   try {
@@ -302,6 +303,29 @@ function writeJson(file, data) {
       return { ok: false, error: lastWriteError.message };
     }
   }
+}
+
+/**
+ * 每个 JSON 文件一个 lowdb 实例；读写细节仍是下面那套容错实现。
+ * 统一从这里进出，避免同一个文件被两个实例各写一半。
+ */
+const jsonStores = new Map();
+
+function storeFor(file, fallback) {
+  let store = jsonStores.get(file);
+  if (!store) {
+    store = createJsonStore({ file, fallback, read: readJsonFile, write: writeJsonFile });
+    jsonStores.set(file, store);
+  }
+  return store;
+}
+
+function readJson(file, fallback) {
+  return storeFor(file, fallback).read(fallback);
+}
+
+function writeJson(file, data) {
+  return storeFor(file, data ?? null).write(data);
 }
 
 /**
@@ -423,7 +447,16 @@ function safeBase(name) {
 }
 
 function shortHash(text) {
-  return crypto.createHash('sha1').update(String(text)).digest('hex').slice(0, 8);
+  const data = Buffer.isBuffer(text) ? text : String(text);
+  return crypto.createHash('sha1').update(data).digest('hex').slice(0, 8);
+}
+
+/** 电子书格式：只认扩展名，避免把改名成 .epub 的 zip / 其他二进制误当书打开 */
+function detectEbookFormat(filePath) {
+  const ext = path.extname(String(filePath || '')).toLowerCase();
+  if (ext === '.epub') return 'epub';
+  if (ext === '.pdf') return 'pdf';
+  return 'text';
 }
 
 /** 把正文写到 books/ 下的副本，返回绝对路径（同名文件会带 hash 后缀，避免互相覆盖） */
@@ -447,12 +480,48 @@ function writeBookCopy(id, name, content) {
   return target;
 }
 
+/** EPUB / PDF 副本：二进制原样落盘，扩展名保留给阅读器分派用 */
+function writeBinaryCopy(id, name, buffer, format) {
+  booksDirReady();
+  const base = safeBase(name);
+  let target = path.join(booksDir, `${base}.${format}`);
+  if (fs.existsSync(target)) {
+    const same = (() => {
+      try {
+        return fs.readFileSync(target).equals(buffer);
+      } catch {
+        return false;
+      }
+    })();
+    if (!same) target = path.join(booksDir, `${base}-${shortHash(id)}.${format}`);
+  }
+  const tmp = `${target}.tmp`;
+  fs.writeFileSync(tmp, buffer);
+  fs.renameSync(tmp, target);
+  return target;
+}
+
+/** 二进制电子书的书架元数据：正文留在 books/ 副本里，json 只记格式与大小 */
+function importBinaryBook({ id, name, buffer, format, sourcePath }) {
+  if (!buffer?.length) return { error: '这本书是空的' };
+  const storedPath = writeBinaryCopy(id, name, buffer, format);
+  return {
+    id,
+    name,
+    sourcePath: sourcePath || null,
+    filePath: storedPath,
+    size: buffer.length,
+    addedAt: Date.now(),
+    format,
+  };
+}
+
 function readBookContent(filePath) {
   const buffer = fs.readFileSync(filePath);
   if (isProbablyBinary(buffer)) {
     return {
       error:
-        '暂不支持该二进制格式。当前版本专注于纯文本（TXT / MD）电子书，请导入 TXT 或 Markdown 文件。',
+        '这个文件不是纯文本。EPUB / PDF 请用「导入电子书」加入书架，阅读器会按格式打开。',
     };
   }
   // 副本是我们自己写的 UTF-8，但老数据/手改过的文件仍按智能解码兜底
@@ -460,20 +529,24 @@ function readBookContent(filePath) {
   return { content, size: buffer.length };
 }
 
-/** 从磁盘上的原文件导入：读一次 -> 判断编码/二进制 -> 复制到 books/ -> 只回元数据 */
+/** 从磁盘上的原文件导入：读一次 -> 判断格式/编码 -> 复制到 books/ -> 只回元数据 */
 function importBookFromPath(filePath) {
   const buffer = fs.readFileSync(filePath);
+  const stats = fs.statSync(filePath);
+  const format = detectEbookFormat(filePath);
+  const id = `${filePath}::${stats.mtimeMs}`;
+  const name = path.basename(filePath, path.extname(filePath));
+  if (format !== 'text') {
+    return importBinaryBook({ id, name, buffer, format, sourcePath: filePath });
+  }
   if (isProbablyBinary(buffer)) {
     return {
       error:
-        '暂不支持该二进制格式。当前版本专注于纯文本（TXT / MD）电子书，请导入 TXT 或 Markdown 文件。',
+        '暂不支持该二进制格式。可以导入 TXT / Markdown，或 EPUB / PDF 电子书。',
     };
   }
-  const stats = fs.statSync(filePath);
   const content = decodeText(buffer);
   if (!content.trim()) return { error: '这本书是空的' };
-  const id = `${filePath}::${stats.mtimeMs}`;
-  const name = path.basename(filePath, path.extname(filePath));
   const storedPath = writeBookCopy(id, name, content);
   return {
     id,
@@ -694,11 +767,11 @@ function createWindow(options = {}) {
     minHeight: 620,
     show: false,
     backgroundColor: '#f6f4ef',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(app.getAppPath(), 'electron', 'icon.png'),
     // macOS 用原生 inset 交通灯；Windows 上可切成自绘的 macOS 风格边框。
     ...frameWindowOptions(),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(__dirname, '..', 'preload', 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
@@ -727,9 +800,9 @@ function createWindow(options = {}) {
   }
 
   if (isDev) {
-    win.loadURL('http://127.0.0.1:5173');
+    win.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://127.0.0.1:5173');
   } else {
-    win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   }
 
   // 双保险：ready-to-show 在渲染进程崩溃、GPU 初始化失败等情况下不会触发，
@@ -1706,7 +1779,10 @@ ipcMain.handle('book:pick', async () => {
     title: '导入电子书',
     properties: ['openFile', 'multiSelections'],
     filters: [
+      { name: '电子书', extensions: ['epub', 'pdf', 'txt', 'md', 'markdown', 'text'] },
       { name: '纯文本电子书', extensions: ['txt', 'md', 'markdown', 'text'] },
+      { name: 'EPUB 电子书', extensions: ['epub'] },
+      { name: 'PDF 文档', extensions: ['pdf'] },
       { name: '所有文件', extensions: ['*'] },
     ],
   });
@@ -1733,6 +1809,25 @@ ipcMain.handle('book:add-content', async (_e, payload) => {
   }
 });
 
+ipcMain.handle('book:add-binary', async (_e, payload) => {
+  try {
+    const name = path.basename(String(payload?.name || '未命名'));
+    const buffer = Buffer.from(payload?.data || []);
+    const format = detectEbookFormat(name);
+    if (format === 'text') return { error: '只支持导入 EPUB / PDF 电子书' };
+    if (!buffer.length) return { error: '这个文件是空的' };
+    const id = `${name}::${buffer.length}::${shortHash(buffer)}`;
+    return importBinaryBook({
+      id,
+      name: path.basename(name, path.extname(name)),
+      buffer,
+      format,
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+});
+
 /** 只允许读 books/ 里的副本，或 books.json 里登记过的 filePath（防渲染层读任意文件）。 */
 function isKnownBookPath(filePath) {
   const target = path.resolve(String(filePath || ''));
@@ -1753,6 +1848,19 @@ ipcMain.handle('book:read', async (_e, filePath) => {
     return readBookContent(filePath);
   } catch (err) {
     return { error: `读不到这本书的正文（${path.basename(String(filePath || ''))}）：${err.message}` };
+  }
+});
+
+/** EPUB / PDF：整份二进制交给渲染层（Buffer 经 IPC 序列化成 Uint8Array） */
+ipcMain.handle('book:read-binary', async (_e, filePath) => {
+  try {
+    if (!isKnownBookPath(filePath)) {
+      return { error: '这个文件不在书架目录里，拒绝读取' };
+    }
+    const data = fs.readFileSync(filePath);
+    return { data, size: data.length, format: detectEbookFormat(filePath) };
+  } catch (err) {
+    return { error: `读不到这本书（${path.basename(String(filePath || ''))}）：${err.message}` };
   }
 });
 

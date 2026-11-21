@@ -33,7 +33,7 @@ dataDir/
 
 1. **零依赖**：只用 Node 内置 `http`，不引 WebSocket、不引任何 npm 包。打包体积不变。
 2. **单端口**：面板是一个 HTML + 一个 CSS + 一个 JS + 一条 SSE 长连接，全部由 `electron/lan.js` 托管。
-   面板本身不打包进 `dist/`，也不参与 vite 构建。
+   面板本身不打包进 `out/renderer/`，也不参与 vite 构建。
 3. **只有一份进度**：写入永远是「读盘 → 按 `updatedAt` 合并 → 写盘」，
    所以两端不存在「谁是主」的问题。内存里的渲染层副本靠推送对齐。
 

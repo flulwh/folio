@@ -5,8 +5,8 @@ import React, {
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from 'react';
+import { create } from 'zustand';
 import { friendlyError } from '../utils/friendly.js';
 import { BUILTIN_THEMES, normalizeTheme } from '../themes.js';
 import { useFontLoader } from '../hooks/useFontLoader.js';
@@ -33,21 +33,10 @@ import { useFontLoader } from '../hooks/useFontLoader.js';
  */
 const MISSING = Symbol('missing');
 
-// 默认值用 MISSING 哨兵：这样 useSlice 才能把「Provider 缺失」
-// 和「这一片的值恰好是 null」（比如没有提示条）区分开。
+// 数据切片（books / progress / settings / …）由 zustand 管理，只有
+// 「字体加载结果」留在 Context：它由 useFontLoader 的 effect 产生，必须在组件树内运行。
 const AppActionsContext = createContext(MISSING);
-const BooksContext = createContext(MISSING);
-const DevicesContext = createContext(MISSING);
-const ProgressContext = createContext(MISSING);
-const SettingsContext = createContext(MISSING);
-const MarksContext = createContext(MISSING);
-const ThemeContext = createContext(MISSING);
-const SourcesContext = createContext(MISSING);
-const RulesContext = createContext(MISSING);
-const FontsContext = createContext(MISSING);
 const FontStatusContext = createContext(MISSING);
-const LoadedContext = createContext(MISSING);
-const ToastContext = createContext(MISSING);
 
 /* ------------------------------------------------------------------ */
 /*  Storage adapter: Electron IPC when available, localStorage in a    */
@@ -213,6 +202,15 @@ const api = {
     const list = JSON.parse(localStorage.getItem(LS_PREFIX + 'books') || '[]');
     const hit = list.find((b) => b.filePath === filePath);
     return hit ? { content: hit.content || '' } : { error: '浏览器预览模式下读不到文件' };
+  },
+  // EPUB / PDF：整份二进制（Uint8Array）交给阅读器，浏览器预览没有磁盘副本
+  readBookBinary: async (filePath) => {
+    if (window.readerAPI?.readBookBinary) return window.readerAPI.readBookBinary(filePath);
+    return { error: '浏览器预览模式下读不到电子书文件' };
+  },
+  addBookBinary: async (payload) => {
+    if (window.readerAPI?.addBookBinary) return window.readerAPI.addBookBinary(payload);
+    return { error: '需要桌面版' };
   },
   deleteBookFile: (filePath) => window.readerAPI?.deleteBookFile?.(filePath) ?? Promise.resolve({ ok: false }),
   cacheCover: async (payload) => {
@@ -443,7 +441,6 @@ export const DEFAULT_SETTINGS = {
   indent: false,
   showProgress: true,  autoHideUI: true,
   reduceMotion: false, // 减少动效（也遵循系统「减少动态效果」）
-  skin: 'apple', // 界面风格：apple | miui（两套皮肤并存，可在设置里切换）
   macosFrame: true, // macOS 风格边框：Windows 上自绘红黄绿交通灯并去掉原生标题栏
   comicFit: 'width', // width | original，漫画默认适应宽度
   proxy: '', // 书源抓取用的 HTTP 代理，如 http://127.0.0.1:7890
@@ -456,7 +453,7 @@ export const DEFAULT_SETTINGS = {
   },
 };
 
-const THEME_NAMES = ['paper', 'sepia', 'night', 'forest', 'obsidian'];
+const THEME_NAMES = ['paper', 'sepia', 'night', 'forest'];
 
 const normalizeCustomThemes = (list) =>
   (Array.isArray(list) ? list : []).map((item) => normalizeTheme(item)).filter(Boolean);
@@ -547,17 +544,63 @@ function rebaseBooks(base, local, incoming) {
   return result;
 }
 
+/* ------------------------------------------------------------------ */
+/*  数据切片（zustand）                                                 */
+/*  ------------------------------------------------------------------ */
+/*  每个 hook 只订阅自己需要的那一片；setX 同时支持「直接给值」和       */
+/*  「给一个 updater」两种写法，和原来的 useState 行为一致。            */
+/* ------------------------------------------------------------------ */
+
+const resolveNext = (value, prev) => (typeof value === 'function' ? value(prev) : value);
+
+const useAppStore = create((set) => {
+  const slice = (key) => (value) => set((state) => ({ [key]: resolveNext(value, state[key]) }));
+  return {
+    books: [],
+    devices: [],
+    progress: {},
+    settings: DEFAULT_SETTINGS,
+    marks: {},
+    sources: [],
+    rules: [],
+    fonts: [],
+    loaded: false,
+    toast: null,
+    setBooks: slice('books'),
+    setDevices: slice('devices'),
+    setProgress: slice('progress'),
+    setSettings: slice('settings'),
+    setMarks: slice('marks'),
+    setSources: slice('sources'),
+    setRules: slice('rules'),
+    setFonts: slice('fonts'),
+    setLoaded: slice('loaded'),
+    setToast: slice('toast'),
+  };
+});
+
+// zustand 的 setX 引用恒定；放在模块作用域，回调里用它们不会触发 exhaustive-deps 告警。
+const {
+  setBooks,
+  setDevices,
+  setProgress,
+  setSettings,
+  setMarks,
+  setSources,
+  setRules,
+  setFonts,
+  setLoaded,
+  setToast,
+} = useAppStore.getState();
+
 export function AppProvider({ children }) {
-  const [books, setBooks] = useState([]);
-  const [devices, setDevices] = useState([]);
-  const [progress, setProgress] = useState({});
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-  const [marks, setMarks] = useState({});
-  const [sources, setSources] = useState([]);
-  const [rules, setRules] = useState([]);
-  const [fonts, setFonts] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-  const [toast, setToast] = useState(null);
+  const books = useAppStore((state) => state.books);
+  const progress = useAppStore((state) => state.progress);
+  const settings = useAppStore((state) => state.settings);
+  const marks = useAppStore((state) => state.marks);
+  const rules = useAppStore((state) => state.rules);
+  const fonts = useAppStore((state) => state.fonts);
+  const loaded = useAppStore((state) => state.loaded);
 
   const booksRef = useRef(books);
   const progressRef = useRef(progress);
@@ -901,6 +944,8 @@ export function AppProvider({ children }) {
         addedAt: book.addedAt || Date.now(),
         hue: Math.floor(Math.random() * 360),
       };
+      // 电子书格式：缺省视为纯文本，旧数据/旧端读到未知字段会忽略
+      if (book.format === 'epub' || book.format === 'pdf') entry.format = book.format;
       // 有磁盘副本时不再把正文塞进 books.json（浏览器预览没有副本才内联）
       if (!entry.filePath) entry.content = book.content || '';
       setBooks((prev) => {
@@ -1114,6 +1159,24 @@ export function AppProvider({ children }) {
     [addBook, notify]
   );
 
+  /** 拖拽 EPUB / PDF：二进制直接写进 books/ 副本，再进书架 */
+  const addBookFromBinary = useCallback(
+    async ({ name, data }) => {
+      try {
+        const meta = await api.addBookBinary({ name, data });
+        if (!meta || meta.error) {
+          notify(meta?.error || '这本书保存失败', 'error');
+          return null;
+        }
+        return addBook(meta);
+      } catch (err) {
+        notify(`保存《${name}》失败：${err.message}`, 'error');
+        return null;
+      }
+    },
+    [addBook, notify]
+  );
+
   const removeBook = useCallback((id) => {
     // 副作用不能写在 setBooks 的 updater 里：StrictMode 下 updater 会被调用两次，
     // 并发渲染也可能延后执行，而下面要拿被删的那本书去排清理定时器。
@@ -1256,11 +1319,6 @@ export function AppProvider({ children }) {
     [customThemes],
   );
 
-  const activeTheme = useMemo(
-    () => themes.find((theme) => theme.id === settings.theme) || BUILTIN_THEMES[0],
-    [themes, settings.theme],
-  );
-
   const saveCustomTheme = useCallback((theme) => {
     const normalized = normalizeTheme(theme);
     if (!normalized) return null;
@@ -1298,7 +1356,9 @@ export function AppProvider({ children }) {
       addBook,
       addBookFromPicker,
       addBookFromText,
+      addBookFromBinary,
       readBookText: api.readBookText,
+      readBookBinary: api.readBookBinary,
       cacheCover: api.cacheCover,
       cacheCovers: api.cacheCovers,
       clearCoverCache: api.clearCoverCache,
@@ -1390,6 +1450,7 @@ export function AppProvider({ children }) {
       addBook,
       addBookFromPicker,
       addBookFromText,
+      addBookFromBinary,
       addCloudBook,
       removeBook,
       restoreBook,
@@ -1428,13 +1489,6 @@ export function AppProvider({ children }) {
     ]
   );
 
-  // 主题相关：themes / activeTheme / customThemes 全部由 settings 派生，
-  // 所以和 settings 放同一个切片。
-  const themeState = useMemo(
-    () => ({ themes, activeTheme, customThemes }),
-    [themes, activeTheme, customThemes]
-  );
-
   // 字体加载结果由 useFontLoader 内部维护，和 fonts 列表分开订阅：
   // 安装/删除字体会改 fonts，但加载成功与否是另一件事。
   const fontStatus = useMemo(
@@ -1444,31 +1498,9 @@ export function AppProvider({ children }) {
 
   return (
     <AppActionsContext.Provider value={actions}>
-      <BooksContext.Provider value={books}>
-        <DevicesContext.Provider value={devices}>
-          <ProgressContext.Provider value={progress}>
-          <MarksContext.Provider value={marks}>
-          <SettingsContext.Provider value={settings}>
-            <ThemeContext.Provider value={themeState}>
-              <SourcesContext.Provider value={sources}>
-                <RulesContext.Provider value={rules}>
-                  <FontsContext.Provider value={fonts}>
-                    <FontStatusContext.Provider value={fontStatus}>
-                      <LoadedContext.Provider value={loaded}>
-                        <ToastContext.Provider value={toast}>
-                          {children}
-                        </ToastContext.Provider>
-                      </LoadedContext.Provider>
-                    </FontStatusContext.Provider>
-                  </FontsContext.Provider>
-                </RulesContext.Provider>
-              </SourcesContext.Provider>
-            </ThemeContext.Provider>
-          </SettingsContext.Provider>
-          </MarksContext.Provider>
-        </ProgressContext.Provider>
-        </DevicesContext.Provider>
-      </BooksContext.Provider>
+      <FontStatusContext.Provider value={fontStatus}>
+        {children}
+      </FontStatusContext.Provider>
     </AppActionsContext.Provider>
   );
 }
@@ -1493,49 +1525,39 @@ export function useAppActions() {
 }
 
 /** 书架条目。 */
-export function useBooks() {
-  return useSlice(BooksContext, 'useBooks');
-}
+export const useBooks = () => useAppStore((state) => state.books);
 
 /** 已连接过的手机/平板（含 online/lost/pending 派生值）。 */
-export function useDevices() {
-  return useSlice(DevicesContext, 'useDevices');
-}
+export const useDevices = () => useAppStore((state) => state.devices);
 
 /** 阅读进度（高频：滚动时频繁变化）。 */
-export function useProgress() {
-  return useSlice(ProgressContext, 'useProgress');
-}
+export const useProgress = () => useAppStore((state) => state.progress);
 
 /** 偏好设置。 */
-export function useSettings() {
-  return useSlice(SettingsContext, 'useSettings');
-}
+export const useSettings = () => useAppStore((state) => state.settings);
 
 /** 书签 / 划线 / 笔记：{ 书 id: [mark, ...] }。 */
-export function useMarks() {
-  return useSlice(MarksContext, 'useMarks');
-}
+export const useMarks = () => useAppStore((state) => state.marks);
 
-/** 主题集合与当前主题。 */
+/** 主题集合与当前主题（由 settings 派生）。 */
 export function useThemeState() {
-  return useSlice(ThemeContext, 'useThemeState');
+  const settings = useSettings();
+  return useMemo(() => {
+    const customThemes = normalizeCustomThemes(settings.customThemes);
+    const themes = [...BUILTIN_THEMES, ...customThemes];
+    const activeTheme = themes.find((theme) => theme.id === settings.theme) || BUILTIN_THEMES[0];
+    return { themes, activeTheme, customThemes };
+  }, [settings.customThemes, settings.theme]);
 }
 
 /** 书源列表。 */
-export function useSources() {
-  return useSlice(SourcesContext, 'useSources');
-}
+export const useSources = () => useAppStore((state) => state.sources);
 
 /** 净化规则列表。 */
-export function useRules() {
-  return useSlice(RulesContext, 'useRules');
-}
+export const useRules = () => useAppStore((state) => state.rules);
 
 /** 已安装字体列表。 */
-export function useFonts() {
-  return useSlice(FontsContext, 'useFonts');
-}
+export const useFonts = () => useAppStore((state) => state.fonts);
 
 /** 字体加载结果：{ loadedFonts, failedFonts, fontCJK }。 */
 export function useFontStatus() {
@@ -1543,14 +1565,10 @@ export function useFontStatus() {
 }
 
 /** 初始数据是否加载完成。 */
-export function useLoaded() {
-  return useSlice(LoadedContext, 'useLoaded');
-}
+export const useLoaded = () => useAppStore((state) => state.loaded);
 
 /** 当前提示条。 */
-export function useToast() {
-  return useSlice(ToastContext, 'useToast');
-}
+export const useToast = () => useAppStore((state) => state.toast);
 
 /**
  * 兼容旧写法：一次性拿到全部。

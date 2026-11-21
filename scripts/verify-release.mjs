@@ -70,7 +70,7 @@ if (!viteConfig.includes("readFileSync(path.join(rootDir, 'package.json')") || !
 }
 
 const SKIP_DIRS = new Set([
-  'node_modules', 'dist', '.git', '.workbuddy', '.workbuddy-ai', '.memory',
+  'node_modules', 'dist', 'out', '.git', '.workbuddy', '.workbuddy-ai', '.memory',
   'release', 'release-portable', 'release-pack', 'release-v2',
 ]);
 function walk(dir, out = []) {
@@ -123,8 +123,8 @@ const list = Array.isArray(targets) ? targets : targets ? [targets] : [];
 const missing = needed.filter((t) => !list.includes(t));
 if (missing.length) fail('打包目标', `缺少 ${missing.join(', ')}`);
 else pass(`打包目标（${needed.join(' / ')}）`);
-if (!pkg.build?.files?.includes('electron/**/*') || !pkg.build?.files?.includes('dist/**/*')) {
-  fail('打包文件清单', 'build.files 必须同时包含 dist/**/* 与 electron/**/*');
+if (!pkg.build?.files?.includes('out/**/*') || !pkg.build?.files?.includes('electron/icon.png')) {
+  fail('打包文件清单', 'build.files 必须包含 out/**/*（electron-vite 产物）与 electron/icon.png');
 } else {
   pass('打包文件清单');
 }
@@ -140,7 +140,7 @@ if (themeSync.status !== 0) {
 }
 
 /* 6. 设计层代码卫生：不允许 !important（reduced-motion 除外）与硬编码色 */
-const designFiles = ['base', 'shelf', 'reader', 'library'].map((n) => `src/design/${n}.css`);
+const designFiles = ['base', 'shelf', 'reader', 'library', 'glass'].map((n) => `src/design/${n}.css`);
 const hygieneIssues = [];
 for (const rel of designFiles) {
   if (!existsSync(path.join(root, rel))) continue;
@@ -188,15 +188,15 @@ if (fontProbe.status !== 0) {
 }
 
 /* 6. 构建产物（可选，CI 强制） */
-const distIndex = path.join(root, 'dist', 'index.html');
+const distIndex = path.join(root, 'out', 'renderer', 'index.html');
 if (existsSync(distIndex)) {
   const html = readFileSync(distIndex, 'utf8');
-  if (!/<script\b/.test(html)) fail('dist/index.html', '没有找到入口 script');
-  else pass('dist/index.html 与入口 script');
+  if (!/<script\b/.test(html)) fail('out/renderer/index.html', '没有找到入口 script');
+  else pass('out/renderer/index.html 与入口 script');
 } else if (requireDist) {
-  fail('dist 产物', '缺少 dist/index.html，请先跑 npm run build:vite');
+  fail('渲染层产物', '缺少 out/renderer/index.html，请先跑 npm run build:vite');
 } else {
-  lines.push('  skip  dist 产物（尚未构建，CI 会带 --require-dist）');
+  lines.push('  skip  渲染层产物（尚未构建，CI 会带 --require-dist）');
 }
 
 /* 7. macOS 边框切换端到端（可选：要真起窗口） */

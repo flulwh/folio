@@ -1,5 +1,5 @@
 /**
- * 核对「主题」在 MIUI 皮肤下的实际颜色是否与主题卡描述一致。
+ * 核对「主题」的实际颜色是否与主题卡描述一致。
  *
  * 做法：进入设置 → 外观，逐个点主题卡，读 .app 上计算后的
  * --accent / --bg / --text，和 themes.js 里该主题声明的值对比。
@@ -118,17 +118,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     js(`(() => {
       const app = document.querySelector('.app');
       const cs = getComputedStyle(app);
-      const root = document.documentElement;
       return JSON.stringify({
-        skin: root.dataset.skin,
         theme: app.dataset.theme,
         themeId: app.dataset.themeId,
         tone: app.dataset.themeTone,
         accent: cs.getPropertyValue('--accent').trim(),
         bg: cs.getPropertyValue('--bg').trim(),
         text: cs.getPropertyValue('--text').trim(),
-        miPrimary: cs.getPropertyValue('--mi-primary').trim(),
-        miS3: cs.getPropertyValue('--mi-s3').trim(),
         bodyBg: getComputedStyle(document.body).backgroundColor,
         appBg: cs.backgroundColor,
       });
@@ -143,7 +139,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const ok = v.appBg === t.preview;
     console.log(
       `  ${t.label.padEnd(4)} tone=${String(v.tone).padEnd(5)} bg=${v.bg.padEnd(8)} text=${v.text.padEnd(18)} ` +
-        `accent=${v.accent.padEnd(10)} mi-primary=${v.miPrimary.padEnd(10)} ${ok ? '与预览一致' : '⚠ 与预览不符'}`
+        `accent=${v.accent.padEnd(10)} ${ok ? '与预览一致' : '⚠ 与预览不符'}`
     );
   }
 

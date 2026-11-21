@@ -11,7 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..', 'dist');
+const REPO = path.join(__dirname, '..');
+const ROOT = fs.existsSync(path.join(REPO, 'out', 'renderer', 'index.html'))
+  ? path.join(REPO, 'out', 'renderer')
+  : path.join(REPO, 'dist');
 
 const argv = process.argv.slice(2).reduce((acc, cur) => {
   const m = /^--([^=]+)=(.*)$/.exec(cur);
@@ -49,7 +52,7 @@ const SERVER = await new Promise((resolve) => {
     if (url === '/seed.html') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        `<!doctype html><meta charset="utf-8"><script>${seedFactory('shelf', THEME, '', argv.skin || 'apple')}</script><script>location.replace('/index.html?static=1')</script>`
+        `<!doctype html><meta charset="utf-8"><script>${seedFactory('shelf', THEME, '')}</script><script>location.replace('/index.html?static=1')</script>`
       );
       return;
     }

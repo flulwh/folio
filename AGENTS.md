@@ -27,23 +27,22 @@ Folio 是**本地优先的双端阅读器**，两端各自独立、只走局域�
 
 ```bash
 npm install            # 首次会下载 Electron，慢
-npm run dev            # Vite 热更新 + Electron 窗口
-npm run dev:vite       # 只跑浏览器 UI，不启 Electron
-npm run dev:electron   # 等 5173 就绪后单独启 Electron
-npm start              # 直接启 Electron（不跑 Vite）
+npm run dev            # electron-vite：渲染层热更新 + Electron 窗口
+npm run dev:vite       # 只跑渲染层 dev server，不启 Electron
+npm start              # 直接启已构建的 Electron（读 out/main，不跑 Vite）
 npm run lint           # ESLint（flat config，react-hooks 规则）
 npm run test           # Vitest 单测（tests/，覆盖 utils 与主进程纯函数）
 npm run check          # 发版门禁：版本 / 语法（含 JSX 编译）/ 打包配置 + 文档校验 + lint + 单测
 npm run check:theme    # 校验 tokens.css 与 src/themes.js 同源
 npm run check:lan-edge # 局域网面板边界用例
 npm run check:lan-sync # 局域网双向同步用例
-npm run build          # 全部 Windows 产物
-npm run build:vite     # 只构建前端到 dist/
+npm run build          # electron-vite 构建 + 全部 Windows 产物
+npm run build:vite     # 只构建渲染层到 out/renderer/
 npm run build:dir      # 只出免安装目录版
 npm run build:portable # 只出单文件便携版
 npm run build:nsis     # 只出 NSIS 安装包
 npm run build:zip      # 只出 zip 压缩包
-npm run preview        # 预览 dist/
+npm run preview        # 预览 out/renderer 产物（electron-vite preview）
 ```
 
 安卓端（`android/` 目录）：

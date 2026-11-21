@@ -171,7 +171,7 @@ fs.writeFileSync(
   }),
   'utf8',
 );
-fs.writeFileSync(files.settings, JSON.stringify({ theme: 'paper', skin: 'apple' }), 'utf8');
+fs.writeFileSync(files.settings, JSON.stringify({ theme: 'paper' }), 'utf8');
 
 const readJson = (file, fallback) => {
   try {

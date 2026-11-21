@@ -38,7 +38,6 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
@@ -70,7 +69,7 @@ fun SyncStatusScreen(
         topBar = { SyncTopBar(onBack = onBack) },
         bottomBar = bottomBar,
         containerColor = scheme.systemGroupedBackground,
-        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyColumn(
@@ -80,9 +79,6 @@ fun SyncStatusScreen(
                 bottom = padding.calculateBottomPadding() + 24.dp,
             ),
         ) {
-            item("nav-title") {
-                SyncTitle(state = state)
-            }
             item("stats") {
                 IosCard {
                     Row(
@@ -93,7 +89,7 @@ fun SyncStatusScreen(
                             value = if (state.online) "在线" else "离线",
                             label = "连接",
                             modifier = Modifier.weight(1f),
-                            tint = if (state.online) BrandPositive else scheme.secondaryLabel,
+                            tint = if (state.online) scheme.accent else scheme.secondaryLabel,
                         )
                         StatDivider()
                         Stat(
@@ -141,7 +137,7 @@ fun SyncStatusScreen(
                             .fillMaxWidth()
                             .padding(horizontal = PageMargin)
                             .clip(RoundedCornerShape(GroupRadius))
-                            .background(BrandWarning.copy(alpha = 0.14f))
+                            .background(scheme.systemFill)
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -149,7 +145,7 @@ fun SyncStatusScreen(
                             Modifier
                                 .size(8.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(BrandWarning),
+                                .background(BrandNegative),
                         )
                         Spacer(Modifier.width(10.dp))
                         CupertinoText(
@@ -220,6 +216,7 @@ private fun SyncTopBar(onBack: (() -> Unit)?) {
     val scheme = CupertinoTheme.colorScheme
     CupertinoTopAppBar(
         title = { CupertinoText(text = "同步", maxLines = 1) },
+        colors = folioTopBarColors(),
         navigationIcon = {
             if (onBack != null) {
                 val source = remember { MutableInteractionSource() }
@@ -241,30 +238,6 @@ private fun SyncTopBar(onBack: (() -> Unit)?) {
             }
         },
     )
-}
-
-@Composable
-private fun SyncTitle(state: ShelfUiState) {
-    val scheme = CupertinoTheme.colorScheme
-    CupertinoNavigationTitle(
-        paddingValues = PaddingValues(start = PageMargin, end = PageMargin, top = 6.dp, bottom = 4.dp),
-    ) {
-        Column {
-            CupertinoText(text = "同步", maxLines = 1)
-            Spacer(Modifier.height(4.dp))
-            CupertinoText(
-                text = if (state.online) {
-                    "已连接桌面端 · 上次同步 ${lastSyncText(state.lastSyncAt)}"
-                } else {
-                    "未连接桌面端 · 上次同步 ${lastSyncText(state.lastSyncAt)}"
-                },
-                style = CupertinoTheme.typography.footnote,
-                color = scheme.secondaryLabel,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
 }
 
 /** iOS inset grouped 卡片：白底、10dp 圆角、页面 16dp 缩进。 */
@@ -396,7 +369,6 @@ private fun SyncBookRow(book: Book, state: ShelfUiState, isLast: Boolean, onRetr
                         fontSize = 15.sp,
                         color = when (syncState) {
                             SyncState.FAILED, SyncState.CONTENT_MISMATCH -> BrandNegative
-                            SyncState.SYNCED -> BrandPositive
                             else -> scheme.secondaryLabel
                         },
                         maxLines = 1,

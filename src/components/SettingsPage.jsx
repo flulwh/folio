@@ -378,14 +378,7 @@ export default function SettingsPage({ onClose }) {
 
         <div className="settings-main">
           <div className="settings-main-inner">
-            {/*
-              key={settings.skin}：切皮肤会让 MotionConfig 的默认 transition 和整套
-              variants 同时换掉。AnimatePresence 内部记录退场状态的那份 presence
-              数据会因此失配——之后任何一次分区切换，退场元素都停在 opacity:0 不再卸载，
-              mode="wait" 于是永远等不到回调，整块内容空白。
-              给它一个跟皮肤绑定的 key，切皮肤时整个 presence 树重建，状态天然干净。
-            */}
-            <AnimatePresence key={settings.skin} mode="wait" initial={false}>
+            <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={section}
                 variants={sectionVariants}
@@ -396,32 +389,7 @@ export default function SettingsPage({ onClose }) {
             {section === 'appearance' && (
               <>
                 <section className="settings-group">
-                  <h3 className="settings-group-title">界面风格</h3>
-                  <Row
-                    title="外观语言"
-                    hint="Apple 克制风、MIUI Console 风，或黑曜：深空玻璃 + 3D 纵深。皮肤决定形态与动效；黑曜自带「黑曜」主题，切走时回到深色主题"
-                  >
-                    <Segmented
-                      options={[
-                        { value: 'apple', label: 'Apple' },
-                        { value: 'miui', label: 'MIUI' },
-                        { value: 'obsidian', label: '黑曜' },
-                      ]}
-                      value={settings.skin || 'apple'}
-                      onChange={(skin) =>
-                        patchSettings({
-                          skin,
-                          // 黑曜是「皮肤 + 配色」一体设计的：底色必须跟着走，
-                          // 否则深空玻璃会浮在浅色纸上。切走时退回普通深色主题。
-                          ...(skin === 'obsidian'
-                            ? { theme: 'obsidian' }
-                            : settings.theme === 'obsidian'
-                              ? { theme: 'night' }
-                              : {}),
-                        })
-                      }
-                    />
-                  </Row>
+                  <h3 className="settings-group-title">窗口</h3>
                   <label className="switch-row">
                     <span>
                       macOS 风格边框

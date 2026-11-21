@@ -77,11 +77,8 @@ import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoDropdownMenu
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
-import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
-import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
-import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
@@ -102,7 +99,7 @@ import kotlin.math.absoluteValue
  * 书架。
  *
  * 结构只有三层：
- * 1. 顶栏：字号最大的书名级标题 + 一条工具胶囊（搜索 / 导入 / 同步 / 设置）；
+ * 1. 顶栏：实色底、标题常显，右侧放搜索 / 导入 / 同步；
  * 2. 筛选：横向胶囊，选中给朱砂底，不做下划线那套「表格感」；
  * 3. 内容：最近在读的一本放大成一张「继续阅读」卡片，其余书按封面墙三列排开。
  *
@@ -151,7 +148,7 @@ fun ShelfScreen(
     ) { state.sections }
 
     // 封面墙里翻到新导入的书：先按「头部区 + 分区标题 + 每本一格」换算成网格下标。
-    // 头部区（大标题 / 搜索 / 筛选 / 横幅）在网格里也各占一格，计数要和下面的 item 一一对应。
+    // 头部区（统计 / 搜索 / 筛选 / 横幅）在网格里也各占一格，计数要和下面的 item 一一对应。
     val headerItems = 1 + 1 + 1 + 1 + if (state.importing) 1 else 0
     LaunchedEffect(state.highlightId, sections) {
         val id = state.highlightId ?: return@LaunchedEffect
@@ -186,7 +183,7 @@ fun ShelfScreen(
         },
         bottomBar = bottomBar,
         containerColor = scheme.systemGroupedBackground,
-        appBarsBlurAlpha = FolioAppBarBlurAlpha,
+        appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
         LazyVerticalGrid(
@@ -202,9 +199,8 @@ fun ShelfScreen(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
-            // 大标题必须是第一个滚动容器的首项，滚动时才会被顶栏裁剪、折叠成内联标题。
-            item(key = "shelf-title", span = { GridItemSpan(maxLineSpan) }) {
-                ShelfTitle(state = state, onOpenSyncStatus = onOpenSyncStatus)
+            item(key = "shelf-stats", span = { GridItemSpan(maxLineSpan) }) {
+                ShelfStats(state = state, onOpenSyncStatus = onOpenSyncStatus)
             }
 
             item(key = "shelf-search", span = { GridItemSpan(maxLineSpan) }) {
@@ -369,9 +365,9 @@ fun ShelfScreen(
 /* ---------------- 顶栏 ---------------- */
 
 /**
- * 内联顶栏：大标题滚出屏幕后出现，自带 iOS 毛玻璃与淡入。
+ * 顶栏：实色底、标题常显，动作按钮用无底色 tinted 图标。
  *
- * 动作按钮沿用无底色 tinted 图标；大标题还在屏内时整条栏是透明的（由 scaffold 控制）。
+ * 老版 iOS 没有折叠大标题，栏的高度与标题位置全程不变。
  */
 @OptIn(ExperimentalCupertinoApi::class)
 @Composable
@@ -386,6 +382,7 @@ private fun ShelfTopBar(
         title = {
             CupertinoText(text = "书架", maxLines = 1)
         },
+        colors = folioTopBarColors(),
         actions = {
             NavIcon(
                 icon = CupertinoIcons.Outlined.MagnifyingGlass,
@@ -405,44 +402,35 @@ private fun ShelfTopBar(
 }
 
 /**
- * 大标题：放在网格首项，滚动时被顶栏裁剪并折叠成内联标题。
+ * 书架概览：本数、占用、连接状态。
  *
- * 字号与字重由 [CupertinoNavigationTitle] 提供的 largeTitle 决定，这里不再写死 34sp；
- * 副标题显式给 footnote，避免继承大标题的 34sp bold。
+ * 老版 iOS 的栏里只有标题，这行元信息放到内容顶部，点一下进同步页。
  */
 @Composable
-private fun ShelfTitle(state: ShelfUiState, onOpenSyncStatus: () -> Unit) {
+private fun ShelfStats(state: ShelfUiState, onOpenSyncStatus: () -> Unit) {
     val scheme = CupertinoTheme.colorScheme
-    CupertinoNavigationTitle(
-        paddingValues = PaddingValues(top = 6.dp, bottom = 2.dp),
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onOpenSyncStatus)
+            .padding(vertical = 2.dp),
     ) {
-        Column {
-            CupertinoText(text = "书架", maxLines = 1)
-            Spacer(Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onOpenSyncStatus)
-                    .padding(vertical = 2.dp),
-            ) {
-                Box(
-                    Modifier
-                        .size(7.dp)
-                        .clip(CircleShape)
-                        .background(if (state.online) BrandPositive else scheme.secondaryLabel)
-                )
-                Spacer(Modifier.width(6.dp))
-                CupertinoText(
-                    text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
-                        connectionTextOf(state),
-                    style = CupertinoTheme.typography.footnote,
-                    color = scheme.secondaryLabel,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (state.online) scheme.accent else scheme.secondaryLabel)
+        )
+        Spacer(Modifier.width(6.dp))
+        CupertinoText(
+            text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
+                connectionTextOf(state),
+            style = CupertinoTheme.typography.footnote,
+            color = scheme.secondaryLabel,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -497,7 +485,7 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .clip(RoundedCornerShape(GroupRadius))
-            .background(BrandWarning.copy(alpha = 0.14f))
+            .background(scheme.systemFill)
             .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -546,25 +534,34 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
 
 /* ---------------- 筛选 ---------------- */
 
-/** 筛选：iOS 分段控件，一段一个筛选，不做胶囊横滑。 */
-@OptIn(ExperimentalCupertinoApi::class)
+/** 筛选：等宽胶囊。未选白底加发丝描边，选中给 systemBlue 实底白字。 */
 @Composable
 private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
-    val index = ShelfUiState.FILTERS
-        .indexOfFirst { it.first == selected }
-        .coerceAtLeast(0)
-    CupertinoSegmentedControl(
-        selectedTabIndex = index,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
+    val scheme = CupertinoTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        ShelfUiState.FILTERS.forEachIndexed { i, (key, label) ->
-            CupertinoSegmentedControlTab(
-                onClick = { onSelect(key) },
-                isSelected = i == index,
+        ShelfUiState.FILTERS.forEach { (key, label) ->
+            val on = key == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(shape)
+                    .background(if (on) scheme.accent else scheme.secondarySystemGroupedBackground)
+                    .border(1.dp, if (on) Color.Transparent else scheme.separator, shape)
+                    .clickable { onSelect(key) }
+                    .padding(vertical = 7.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                CupertinoText(text = label, fontSize = 12.sp, maxLines = 1)
+                CupertinoText(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) BrandPaper else scheme.label,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -965,8 +962,8 @@ private fun badgeColor(badge: BookBadge): Color {
     val scheme = CupertinoTheme.colorScheme
     return when (badge) {
         BookBadge.MISMATCH, BookBadge.FAILED -> BrandNegative
-        BookBadge.NOT_SYNCED, BookBadge.TRANSFERRING -> scheme.accent
-        BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.secondaryLabel
+        BookBadge.TRANSFERRING -> scheme.accent
+        BookBadge.NOT_SYNCED, BookBadge.NEED_CONNECT, BookBadge.LOCAL_ONLY -> scheme.secondaryLabel
         BookBadge.NONE -> scheme.secondaryLabel
     }
 }

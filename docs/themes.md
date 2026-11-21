@@ -59,7 +59,7 @@ Folio 的主题是「一组 CSS 变量」。内置五套（浅色 / 暖沙 / 深
 
 主题生效时，应用会把令牌写到 `<html>` 的行内样式（`--bg`、`--text` …），行内样式优先级最高，所以对内置主题之外的自定义主题同样有效。同时：
 
-- `html[data-theme]` 对内置主题是主题 id（`paper` / `night` / `obsidian` …），对自定义主题是外壳主题（`paper` / `night`），保证阴影、滚动条、玻璃等结构性样式跟着明暗走；
+- `html[data-theme]` 对内置主题是主题 id（`paper` / `sepia` / `night` / `forest` …），对自定义主题是外壳主题（`paper` / `night`），保证阴影、滚动条、玻璃等结构性样式跟着明暗走；
 - `html[data-theme-id]` 是真实主题 id，`data-theme-tone` 是 `light`/`dark`，便于写针对性的样式。
 
 切换回内置主题时会清掉所有行内变量，完全回到 CSS 定义。

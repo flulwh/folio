@@ -106,10 +106,8 @@ End 落到末段附近且进度 100%、连续 4 次滚到窗口底部后段落�
 | --- | --- |
 | `_boot-race.cjs` | 统计启动白屏率 |
 | `_feel.cjs` | 逐帧量化动效（时长、位移、是否掉帧） |
-| `_settings-blank.cjs` | 切皮肤后分区空白的回归 |
 | `_lan-check.mjs` | 局域网服务端 47 项断言（不依赖 Electron） |
 | `_lan-panel-shot.cjs` | 端到端：真浏览器开面板 → 读书 → 进度写回磁盘 → 桌面端接住（26 项） |
 | `_lan-cloud-shot.cjs` | 云端书：目录、阅读、翻章、跳章、进度写回（22 项） |
 | `_paths-check.mjs` | 路径包含关系判断（大小写、相邻目录、`..` 抬升） |
 | `_theme-sync.mjs` | 主题令牌两份副本一致性 |
-| `_scope-skin.mjs` | 由 `src/miui.css` 生成作用域化的 `src/skin-miui.css` |

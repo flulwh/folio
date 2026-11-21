@@ -16,6 +16,8 @@ export default [
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      // electron-vite 的构建产物目录（主进程 / preload / 渲染层）
+      'out/**',
       'release/**',
       'release-*/**',
       'android/**',

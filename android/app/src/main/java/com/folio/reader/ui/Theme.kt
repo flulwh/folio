@@ -13,7 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.alexzhirkevich.cupertino.CupertinoScaffoldDefaults
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBarColors
+import io.github.alexzhirkevich.cupertino.CupertinoTopAppBarDefaults
 import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import io.github.alexzhirkevich.cupertino.theme.Shapes
 import io.github.alexzhirkevich.cupertino.theme.Typography
@@ -26,7 +27,8 @@ import io.github.alexzhirkevich.cupertino.theme.lightColorScheme
    组件与观感全部交给 compose-cupertino（iOS 风格），这里只做三件事：
    - 语义色直接对齐 iOS 系统色板：label / secondaryLabel / separator /
      systemGroupedBackground（#F2F2F7 · #000000）/ 卡片（#FFFFFF · #1C1C1E）
-   - 强调色用 systemBlue（#007AFF / #0A84FF），绿 / 橙 / 红只做状态点缀
+   - 强调色用 systemBlue（#007AFF / #0A84FF），可点元素只认这一个彩色；
+     绿 / 橙不再出现在界面上，systemRed 只留给「失败 / 内容不一致」这一种状态
    - 底色 = 当前阅读底色预设（浅色 / 纸白 / 米色 / 石墨 / 夜间），全部落在系统灰阶上
    正文的排版（字号 / 行距 / 字距 / 段距）与皮肤无关，仍由阅读设置驱动。
    ========================================================================== */
@@ -45,11 +47,7 @@ val BrandFill = Color(0xFFE5E5EA)
 val BrandAccent = Color(0xFF007AFF)
 /** 深色下的 systemBlue：夜间底上高一档亮度才够对比。 */
 val BrandAccentDark = Color(0xFF0A84FF)
-/** 正向状态：systemGreen。 */
-val BrandPositive = Color(0xFF34C759)
-/** 提醒状态：systemOrange。 */
-val BrandWarning = Color(0xFFFF9500)
-/** 失败状态：systemRed。 */
+/** 失败状态：systemRed。界面上仅剩这一种语义色。 */
 val BrandNegative = Color(0xFFFF3B30)
 
 /** 阅读底色预设（同时决定阅读器与整个 App 的明暗）。 */
@@ -138,21 +136,32 @@ fun readingPalette(id: String?): ReadingPalette =
 /** 当前生效的纸色，组件与阅读器共用。 */
 val LocalReadingPalette = staticCompositionLocalOf { WHITE_PALETTE }
 
-/* ------------------------------ 顶栏毛玻璃 ------------------------------ */
+/* -------------------------------- 实色栏 -------------------------------- */
 
 /**
- * 顶栏与 Tab Bar 的毛玻璃半径。
+ * 顶栏与 Tab Bar 的底色不透明度：1f = 完全不透明。
  *
- * compose-cupertino 默认 40dp，安卓上每一帧都要按这个半径重做一次卷积：
- * 书架上下滑、封面滚动时它是最主要的 GPU 开销。压到 60%（约 24dp）后
- * 仍是磨砂观感，代价明显下降；系统「减弱透明度」时基准是 50dp，同样按比例缩。
+ * 老版 iOS（iOS 6 及更早）的导航栏是实色的，不透出滚动内容；
+ * scaffold 默认 0.5f 会把下方内容糊成毛玻璃，这里直接拉满。
  */
-val FolioAppBarBlurRadius: Dp
-    get() = CupertinoScaffoldDefaults.AppBarsBlurRadius * 0.6f
+val FolioAppBarAlpha: Float = 1f
 
-/** 与 [FolioAppBarBlurRadius] 配套：半径缩小后把底色提一点，避免发灰发薄。 */
-val FolioAppBarBlurAlpha: Float
-    get() = CupertinoScaffoldDefaults.AppBarsBlurAlpha.let { if (it > 0.6f) it else 0.62f }
+/** 实色栏不需要模糊卷积：半径固定 0，滚动时省掉整块 GPU 开销。 */
+val FolioAppBarBlurRadius: Dp = 0.dp
+
+/**
+ * 顶栏底色：卡片白。
+ *
+ * CupertinoTopAppBar 默认与 Tab 栏同色（tertiarySystemBackground），
+ * 两条栏一样灰就把层级压平了；这里显式抬到卡片白，
+ * 页面灰底 → 卡片白 → Tab 栏浅灰，只用灰阶分层，不再加别的颜色。
+ */
+@Composable
+fun folioTopBarColors(): CupertinoTopAppBarColors =
+    CupertinoTopAppBarDefaults.topAppBarColors(
+        containerColor = CupertinoTheme.colorScheme.secondarySystemGroupedBackground,
+        scrolledContainerColor = CupertinoTheme.colorScheme.secondarySystemGroupedBackground,
+    )
 
 /* --------------------------------- 字体 --------------------------------- */
 

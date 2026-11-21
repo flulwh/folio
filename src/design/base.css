@@ -423,7 +423,7 @@ html[data-frame='macos'] .settings-page-head {
 }
 
 /* 顶部下移：内容整体落到交通灯下方 */
-html[data-frame='macos'] .shelf-header {
+html[data-frame='macos'] .shelf-topbar {
   padding-top: 46px;
 }
 

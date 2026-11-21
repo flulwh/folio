@@ -16,10 +16,10 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.13.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.13.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.13.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.13.0) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.13.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.13.0) | 免安装压缩包，解压后运行 `Folio.exe` |
-| [`Folio-4.3.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-4.3.0/Folio-4.3.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
+| [`Folio-Setup-2.14.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.14.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.14.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-4.4.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-4.4.0/Folio-4.4.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
@@ -66,6 +66,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 ### 书架
 
 - 导入本地 `.txt` / `.md`（含 Markdown），支持**编码嗅探**（UTF-8 / UTF-8 BOM / GBK / UTF-16 自动识别）
+- 导入 `.epub` / `.pdf`：EPUB 用 [foliate-js](https://github.com/johnfactotum/foliate-js) 分页渲染（目录、CFI 定位），PDF 用 [pdf.js](https://github.com/mozilla/pdf.js) 逐页渲染
 - 书卡由书名哈希落到六组封面配色，悬停浮起 + 扫光
 - **继续阅读**大卡：一键回到上次读到的那一行
 - 搜索（按 `/` 聚焦）、排序（最近阅读 / 添加时间 / 书名）、删除确认
@@ -129,9 +130,9 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 ### 外观与主题
 
-- **三套皮肤随时切换**：设置 →「外观 → 界面风格」在 **Apple**（克制、留白、细描边）、**MIUI Console**（大圆角、弥散阴影、弹簧回弹）与 **黑曜**（深空玻璃、紫电强调、封面 3D 倾斜）之间切换，即时生效、随偏好保存
-- **皮肤管形态，主题管颜色** —— 两件事正交。MIUI 皮肤 + 深色主题是合法组合，主色始终来自主题的 `accent`；黑曜是唯一「皮肤自带配色」的，选中时自动切到同名主题
-- 五套内置主题（浅色 / 暖沙 / 深色 / 冷灰 / 黑曜），还能「新建主题」调颜色实时预览，或「导入」一段主题 JSON
+- **Apple Liquid Glass**：书架底部是一枚离开窗口边缘的浮动玻璃胶囊（搜索 / 排序 / 书源 / 书籍市场 / 导入 / 日志 / 设置），正文从它下面滚过；书封、主视觉、阅读器顶栏与抽屉共用同一套折射玻璃材质
+- **形态只有一套，颜色照旧可换** —— 皮肤不再分 Apple / MIUI / 黑曜，统一为 Liquid Glass；四套内置主题（浅色 / 暖沙 / 深色 / 冷灰）决定底色与强调色
+- 还能「新建主题」调颜色实时预览，或「导入」一段主题 JSON
 - **流体交互**：分段控件的选中块是一块会「滑过去」的拇指（弹簧跟随，不是硬切）；设置页分区切换按导航方向推拉淡入；漫画放大层支持双指捏合缩放、拖动平移、越界橡皮筋与松手回弹
 - **减弱动效**：跟随系统「减少动态效果」与设置里的开关，滑块退化为颜色切换
 
@@ -175,7 +176,7 @@ Folio 不提供任何服务器，也不代理内容。你可以导入第三方�
 | `+` / `-` | 字号增减 |
 | `Esc` | 关闭面板 / 唤醒工具栏 / 返回书架 |
 | `/` | 书架页聚焦搜索 |
-| `Ctrl` + `O` | 导入 TXT / Markdown |
+| `Ctrl` + `O` | 导入电子书 |
 | `?` | 快捷键说明面板 |
 
 ---
@@ -225,7 +226,7 @@ cd android
 > 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
 > push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
-> 版本号只写在 `package.json`（当前 `2.13.0`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.14.0`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)
@@ -252,7 +253,7 @@ cd android
 
 ## 设计取舍
 
-- **只收纯文本**：EPUB 本质是 ZIP 容器，需要额外的解析与内联资源处理；本项目把「正则章节匹配」作为核心，纯文本更能把这套机制做透
+- **纯文本走章节正则，电子书走成熟库**：TXT / Markdown 用「正则章节匹配」把正文切成段落，段落索引就是进度锚点；EPUB / PDF 不自己解析容器，分别交给 foliate-js 与 pdf.js，进度额外记 `location`（CFI）/ `page`，旧字段保持不变
 - **进度锚在段落而非像素**：字号与栏宽随时可调，段落索引是唯一稳定的坐标
 - **书源不做自建后端**：内容只在你的机器与源站之间流动，Folio 不托管、不中转、不缓存到云端
 - **局域网面板零依赖**：只用 Node 内置 `http`，不引 WebSocket、不引任何 npm 包，打包体积不变

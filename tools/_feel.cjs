@@ -232,8 +232,7 @@ const getJson = (path) =>
   await trial('主按钮', '.btn.primary', 'scale', { hold: 180, total: 800 });
 
   // 2) 分段滑块：读内联 style 里的 translateX（framer 每帧写的就是这个值）。
-  //    不能用 getComputedStyle：在 miui 皮肤下 .segmented-thumb 命中多个节点时，
-  //    计算值可能来自那个 display:none 的旧节点，恒为 none → 恒为 0。
+  //    不能用 getComputedStyle：过渡未结束时计算值会落在中间的插值上，看不出弹簧轨迹。
   const beforeSort = await js(
     `document.querySelector('.segmented .segmented-item.active')?.textContent?.trim() || '-'`
   );

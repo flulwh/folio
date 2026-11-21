@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import Tilt from 'react-parallax-tilt';
+import { LiquidGlass } from '@vepando/liquid-glass-react';
 import { useMotionKit } from '../design/motion.js';
 import { cleanSourceName } from '../utils/text.js';
 import { useAppActions, useBooks, useDevices, useProgress, useSources, dataApi } from '../store/AppStore.jsx';
@@ -8,7 +8,7 @@ import SourcePanel from './SourcePanel.jsx';
 import LogPanel from './LogPanel.jsx';
 import Segmented from './Segmented.jsx';
 import { SAMPLE_BOOK_CONTENT, SAMPLE_BOOK_NAME } from '../data/sampleBook.js';
-import { decodeBuffer, formatDate, formatPercent, isProbablyTextFile } from '../utils/format.js';
+import { decodeBuffer, formatDate, formatPercent, isEbookFile, isProbablyTextFile } from '../utils/format.js';
 import { useCachedCover, useCoverReadyTick, usePrimeShelfCovers } from '../hooks/useCachedCover.js';
 import { ContextMenuArea } from '../ui/Menu.jsx';
 import {
@@ -55,13 +55,13 @@ function coverStyle(book) {
   };
 }
 
-function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, index, coverTick, variants, tilt }) {
+function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, index, coverTick, variants }) {
   const percentValue = Math.min(100, Math.max(0, percent || 0));
   const finished = percentValue >= 99.5;
   const coverTickValue = coverTick; // 批量封面就绪后重新求一次地址
   const coverSrc = useCachedCover(book, coverTickValue);
 
-  // 封面本体。黑曜皮肤会把它包进 Tilt（见下方），其他皮肤直接渲染。
+  // 封面本体
   const cover = (
     <button
       className={`book-cover${coverSrc ? ' has-art' : ''}`}
@@ -115,27 +115,7 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, i
         custom={index}
         onClick={() => onOpen(book)}
       >
-        {/* 3D 倾斜只在黑曜皮肤里开：其他两套的封面语言是平的，加倾斜会打架。
-            角度压得很小（7°/9°），配一层紫光 glare，像玻璃书封被灯照到。 */}
-        {tilt ? (
-          <Tilt
-            className="cover-tilt"
-            tiltMaxAngleX={7}
-            tiltMaxAngleY={9}
-            perspective={900}
-            scale={1.03}
-            transitionSpeed={900}
-            gyroscope={false}
-            glareEnable
-            glareMaxOpacity={0.16}
-            glareColor="#b3aaff"
-            glarePosition="all"
-          >
-            {cover}
-          </Tilt>
-        ) : (
-          cover
-        )}
+        {cover}
         <div className="book-meta">
           <div className="book-meta-text">
             <div className="book-name" title={book.name}>
@@ -188,11 +168,8 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, i
 
 export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) {
   const kit = useMotionKit();
-  // 级联节奏随皮肤走：苹果 18ms 紧凑，MIUI 26ms 能看出"一列列亮起来"，
-  // 黑曜 30ms——每项还带 60px 景深差，太密就看不出"从深处依次归位"。
+  // 级联节奏：苹果 18ms 紧凑，一列列亮起来刚好能看清
   const containerVariants = useMemo(() => {
-    if (kit.id === 'miui') return kit.stagger(0.026, 0.06);
-    if (kit.id === 'obsidian') return kit.stagger(0.03, 0.04);
     return kit.stagger(0.018, 0.05);
   }, [kit]);
   const books = useBooks();
@@ -201,6 +178,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
   const sources = useSources();
   const {
     addBookFromText,
+    addBookFromBinary,
     addBookFromPicker,
     removeBook,
     restoreBook,
@@ -341,9 +319,11 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
 
   const importBooks = useCallback(
     async (files) => {
-      const list = Array.from(files).filter((f) => isProbablyTextFile(f.name) || f.type.startsWith('text/'));
+      const list = Array.from(files).filter(
+        (f) => isProbablyTextFile(f.name) || isEbookFile(f.name) || f.type.startsWith('text/')
+      );
       if (!list.length) {
-        notify('请拖入 TXT 或 Markdown 文本文件', 'error');
+        notify('请拖入 TXT / Markdown 或 EPUB / PDF 文件', 'error');
         return;
       }      let ok = 0;
       let failed = 0;
@@ -354,12 +334,14 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         }
         try {
           const buffer = await file.arrayBuffer();
-          const content = decodeBuffer(buffer);
-          const added = await addBookFromText({
-            id: `${file.name}::${file.size}::${file.lastModified || 0}`,
-            name: file.name.replace(/\.(txt|md|markdown|text)$/i, ''),
-            content,
-          });
+          // EPUB / PDF 按二进制落盘，阅读器自己解析；其余仍按文本解码
+          const added = isEbookFile(file.name)
+            ? await addBookFromBinary({ name: file.name, data: new Uint8Array(buffer) })
+            : await addBookFromText({
+                id: `${file.name}::${file.size}::${file.lastModified || 0}`,
+                name: file.name.replace(/\.(txt|md|markdown|text)$/i, ''),
+                content: decodeBuffer(buffer),
+              });
           if (added) ok += 1;
           else failed += 1;
         } catch (err) {
@@ -375,7 +357,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         );
       }
     },
-    [addBookFromText, notify]
+    [addBookFromText, addBookFromBinary, notify]
   );
 
   const handleImport = useCallback(async () => {
@@ -454,85 +436,26 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
   return (
     <div className="shelf">
       <motion.header
-        className="shelf-header"
-        initial={{ opacity: 0, y: -18 }}
+        className="shelf-topbar"
+        initial={{ opacity: 0, y: -14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="brand">
-          <span className="brand-mark">
-            <IconBook size={20} />
-          </span>
-          <div className="brand-text">
-            <span className="brand-name">Folio</span>
+        <LiquidGlass className="brand-glass" radius={999}>
+          <div className="brand">
+            <span className="brand-mark">
+              <IconBook size={18} />
+            </span>
+            <div className="brand-text">
+              <span className="brand-name">Folio</span>
+            </div>
           </div>
-        </div>
+        </LiquidGlass>
 
-        <div className="shelf-tools">
-          <label className="search">
-            <IconSearch size={17} />
-            <input
-              ref={searchRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索书名"
-              spellCheck={false}
-            />
-            {query && (
-              <button className="search-clear" onClick={() => setQuery('')} title="清除">
-                <IconX size={14} />
-              </button>
-            )}
-          </label>
-
-          <Segmented
-            ariaLabel="排序方式"
-            options={[
-              { value: 'recent', label: '最近阅读' },
-              { value: 'added', label: '添加时间' },
-              { value: 'name', label: '书名' },
-            ]}
-            value={sort}
-            onChange={setSort}
-          />
-
-          <button className="btn ghost shelf-source-btn" onClick={() => setSourceOpen(true)}>
-            <IconCloud size={16} />
-            书源
-            {sources.length > 0 && <span className="tool-count">{sources.length}</span>}
-          </button>
-
-          <button
-            className="btn ghost shelf-cloud-btn"
-            onClick={() => onOpenMarket?.()}
-            title="打开书籍市场，在所有书源里搜书"
-          >
-            <IconGrid size={16} />
-            书籍市场
-          </button>
-
-          <button className="btn primary" onClick={handleImport}>
-            <IconPlus size={17} />
-            导入
-          </button>
-
-          <button
-            className="btn ghost shelf-log-btn"
-            onClick={() => setLogOpen(true)}
-            title="运行日志（排错用）"
-            aria-label="运行日志"
-          >
-            <IconTerminal size={16} />
-          </button>
-
-          <button
-            className="btn ghost shelf-settings-btn"
-            onClick={() => onOpenSettings?.()}
-            title="打开设置"
-            aria-label="设置"
-          >
-            <IconSettings size={16} />
-          </button>
+        <div className="shelf-topbar-meta">
+          <span>{books.length} 本藏书</span>
+          <span className="dot">·</span>
+          <span>平均进度 {formatPercent(averagePercent)}</span>
         </div>
       </motion.header>
 
@@ -621,7 +544,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
               <span className="mascot-bubble">来读点有趣的东西吧～</span>
             </div>
             <h2>书架空着，正好放一本新书</h2>
-            <p>导入 TXT / Markdown，或把文件直接拖进窗口。也可以先读一篇内置的示例，看看沉浸阅读是什么感觉。</p>
+            <p>导入 TXT / Markdown / EPUB / PDF，或把文件直接拖进窗口。也可以先读一篇内置的示例，看看沉浸阅读是什么感觉。</p>
             <div className="empty-actions">
               <button className="btn primary" onClick={handleImport}>
                 <IconPlus size={17} />
@@ -660,7 +583,6 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
                   index={i}
                   coverTick={coverTick}
                   variants={kit.rise}
-                  tilt={kit.id === 'obsidian'}
                   percent={percentOf(book)}
                   onOpen={onOpenBook}
                   onDelete={setPendingDelete}
@@ -677,13 +599,91 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
         )}
       </div>
 
-      <footer className="shelf-footer">
-        <span>
-          藏书 {books.length} 本 · 平均进度 {formatPercent(averagePercent)}
-        </span>        <span className="shelf-footer-keys">
-          <kbd>/</kbd> 搜索 <kbd>拖拽</kbd> 导入 <kbd>?</kbd> 快捷键
-        </span>
-      </footer>
+      <motion.div
+        className="shelf-dock"
+        initial={{ opacity: 0, y: 26 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...kit.spring.panel, delay: 0.15 }}
+      >
+        <LiquidGlass className="dock-glass" radius={999}>
+          <div className="dock-inner">
+            <label className="search" title="搜索书名（/）">
+              <IconSearch size={16} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索书名"
+                spellCheck={false}
+              />
+              {query && (
+                <button className="search-clear" onClick={() => setQuery('')} title="清除">
+                  <IconX size={14} />
+                </button>
+              )}
+            </label>
+
+            <span className="dock-sep" aria-hidden="true" />
+
+            <Segmented
+              ariaLabel="排序方式"
+              options={[
+                { value: 'recent', label: '最近阅读' },
+                { value: 'added', label: '添加时间' },
+                { value: 'name', label: '书名' },
+              ]}
+              value={sort}
+              onChange={setSort}
+            />
+
+            <span className="dock-sep" aria-hidden="true" />
+
+            <button className="dock-btn" onClick={() => setSourceOpen(true)} title="书源">
+              <IconCloud size={16} />
+              <span>书源</span>
+              {sources.length > 0 && <span className="tool-count">{sources.length}</span>}
+            </button>
+
+            <button
+              className="dock-btn"
+              onClick={() => onOpenMarket?.()}
+              title="打开书籍市场，在所有书源里搜书"
+            >
+              <IconGrid size={16} />
+              <span>书籍市场</span>
+            </button>
+
+            <button
+              className="dock-btn dock-btn-primary"
+              onClick={handleImport}
+              title="导入（拖拽文件到窗口也可以）"
+            >
+              <IconPlus size={16} />
+              <span>导入</span>
+            </button>
+
+            <span className="dock-sep" aria-hidden="true" />
+
+            <button
+              className="dock-icon-btn"
+              onClick={() => setLogOpen(true)}
+              title="运行日志（排错用）"
+              aria-label="运行日志"
+            >
+              <IconTerminal size={16} />
+            </button>
+
+            <button
+              className="dock-icon-btn"
+              onClick={() => onOpenSettings?.()}
+              title="打开设置"
+              aria-label="设置"
+            >
+              <IconSettings size={16} />
+            </button>
+          </div>
+        </LiquidGlass>
+      </motion.div>
 
       <AnimatePresence>
         {dragging && (
@@ -703,7 +703,7 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
             >
               <IconPlus size={26} />
               <p>松开即可导入到书架</p>
-              <span>支持 TXT / Markdown</span>
+              <span>支持 TXT / Markdown / EPUB / PDF</span>
             </motion.div>
           </motion.div>
         )}

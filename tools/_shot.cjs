@@ -1,5 +1,6 @@
-// 离屏截图工具：起一个临时 HTTP 服务托管 dist/，注入种子数据后再加载页面。
-// 用法：npx electron tools/_shot.cjs --out=x.png [--w=1280] [--h=800] [--theme=night] [--skin=miui] [--wait=1200]
+// 离屏截图工具：起一个临时 HTTP 服务托管渲染层产物，注入种子数据后再加载页面。
+// 产物目录优先 electron-vite 的 out/renderer，旧 dist/ 仍兼容。
+// 用法：npx electron tools/_shot.cjs --out=x.png [--w=1280] [--h=800] [--theme=night] [--wait=1200]
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -12,12 +13,14 @@ const argv = process.argv.slice(2).reduce((acc, cur) => {
   return acc;
 }, {});
 
-const ROOT = path.join(__dirname, '..', 'dist');
+const REPO = path.join(__dirname, '..');
+const ROOT = fs.existsSync(path.join(REPO, 'out', 'renderer', 'index.html'))
+  ? path.join(REPO, 'out', 'renderer')
+  : path.join(REPO, 'dist');
 const OUT = argv.out || 'shot.png';
 const W = Number(argv.w || 1280);
 const H = Number(argv.h || 800);
-const THEME = argv.theme || '';
-const SKIN = argv.skin || '';
+const THEME = argv.theme || 'paper';
 const WAIT = Number(argv.wait || 1100);
 
 const MIME = {
@@ -72,7 +75,7 @@ app.whenReady().then(async () => {
 
   // 先落在空白页，写入 localStorage 种子，再进入应用
   await win.loadURL(`${base}/seed.html`).catch(() => {});
-  await win.webContents.executeJavaScript(require('./_seed.cjs')('shelf', THEME, '', SKIN)).catch((e) => {
+  await win.webContents.executeJavaScript(require('./_seed.cjs')('shelf', THEME, '')).catch((e) => {
     console.error('seed failed:', e.message);
   });
 

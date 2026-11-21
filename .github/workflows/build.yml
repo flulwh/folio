@@ -70,14 +70,6 @@ jobs:
       - name: 发版门禁（构建后）
         run: npm run check -- --require-dist
 
-      - name: 上传前端产物
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist
-          path: dist/
-          retention-days: 7
-          if-no-files-found: error
-
   package:
     name: Windows 四目标打包
     needs: verify
@@ -98,11 +90,8 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      - name: 下载前端产物
-        uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist
+      - name: 构建主进程 / preload / 渲染层
+        run: npx electron-vite build
 
       - name: 打包 NSIS / portable / zip / dir
         # 加 --publish never：否则打 tag 时 electron-builder 会认为要自己发布到 GitHub，

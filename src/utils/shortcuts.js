@@ -16,7 +16,7 @@ export const SHORTCUT_GROUPS = [
     title: '书架',
     items: [
       ['/', '搜索书名'],
-      [`${mod} + O`, '导入 TXT / Markdown'],
+      [`${mod} + O`, '导入电子书'],
       ['拖拽文件', '导入到书架'],
     ],
   },

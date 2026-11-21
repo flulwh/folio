@@ -697,7 +697,6 @@ export function createLanService(opts) {
     const custom = Array.isArray(settings.customThemes) ? settings.customThemes : [];
     return {
       id: settings.theme || 'paper',
-      skin: settings.skin === 'miui' ? 'miui' : 'apple',
       custom: custom.map((item) => ({
         id: item?.id,
         label: item?.label,
@@ -1488,6 +1487,15 @@ export function createLanService(opts) {
           error: hit.error,
           cloud: hit.error === 'cloud',
           book: hit.book ? slimBook(hit.book) : null,
+        });
+        return;
+      }
+      // EPUB / PDF 是二进制，面板按纯文本读会是一堆乱码，直接请在桌面端打开
+      if (hit.book?.format === 'epub' || hit.book?.format === 'pdf') {
+        sendJson(res, 415, {
+          ok: false,
+          error: 'EPUB / PDF 请在桌面端阅读',
+          book: slimBook(hit.book),
         });
         return;
       }
