@@ -594,6 +594,19 @@ class AnnounceApp(tk.Tk):
                 return
             push = git("push", "origin", "main")
             if push.returncode != 0:
+                # 远端被别的提交推动了（最常见是 CI 机器人更新 README），
+                # 把本地提交挪到远端之上再推一次；--autostash 保住用户没提交的改动。
+                fetch = git("fetch", "origin", "main")
+                if fetch.returncode != 0:
+                    self.after(0, lambda: self._fail("推送失败（拉取远端也失败，提交已在本地）", fetch))
+                    return
+                rebase = git("rebase", "--autostash", "origin/main")
+                if rebase.returncode != 0:
+                    git("rebase", "--abort")
+                    self.after(0, lambda: self._fail("推送失败（远端有新提交，自动合并失败，提交已在本地）", rebase))
+                    return
+                push = git("push", "origin", "main")
+            if push.returncode != 0:
                 self.after(0, lambda: self._fail("推送失败（提交已在本地）", push))
                 return
             self.after(0, lambda: self._set_busy(
