@@ -37,8 +37,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -88,8 +88,8 @@ fun ComicReaderScreen(
     onOpenSettings: () -> Unit,
 ) {
     val vm = model.session
-    val comic by vm.comic.collectAsState()
-    val settings by vm.settingsState.collectAsState()
+    val comic by vm.comic.collectAsStateWithLifecycle()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
     val scheme = CupertinoTheme.colorScheme
 
     val book = comic.book

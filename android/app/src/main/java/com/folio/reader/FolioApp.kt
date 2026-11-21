@@ -146,7 +146,15 @@ class FolioApp : Application() {
     /** 内存压力：图片与章节缓存跟着让路，绝不去动磁盘（本来也没有磁盘缓存）。 */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        SingletonImageLoader.get(this).memoryCache?.clear()
+        val imageCache = SingletonImageLoader.get(this).memoryCache
+        when {
+            // 进后台：整块让出，系统和其它应用要用。
+            level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> imageCache?.clear()
+            // 前台偏紧：只砍一半。直接清空会把当前屏幕的封面 / 漫画页一起丢掉，
+            // 回到前台要重新下载 + 解码，反而更卡也更费电。
+            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ->
+                imageCache?.trimToSize(imageCache.maxSize / 2)
+        }
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
             container.chapters.clear()
         }

@@ -198,38 +198,33 @@ data class ShelfUiState(
             }.distinctBy { it.id }
         }
 
-    /** 继续阅读：最近在读的 1–3 本，按 lastReadAt。 */
-    val continueReading: List<Book>
-        get() = visibleBooks
-            .filter { progress.containsKey(it.id) }
-            .sortedByDescending { progress[it.id]?.updatedAt ?: 0L }
-            .take(3)
-
-    /** 本机书：自己导进来、正文在手机上。 */
-    val localSection: List<Book>
-        get() = visibleBooks.filter { it.origin == Origin.LOCAL && it.hasLocalFile }
-
-    /** 桌面端书：从桌面端清单来的（含云端小说与漫画）。 */
-    val desktopSection: List<Book>
-        get() = visibleBooks.filter { it.origin == Origin.DESKTOP }
-
     /**
      * 分区。空分区不显示。
      *
      * 分区之间**允许重叠**：一本有进度的本机书会同时出现在「继续阅读」（当快捷入口）
      * 与「本机书」（当全集）。这是产品上有意为之的，所以渲染时 item key 必须带分区前缀，
      * 否则 Compose 会抛「Key was already used」把整个书架打死（3.0.0 真机上就是这么崩的）。
+     *
+     * `visibleBooks` 每次都会过滤 + 去重一遍，这里只取一次再分三份：
+     * 之前三个 getter 各算一次，几百本书的书架在每次状态变化时要白扫三遍。
      */
     val sections: List<ShelfSection>
         get() {
+            val visible = visibleBooks
             val list = ArrayList<ShelfSection>(3)
-            val reading = continueReading
+            // 继续阅读：最近在读的 1–3 本，按 lastReadAt。
+            val reading = visible
+                .filter { progress.containsKey(it.id) }
+                .sortedByDescending { progress[it.id]?.updatedAt ?: 0L }
+                .take(3)
             if (reading.isNotEmpty()) list.add(ShelfSection("continue", "继续阅读", reading))
-            val local = localSection
+            // 本机书：自己导进来、正文在手机上。
+            val local = visible.filter { it.origin == Origin.LOCAL && it.hasLocalFile }
             if (local.isNotEmpty()) {
                 list.add(ShelfSection("local", "本机书（${local.size}）", local))
             }
-            val desktop = desktopSection
+            // 桌面端书：从桌面端清单来的（含云端小说与漫画）。
+            val desktop = visible.filter { it.origin == Origin.DESKTOP }
             if (desktop.isNotEmpty()) {
                 list.add(ShelfSection("desktop", "桌面端书（${desktop.size}）", desktop))
             }

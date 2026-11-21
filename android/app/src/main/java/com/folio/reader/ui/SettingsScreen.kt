@@ -28,7 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,8 +85,9 @@ private val AutoScrollChoices = listOf("慢", "稳", "快", "疾")
 /**
  * 设置页（Cupertino）。
  *
- * 四组 InsetGrouped 分组：连接 / 同步 / 阅读 / 本机。
+ * 六组 InsetGrouped 分组：连接 / 同步 / 排版 / 翻页 / 外观 / 本机 / 公告。
  * 开关、滑杆、下拉全部用 Cupertino 原生件，只有「排版预览」与「底色选择」是内容块。
+ * 4.7 把原来一整块「阅读」拆成排版 / 翻页 / 外观三组：一组十几行太难扫。
  */
 @OptIn(ExperimentalCupertinoApi::class)
 @Composable
@@ -98,10 +99,10 @@ fun SettingsScreen(
     bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
-    val state by vm.settingsState.collectAsState()
-    val shelf by vm.shelf.collectAsState()
-    val update by vm.updateState.collectAsState()
-    val notices by vm.noticeState.collectAsState()
+    val state by vm.settingsState.collectAsStateWithLifecycle()
+    val shelf by vm.shelf.collectAsStateWithLifecycle()
+    val update by vm.updateState.collectAsStateWithLifecycle()
+    val notices by vm.noticeState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scheme = CupertinoTheme.colorScheme
     var showDiagnostics by remember { mutableStateOf(false) }
@@ -345,23 +346,11 @@ fun SettingsScreen(
                 }
             }
 
-            /* ---------------- 阅读 ---------------- */
-            item("read") {
+            /* ---------------- 排版 ---------------- */
+            item("typeset") {
                 Reveal(index = 2) {
-                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("阅读")) {
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("排版")) {
                         Item(key = "preview") { ReadingPreview(state) }
-                        Item(key = "mode") {
-                            SegmentedRow(
-                                title = "阅读方式",
-                                options = listOf("上下滚动", "左右翻页"),
-                                selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
-                                onSelect = {
-                                    vm.updateReadingMode(
-                                        if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
-                                    )
-                                },
-                            )
-                        }
                         SliderItem(
                             title = "字号",
                             valueLabel = "${state.fontSizeSp.roundToInt()}sp",
@@ -402,6 +391,12 @@ fun SettingsScreen(
                             minValue = 12f,
                             maxValue = 48f,
                         )
+                        SwitchItem(
+                            title = "首行缩进",
+                            summary = "每段首行缩进两个字符",
+                            checked = state.firstLineIndent,
+                            onCheckedChange = vm::updateFirstLineIndent,
+                        )
                         Item(key = "font-family") {
                             SegmentedRow(
                                 title = "系统字体",
@@ -423,30 +418,32 @@ fun SettingsScreen(
                                 CupertinoText(text = "字体商店", fontSize = 17.sp, color = scheme.label)
                             }
                         }
+                    }
+                }
+            }
+
+            /* ---------------- 翻页 ---------------- */
+            item("paging") {
+                Reveal(index = 3) {
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("翻页")) {
+                        Item(key = "mode") {
+                            SegmentedRow(
+                                title = "阅读方式",
+                                options = listOf("上下滚动", "左右翻页"),
+                                selectedIndex = if (state.readingMode == SettingsStore.MODE_PAGED) 1 else 0,
+                                onSelect = {
+                                    vm.updateReadingMode(
+                                        if (it == 1) SettingsStore.MODE_PAGED else SettingsStore.MODE_SCROLL
+                                    )
+                                },
+                            )
+                        }
                         Item(key = "auto-scroll") {
                             SegmentedRow(
                                 title = "自动滚动",
                                 options = AutoScrollChoices,
                                 selectedIndex = state.autoScrollSpeed.coerceIn(0, AutoScrollChoices.lastIndex),
                                 onSelect = vm::updateAutoScrollSpeed,
-                            )
-                        }
-                        SwitchItem(
-                            title = "首行缩进",
-                            summary = "每段首行缩进两个字符",
-                            checked = state.firstLineIndent,
-                            onCheckedChange = vm::updateFirstLineIndent,
-                        )
-                        SwitchItem(
-                            title = "保持常亮",
-                            summary = "阅读时不熄屏",
-                            checked = state.keepScreenOn,
-                            onCheckedChange = vm::updateKeepScreenOn,
-                        )
-                        Item(key = "palette") {
-                            PaletteRow(
-                                selectedId = state.themePreset,
-                                onSelect = vm::updateThemePreset,
                             )
                         }
                         Item(key = "comic-direction") {
@@ -461,13 +458,33 @@ fun SettingsScreen(
                                 },
                             )
                         }
+                        SwitchItem(
+                            title = "保持常亮",
+                            summary = "阅读时不熄屏",
+                            checked = state.keepScreenOn,
+                            onCheckedChange = vm::updateKeepScreenOn,
+                        )
+                    }
+                }
+            }
+
+            /* ---------------- 外观 ---------------- */
+            item("appearance") {
+                Reveal(index = 4) {
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("外观")) {
+                        Item(key = "palette") {
+                            PaletteRow(
+                                selectedId = state.themePreset,
+                                onSelect = vm::updateThemePreset,
+                            )
+                        }
                     }
                 }
             }
 
             /* ---------------- 本机 ---------------- */
             item("local") {
-                Reveal(index = 3) {
+                Reveal(index = 5) {
                     CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("本机")) {
                         Item(key = "local-bytes") { ValueRow(title = "本机正文", value = formatSize(state.localBytes)) }
                         Item(key = "memory") { ValueRow(title = "内存缓存", value = formatSize(state.memoryBytes)) }
@@ -590,7 +607,7 @@ fun SettingsScreen(
 
             /* ---------------- 公告 ---------------- */
             item("notices") {
-                Reveal(index = 4) {
+                Reveal(index = 6) {
                     CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("公告")) {
                         if (notices.notices.isEmpty()) {
                             Item(key = "notice-empty") {

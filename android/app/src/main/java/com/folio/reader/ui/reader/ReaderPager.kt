@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.folio.reader.core.Chapter
 import com.folio.reader.core.Paragraph
 import com.folio.reader.ui.PageTurn
+import com.folio.reader.ui.ReaderColumn
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -212,6 +214,8 @@ fun ReaderPager(
         onJumpHandled()
     }
 
+    val gutter = maxOf(0.dp, (LocalConfiguration.current.screenWidthDp.dp - ReaderColumn) / 2)
+
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         // 预留给顶栏：翻页模式下正文不钻到 HUD 底下，页面顶部保持一条纸边
         Spacer(Modifier.height(36.dp))
@@ -220,7 +224,10 @@ fun ReaderPager(
                 .weight(1f)
                 .fillMaxWidth(),
         ) {
-            val widthPx = with(density) { (maxWidth - pagePadding.dp * 2).roundToPx() }
+            // 分页测量用的是收窄后的正文列宽，否则宽屏上每页末尾会多出一大片空白。
+            val widthPx = with(density) {
+                (maxWidth - gutter - gutter - pagePadding.dp * 2).roundToPx()
+            }
             // 页内容上下各 4dp 内边距，测量时先扣掉，避免最后一行压到页脚
             val heightPx = with(density) { (maxHeight - 8.dp).roundToPx() }
             val key = PageLayoutKey(
@@ -281,6 +288,7 @@ fun ReaderPager(
                     kickerStyle = kickerStyle,
                     headingStyle = headingStyle,
                     pagePadding = pagePadding,
+                    gutter = gutter,
                     paragraphGap = paragraphGap,
                     blankGap = blankGap,
                     bookmarkedParas = bookmarkedParas,
@@ -293,7 +301,7 @@ fun ReaderPager(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = (pagePadding + 2).dp, vertical = 4.dp),
+                .padding(horizontal = (pagePadding + 2).dp + gutter, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CupertinoText(
@@ -321,6 +329,7 @@ private fun PageView(
     kickerStyle: TextStyle,
     headingStyle: TextStyle,
     pagePadding: Int,
+    gutter: Dp,
     paragraphGap: Dp,
     blankGap: Dp,
     bookmarkedParas: Set<Int>,
@@ -330,7 +339,7 @@ private fun PageView(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = pagePadding.dp, vertical = 4.dp),
+            .padding(horizontal = pagePadding.dp + gutter, vertical = 4.dp),
     ) {
         page.blocks.forEach { block ->
             when (block) {

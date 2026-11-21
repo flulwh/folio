@@ -26,6 +26,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -64,13 +65,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import com.folio.reader.core.Book
 import com.folio.reader.core.Origin
 import com.folio.reader.data.ConnectionState
+import com.folio.reader.net.Notice
 import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
 import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
@@ -116,8 +118,8 @@ fun ShelfScreen(
     bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
-    val state by vm.shelf.collectAsState()
-    val notices by vm.noticeState.collectAsState()
+    val state by vm.shelf.collectAsStateWithLifecycle()
+    val notices by vm.noticeState.collectAsStateWithLifecycle()
     val gridState = rememberLazyGridState()
     val scheme = CupertinoTheme.colorScheme
 
@@ -149,8 +151,8 @@ fun ShelfScreen(
     ) { state.sections }
 
     // 封面墙里翻到新导入的书：先按「头部区 + 分区标题 + 每本一格」换算成网格下标。
-    // 头部区（统计 / 搜索 / 筛选 / 横幅）在网格里也各占一格，计数要和下面的 item 一一对应。
-    val headerItems = 1 + 1 + 1 + 1 + if (state.importing) 1 else 0
+    // 头部区（统计 / 搜索 / 筛选 / 横幅 / 导入）合成了一整块，只占一格。
+    val headerItems = 1
     LaunchedEffect(state.highlightId, sections) {
         val id = state.highlightId ?: return@LaunchedEffect
         var index = headerItems + if (sections.any { it.key == "continue" }) 1 else 0
@@ -187,159 +189,116 @@ fun ShelfScreen(
         appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
     ) { padding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            state = gridState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = PageMargin,
-                end = PageMargin,
-                top = padding.calculateTopPadding(),
-                bottom = padding.calculateBottomPadding() + 20.dp,
-            ),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
-        ) {
-            item(key = "shelf-stats", span = { GridItemSpan(maxLineSpan) }) {
-                ShelfStats(state = state, onOpenSyncStatus = onOpenSyncStatus)
-            }
-
-            item(key = "shelf-search", span = { GridItemSpan(maxLineSpan) }) {
-                AnimatedVisibility(
-                    visible = searchOpen,
-                    enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-                    exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-                ) {
-                    CupertinoSearchTextField(
-                        value = state.query,
-                        onValueChange = vm::setQuery,
-                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                        placeholder = {
-                            CupertinoText(
-                                text = "搜书名或作者",
-                                fontSize = 16.sp,
-                                color = scheme.placeholderText,
-                            )
-                        },
+        // 列数跟着可用宽度走：手机 3 列、横屏 4–5 列、平板 6 列。
+        // 固定 3 列在平板上会把封面拉到 200dp 以上，一屏只剩 6 本。
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(shelfColumnsFor(maxWidth)),
+                state = gridState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(
+                    start = PageMargin,
+                    end = PageMargin,
+                    top = padding.calculateTopPadding() + 8.dp,
+                    bottom = padding.calculateBottomPadding() + 20.dp,
+                ),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item(key = "shelf-header", span = { GridItemSpan(maxLineSpan) }) {
+                    ShelfHeader(
+                        state = state,
+                        searchOpen = searchOpen,
+                        onQueryChange = vm::setQuery,
+                        onSelectFilter = vm::setFilter,
+                        onOpenSyncStatus = onOpenSyncStatus,
+                        onConnect = onOpenSettings,
+                        onDismissOfflineBanner = vm::dismissBanner,
+                        notice = notices.bannerNotice,
+                        onDismissNotice = vm::dismissNotice,
+                        importing = state.importing,
+                        importLabel = state.importLabel.ifBlank { "正在导入…" },
                     )
                 }
-            }
 
-            item(key = "shelf-filter", span = { GridItemSpan(maxLineSpan) }) {
-                FilterChips(selected = state.filter, onSelect = vm::setFilter)
-            }
-
-            item(key = "shelf-banner", span = { GridItemSpan(maxLineSpan) }) {
-                Column {
-                    // 公告横幅只挂在书架首屏：第一条未读，关掉即记 id 不再出现。
-                    val notice = notices.bannerNotice
-                    AnimatedVisibility(
-                        visible = notice != null,
-                        enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-                        exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-                    ) {
-                        if (notice != null) {
-                            NoticeBanner(
-                                title = notice.title,
-                                body = notice.body,
-                                date = notice.date,
-                                onDismiss = { vm.dismissNotice(notice.id) },
+                if (sections.isEmpty()) {
+                    item(key = "shelf-empty", span = { GridItemSpan(maxLineSpan) }) {
+                        // 固定高度而不是 heightIn：网格项的最大高度是无穷大，
+                        // heightIn 会让 EmptyShelf 的 fillMaxSize 失效、内容贴顶。
+                        Box(Modifier.fillMaxWidth().height(340.dp)) {
+                            EmptyShelf(
+                                hasBooks = state.books.isNotEmpty(),
+                                onImport = importAction,
+                                onConnect = onOpenSettings,
                             )
                         }
                     }
-                    AnimatedVisibility(
-                        visible = state.showBanner,
-                        enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-                        exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-                    ) {
-                        OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
-                    }
-                }
-            }
-
-            if (state.importing) {
-                item(key = "shelf-import", span = { GridItemSpan(maxLineSpan) }) {
-                    ImportStrip(label = state.importLabel.ifBlank { "正在导入…" })
-                }
-            }
-
-            if (sections.isEmpty()) {
-                item(key = "shelf-empty", span = { GridItemSpan(maxLineSpan) }) {
-                    // 固定高度而不是 heightIn：网格项的最大高度是无穷大，
-                    // heightIn 会让 EmptyShelf 的 fillMaxSize 失效、内容贴顶。
-                    Box(Modifier.fillMaxWidth().height(340.dp)) {
-                        EmptyShelf(
-                            hasBooks = state.books.isNotEmpty(),
-                            onImport = importAction,
-                            onConnect = onOpenSettings,
-                        )
-                    }
-                }
-            } else {
-                sections.forEach { section ->
-                    if (section.key == "continue") {
-                        item(
-                            key = "continue-hero",
-                            span = { GridItemSpan(maxLineSpan) },
-                        ) {
-                            val featured = section.books.first()
-                            ContinueCard(
-                                book = featured,
-                                state = state,
-                                onOpen = { onOpenBook(featured) },
-                            )
-                        }
-                    } else {
-                        item(
-                            key = "header-${section.key}",
-                            span = { GridItemSpan(maxLineSpan) },
-                        ) {
-                            SectionLabel(
-                                title = section.title.substringBefore("（"),
-                                count = section.books.size,
-                            )
-                        }
-                        itemsIndexed(
-                            items = section.books,
-                            key = { _, book -> "book-${section.key}-${book.id}" },
-                        ) { index, book ->
-                            val rowKey = "${section.key}-${book.id}"
-                            Reveal(index = index) {
-                                BookCell(
-                                    book = book,
-                                    // 只传单元格自己用得到的值：整份 ShelfUiState 是不稳定类型，
-                                    // 传进来会让同步 / 进度变化时每个可见封面都跟着重组。
-                                    badge = state.badgeOf(book),
-                                    transferPercent = state.transferPercent(book),
-                                    percent = state.progressPercentOf(book),
-                                    summary = state.progressSummaryOf(book),
-                                    readable = state.readable(book),
-                                    highlighted = state.highlightId == book.id,
-                                    menuOpen = menuFor == rowKey,
-                                    onToggleMenu = {
-                                        menuFor = if (menuFor == rowKey) null else rowKey
-                                    },
-                                    onOpen = {
-                                        menuFor = null
-                                        onOpenBook(book)
-                                    },
-                                    onDownload = {
-                                        menuFor = null
-                                        vm.downloadOffline(book)
-                                    },
-                                    onDeleteLocal = {
-                                        menuFor = null
-                                        pendingDelete = book
-                                    },
-                                    onRemoveFromShelf = {
-                                        menuFor = null
-                                        pendingRemove = book
-                                    },
-                                    onSyncStatus = {
-                                        menuFor = null
-                                        onOpenSyncStatus()
-                                    },
+                } else {
+                    sections.forEach { section ->
+                        if (section.key == "continue") {
+                            item(
+                                key = "continue-hero",
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) {
+                                val featured = section.books.first()
+                                ContinueCard(
+                                    book = featured,
+                                    state = state,
+                                    onOpen = { onOpenBook(featured) },
                                 )
+                            }
+                        } else {
+                            item(
+                                key = "header-${section.key}",
+                                span = { GridItemSpan(maxLineSpan) },
+                            ) {
+                                SectionLabel(
+                                    title = section.title.substringBefore("（"),
+                                    count = section.books.size,
+                                )
+                            }
+                            itemsIndexed(
+                                items = section.books,
+                                key = { _, book -> "book-${section.key}-${book.id}" },
+                            ) { index, book ->
+                                val rowKey = "${section.key}-${book.id}"
+                                Reveal(index = index) {
+                                    BookCell(
+                                        book = book,
+                                        // 只传单元格自己用得到的值：整份 ShelfUiState 是不稳定类型，
+                                        // 传进来会让同步 / 进度变化时每个可见封面都跟着重组。
+                                        badge = state.badgeOf(book),
+                                        transferPercent = state.transferPercent(book),
+                                        percent = state.progressPercentOf(book),
+                                        summary = state.progressSummaryOf(book),
+                                        readable = state.readable(book),
+                                        highlighted = state.highlightId == book.id,
+                                        menuOpen = menuFor == rowKey,
+                                        onToggleMenu = {
+                                            menuFor = if (menuFor == rowKey) null else rowKey
+                                        },
+                                        onOpen = {
+                                            menuFor = null
+                                            onOpenBook(book)
+                                        },
+                                        onDownload = {
+                                            menuFor = null
+                                            vm.downloadOffline(book)
+                                        },
+                                        onDeleteLocal = {
+                                            menuFor = null
+                                            pendingDelete = book
+                                        },
+                                        onRemoveFromShelf = {
+                                            menuFor = null
+                                            pendingRemove = book
+                                        },
+                                        onSyncStatus = {
+                                            menuFor = null
+                                            onOpenSyncStatus()
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -378,6 +337,106 @@ fun ShelfScreen(
                 vm.removeFromShelf(book)
             },
         )
+    }
+}
+
+/* ---------------- 头部区 ---------------- */
+
+/**
+ * 封面墙的列数：按可用宽度分档。
+ *
+ * 原来固定三列，手机上刚好，平板 / 横屏上每本封面会被拉到 200dp 以上，
+ * 一屏只剩两行。Apple Books、Legado 这类阅读器在宽屏都会铺更多列，
+ * 这里按「最小封面约 100dp」分档，最多 6 列。
+ */
+private fun shelfColumnsFor(width: Dp): Int = when {
+    width < 340.dp -> 2
+    width < 480.dp -> 3
+    width < 640.dp -> 4
+    width < 840.dp -> 5
+    else -> 6
+}
+
+/**
+ * 头部区：统计 + 搜索 + 筛选 + 横幅 + 导入进度。
+ *
+ * 原来这几块各占一个网格项，网格的行间距（22dp）在它们之间又叠了一遍，
+ * 首屏顶部因此有一段很松的留白，而且滚动定位要手数「几格」。
+ * 合成一整块后间距由内部控制，网格里只占一格。
+ */
+@Composable
+private fun ShelfHeader(
+    state: ShelfUiState,
+    searchOpen: Boolean,
+    onQueryChange: (String) -> Unit,
+    onSelectFilter: (String) -> Unit,
+    onOpenSyncStatus: () -> Unit,
+    onConnect: () -> Unit,
+    onDismissOfflineBanner: () -> Unit,
+    notice: Notice?,
+    onDismissNotice: (String) -> Unit,
+    importing: Boolean,
+    importLabel: String,
+) {
+    val scheme = CupertinoTheme.colorScheme
+    Column(Modifier.fillMaxWidth()) {
+        ShelfStats(state = state, onOpenSyncStatus = onOpenSyncStatus)
+
+        AnimatedVisibility(
+            visible = searchOpen,
+            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+        ) {
+            CupertinoSearchTextField(
+                value = state.query,
+                onValueChange = onQueryChange,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                placeholder = {
+                    CupertinoText(
+                        text = "搜书名或作者",
+                        fontSize = 16.sp,
+                        color = scheme.placeholderText,
+                    )
+                },
+            )
+        }
+
+        FilterChips(
+            selected = state.filter,
+            onSelect = onSelectFilter,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+
+        // 公告横幅只挂在书架首屏：第一条未读，关掉即记 id 不再出现。
+        AnimatedVisibility(
+            visible = notice != null,
+            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+        ) {
+            if (notice != null) {
+                NoticeBanner(
+                    title = notice.title,
+                    body = notice.body,
+                    date = notice.date,
+                    onDismiss = { onDismissNotice(notice.id) },
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = state.showBanner,
+            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+        ) {
+            OfflineBanner(onConnect = onConnect, onDismiss = onDismissOfflineBanner)
+        }
+
+        AnimatedVisibility(
+            visible = importing,
+            enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+            exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+        ) {
+            ImportStrip(label = importLabel)
+        }
     }
 }
 
@@ -626,30 +685,41 @@ private fun NoticeBanner(
 
 /* ---------------- 筛选 ---------------- */
 
-/** 筛选：等宽胶囊。未选白底加发丝描边，选中给 systemBlue 实底白字。 */
+/**
+ * 筛选：横向滚动的胶囊，宽度随文字，不做「等分五格」的分段控件感。
+ *
+ * 等分在窄屏上每个只有 59dp，「桌面端」这种三字标签几乎贴边；
+ * iOS 与 Material 的分类筛选都是内容宽度 + 横向滚动，窄屏也不会挤。
+ */
 @Composable
-private fun FilterChips(selected: String, onSelect: (String) -> Unit) {
+private fun FilterChips(
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val scheme = CupertinoTheme.colorScheme
     val shape = RoundedCornerShape(8.dp)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         ShelfUiState.FILTERS.forEach { (key, label) ->
             val on = key == selected
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    .height(32.dp)
                     .clip(shape)
                     .background(if (on) scheme.accent else scheme.secondarySystemGroupedBackground)
                     .border(1.dp, if (on) Color.Transparent else scheme.separator, shape)
                     .clickable { onSelect(key) }
-                    .padding(vertical = 7.dp),
+                    .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 CupertinoText(
                     text = label,
-                    fontSize = 12.sp,
+                    fontSize = 12.5.sp,
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (on) BrandPaper else scheme.label,
                     maxLines = 1,
@@ -682,12 +752,12 @@ private fun ImportStrip(label: String) {
 
 /* ---------------- 分区标题 ---------------- */
 
-/** 分组标题：iOS 分组头，13sp 次要灰，没有分隔线。 */
+/** 分组标题：iOS 分组头，13sp 次要灰，没有分隔线。上方的间距由网格行距提供。 */
 @Composable
 private fun SectionLabel(title: String, count: Int) {
     val scheme = CupertinoTheme.colorScheme
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 2.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CupertinoText(
@@ -785,7 +855,6 @@ private fun ContinueCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp)
             .pressScale(source, pressedScale = 0.985f)
             .clip(RoundedCornerShape(14.dp))
             .background(scheme.secondarySystemGroupedBackground)

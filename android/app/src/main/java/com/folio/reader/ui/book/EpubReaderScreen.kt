@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -50,8 +50,8 @@ private const val EPUB_HOST_TAG = "epub-host"
 @Composable
 fun EpubReaderScreen(model: EpubModel, onBack: () -> Unit) {
     val vm = model.session
-    val state by vm.epub.collectAsState()
-    val settings by vm.settingsState.collectAsState()
+    val state by vm.epub.collectAsStateWithLifecycle()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
     val palette = readingPalette(settings.themePreset)
     val activity = LocalContext.current as? FragmentActivity
 

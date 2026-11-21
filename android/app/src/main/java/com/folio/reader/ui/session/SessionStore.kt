@@ -92,6 +92,7 @@ class SessionStore(private val app: Application) {
     private var fontCatalogJob: Job? = null
     private var updateJob: Job? = null
     private var noticeJob: Job? = null
+    private var storageStatsJob: Job? = null
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -1675,11 +1676,28 @@ class SessionStore(private val app: Application) {
                 serverVersion = connection.cachedHealth().serverVersion,
                 lastSyncAt = syncState.lastSyncAt(),
                 conflictCount = _shelf.value.conflictCount,
-                localBytes = files.root().walkTopDown().filter { it.isFile }.sumOf { it.length() },
                 memoryBytes = cloud.cacheBytes + (coil.memoryCache?.size ?: 0L),
-                // 恒 0 自证：直接读 cacheDir 实际占用，而不是写死 0
-                cacheBytes = JsonIo.sizeOf(app.cacheDir),
             )
+        }
+        refreshStorageStats()
+    }
+
+    /**
+     * 书库与 cache 的真实占用：两棵目录树的递归统计。
+     *
+     * 书架几百本、缓存过万张图时 `walkTopDown` + `length()` 会阻塞主线程，
+     * 表现是设置页打开时掉帧、首屏慢一拍。这里整体挪到 IO，算完再回填；
+     * 同一时刻只保留最后一次统计，避免连续操作把扫描排成队列。
+     */
+    private fun refreshStorageStats() {
+        storageStatsJob?.cancel()
+        storageStatsJob = scope.launch {
+            val stats = withContext(Dispatchers.IO) {
+                val local = files.root().walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                // 直接读 cacheDir 实际占用，而不是写死 0
+                local to JsonIo.sizeOf(app.cacheDir)
+            }
+            _settings.update { it.copy(localBytes = stats.first, cacheBytes = stats.second) }
         }
     }
 

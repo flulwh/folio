@@ -37,6 +37,14 @@ object FolioMotion {
     /** 列表错开的间隔与上限：同屏最多 6 项依次出现。 */
     const val StaggerStep = 28
     const val StaggerMax = 6
+    /**
+     * 只让首屏这些项播入场动画。
+     *
+     * 之前列表滚到新的一行，每个新组合的项都会重新播一遍淡入 + 上移：
+     * 三列封面墙一次就是 3 个动画同时跑，连续快滑时是整个滚动最费 GPU 的地方。
+     * 超出首屏的项直接以最终状态出现，入场只留给人眼第一时间能看到的那部分。
+     */
+    const val RevealLimit = 12
     val Easing = FastOutSlowInEasing
 }
 
@@ -47,6 +55,7 @@ object FolioMotion {
  * （分组标题、发丝线、设置行），`Box` 会把它们叠在同一位置。
  *
  * 状态用 `rememberSaveable` 保存，滚出屏幕再滚回来时不会重新播一遍。
+ * 首屏之外的项（[index] 超过 [FolioMotion.RevealLimit]）不播，见该常量的说明。
  */
 @Composable
 fun Reveal(
@@ -54,7 +63,7 @@ fun Reveal(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    var shown by rememberSaveable { mutableStateOf(false) }
+    var shown by rememberSaveable { mutableStateOf(index >= FolioMotion.RevealLimit) }
     LaunchedEffect(Unit) {
         if (!shown) {
             val delayMs = index.coerceIn(0, FolioMotion.StaggerMax) * FolioMotion.StaggerStep

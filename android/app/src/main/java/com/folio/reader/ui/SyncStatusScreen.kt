@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -60,8 +60,9 @@ fun SyncStatusScreen(
     bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
-    val state by vm.shelf.collectAsState()
-    val books = state.books.distinctBy { it.id }
+    val state by vm.shelf.collectAsStateWithLifecycle()
+    // 去重只在书单变化时做；重组时不要每次重新扫描整份书架。
+    val books = remember(state.books) { state.books.distinctBy { it.id } }
     val scheme = CupertinoTheme.colorScheme
 
     CupertinoScaffold(

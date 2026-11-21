@@ -37,8 +37,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -110,10 +111,10 @@ fun ReaderScreen(
     onOpenSettings: () -> Unit,
 ) {
     val vm = model.session
-    val reader by vm.reader.collectAsState()
-    val settings by vm.settingsState.collectAsState()
-    val scrollTarget by vm.scrollTarget.collectAsState()
-    val pageTurn by vm.pageTurn.collectAsState()
+    val reader by vm.reader.collectAsStateWithLifecycle()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
+    val scrollTarget by vm.scrollTarget.collectAsStateWithLifecycle()
+    val pageTurn by vm.pageTurn.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     var scrubbing by remember { mutableStateOf(false) }
@@ -159,12 +160,23 @@ fun ReaderScreen(
             .toMap()
     }
 
-    val bodyStyle = TextStyle(
-        fontFamily = fontFamily,
-        fontSize = fontSize,
-        lineHeight = lineHeight,
-        letterSpacing = letterSpacing,
-        textIndent = if (settings.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent.None,
+    // 滚动会频繁上报位置、触发阅读页重组；样式对象只在排版参数变化时重建，
+    // 否则每一帧都给每个可见段落传一个新的 TextStyle（内容相同也要走一次分配）。
+    val bodyStyle = remember(fontFamily, fontSize, lineHeight, letterSpacing, settings.firstLineIndent) {
+        TextStyle(
+            fontFamily = fontFamily,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            letterSpacing = letterSpacing,
+            textIndent = if (settings.firstLineIndent) TextIndent(firstLine = 2.em) else TextIndent.None,
+        )
+    }
+
+    // 宽屏上把正文收进 680dp 的列，多出来的宽度均分到两侧；
+    // 点按翻页的手势区仍是整屏，不跟着正文一起缩水。
+    val readerGutter = maxOf(
+        0.dp,
+        (LocalConfiguration.current.screenWidthDp.dp - ReaderColumn) / 2,
     )
 
     // ---------- 滚动模式的位置同步 ----------
@@ -307,8 +319,8 @@ fun ReaderScreen(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = settings.pagePadding.dp,
-                        end = settings.pagePadding.dp,
+                        start = settings.pagePadding.dp + readerGutter,
+                        end = settings.pagePadding.dp + readerGutter,
                         top = 80.dp,
                         bottom = bottomContentPadding,
                     ),

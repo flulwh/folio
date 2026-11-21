@@ -12,6 +12,10 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.7.0：排版重构——书架封面墙按宽度自适应列数、头部区合并、筛选改横滚胶囊，
+        //        设置页拆成排版 / 翻页 / 外观三组，正文在宽屏收进 680dp 的阅读列（versionCode 30）。
+        // 4.6.1：发布包开启 R8 与资源压缩、接入 Baseline Profile，后台停止 Compose 收集，
+        //        目录扫描移出主线程（versionCode 29）。
         // 4.6.0：设置页新增「检查更新」（查 GitHub Release、跳浏览器下载）与公告列表，
         //        书架首屏顶部显示第一条未读公告横幅，已读按 id 记住（versionCode 28）。
         // 4.5.0：支持导入、阅读本地 CBZ/ZIP 漫画，并与桌面端整包同步（versionCode 27）。
@@ -22,8 +26,8 @@ android {
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 28
-        versionName = "4.6.0"
+        versionCode = 30
+        versionName = "4.7.0"
         vectorDrawables.useSupportLibrary = true
     }
 
@@ -48,8 +52,11 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8：删无用代码、内联、缩短标识符，APK 更小、启动与滚动时驻留代码更少。
+            // 之前一直关着，等于把最大的一块性能/内存收益让掉了；反射点由 proguard-rules.pro
+            // 里的 keep 规则兜住（Readium / JS 桥 / kotlinx.serialization）。
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
@@ -104,6 +111,9 @@ gradle.taskGraph.whenReady {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.10.1")
+    // Baseline Profile 安装器：让 AGP 合并进 APK 的 baseline-prof.txt（Compose / Coil
+    // 等库自带）在侧载安装时也能生效，冷启动少一轮 JIT。体积只有几十 KB。
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

@@ -253,8 +253,8 @@ EPUB 的阅读位置单独存 `epub-progress.json`；
 | `ui/reader/ReaderPager.kt` | 翻页模式：按章用 `TextMeasurer` 分页，超长段落按行切分，页脚显示页码 |
 | `ui/reader/*Sheet.kt` | 目录 / 搜索 / 痕迹 / 排版四套面板 |
 | `ui/book/EpubReaderScreen.kt` | EPUB：Compose 外壳 + Readium Fragment |
-| `ui/ShelfScreen.kt` | 书架：实色顶栏 + 常显标题、胶囊筛选、圆角书卡 |
-| `ui/SettingsScreen.kt` | 设置：分组卡片 + 开关 / 滑杆 / 分段 |
+| `ui/ShelfScreen.kt` | 书架：实色顶栏 + 常显标题、横滚胶囊筛选、按宽度自适应的封面墙 |
+| `ui/SettingsScreen.kt` | 设置：六组分组卡片（连接 / 同步 / 排版 / 翻页 / 外观 / 本机），开关 / 滑杆 / 分段 |
 | `ui/SyncStatusScreen.kt` | 同步报告：状态卡、逐本账本、等宽诊断 |
 | `ui/FontStoreScreen.kt` | 字体商店：已安装列表 + 目录卡片、下载进度、真字形预览 |
 | `ui/ComicReaderScreen.kt` | 漫画：深色图片区 + 浮动顶底栏 + 话目录面板 |
@@ -262,6 +262,8 @@ EPUB 的阅读位置单独存 `epub-progress.json`；
 阅读方式存在 `folio_settings.xml` 的 `reading_mode`（`scroll` / `paged`），默认滚动。
 翻页模式只对「当前章」分页，四十多万段的长篇也不会在打开时整本排版；
 分页随字号 / 行距 / 页边距 / 屏幕尺寸变化自动重算。
+宽屏（平板 / 横屏）上正文列最宽 `ReaderColumn = 680dp`，多出来的宽度均分到左右；
+滚动模式的手势区仍是整屏，翻页模式的分页宽度按收窄后的列宽计算。
 
 ## 已知限制
 

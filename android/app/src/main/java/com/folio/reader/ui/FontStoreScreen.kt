@@ -23,7 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -60,8 +60,8 @@ import io.github.alexzhirkevich.cupertino.theme.CupertinoTheme
 @Composable
 fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
     val vm = model.session
-    val storeState by vm.fontStore.collectAsState()
-    val settings by vm.settingsState.collectAsState()
+    val storeState by vm.fontStore.collectAsStateWithLifecycle()
+    val settings by vm.settingsState.collectAsStateWithLifecycle()
     val scheme = CupertinoTheme.colorScheme
     val context = LocalContext.current
     val store = remember { FontStore(context.filesDir) }

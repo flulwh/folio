@@ -7,8 +7,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -34,8 +34,9 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val settings by session.settingsState.collectAsState()
-            val deleteConfirm by session.deleteConfirm.collectAsState()
+            // lifecycle-aware：页面进后台就停止收集，不在不可见时白白重组 / 耗电。
+            val settings by session.settingsState.collectAsStateWithLifecycle()
+            val deleteConfirm by session.deleteConfirm.collectAsStateWithLifecycle()
             // 状态栏 / 导航栏图标跟着纸色走：夜间底上用浅色图标，纸白底上用深色图标。
             // 只靠 enableEdgeToEdge() 会跟随系统深色模式，和 App 内的底色不是一回事。
             val view = LocalView.current

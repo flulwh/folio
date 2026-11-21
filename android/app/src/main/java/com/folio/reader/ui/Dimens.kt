@@ -19,3 +19,12 @@ val RowInset: Dp = 16.dp
 val GroupRadius: Dp = 10.dp
 /** 面板内容区通用内边距。 */
 val SheetPadding: Dp = 16.dp
+
+/**
+ * 正文列最宽：平板 / 横屏上把行宽收在 680dp。
+ *
+ * 中文一行超过 40 字就难回行，宽屏上满幅铺开会让眼睛在行尾找不回下一行。
+ * Apple Books 与各家阅读器在宽屏都会限制正文宽度；滚动与翻页两种模式共用这一个上限，
+ * 多出来的宽度均分到左右两侧留白。
+ */
+val ReaderColumn: Dp = 680.dp
