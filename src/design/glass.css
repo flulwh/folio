@@ -93,4 +93,67 @@
   border-radius: var(--r-pill);
   box-shadow: var(--glass-shadow);
 }
+
+/* ----------------------------- 6. 应用外壳 ------------------------------- */
+
+/* 页面自己不再铺实色底：让 1 段的氛围光透上来，玻璃才有东西可折射 */
+.settings-page,
+.market {
+  background: transparent;
+}
+
+/* 设置页页头与左侧目录：贴着窗口的两条玻璃导轨 */
+.settings-page-head {
+  border-bottom: 1px solid var(--glass-stroke);
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+}
+
+.settings-nav {
+  border-right: 1px solid var(--glass-stroke);
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
+}
+
+/* 设置分区：外层一张玻璃卡，行自己的实色底交出来。
+   只作用于整页设置（.settings-page）；阅读器右侧抽屉复用 .settings-group，
+   那里本身已经是半透明面板，再套一层玻璃卡会显得发白、层级打架。 */
+.settings-page .settings-group {
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--r-xl);
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--glass-shadow);
+}
+
+.settings-page .settings-group .settings-row,
+.settings-page .settings-group .switch-row,
+.settings-page .settings-group .slider-row {
+  background: transparent;
+  border-bottom-color: color-mix(in srgb, var(--line) 60%, transparent);
+}
+
+/* 书架「继续阅读」卡：整张抬到玻璃层 */
+.continue-card {
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-tint-strong);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(170%);
+  box-shadow: var(--glass-shadow);
+}
+
+/* 菜单 / 确认框 / 提示气泡：与面板同一套材质 */
+.ui-menu,
+.ui-confirm,
+.ui-tooltip {
+  border: 1px solid var(--glass-stroke);
+  background: var(--glass-surface);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+  box-shadow: var(--glass-shadow);
+}
 }

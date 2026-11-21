@@ -24,8 +24,28 @@ export default function NoticeBanner() {
     close();
   };
 
+  // 整张卡片都能点：空白处、标题、正文点下去和「查看」等价，
+  // 否则卡片中间一大片区域看起来可点、实际没反应。
+  const onCardClick = notice.url ? open : undefined;
+  const onCardKeyDown = notice.url
+    ? (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        open();
+      }
+    : undefined;
+
   return (
-    <aside className="notice-banner" data-level={notice.level} role="status" aria-live="polite">
+    <aside
+      className="notice-banner"
+      data-level={notice.level}
+      data-clickable={Boolean(notice.url)}
+      role="status"
+      aria-live="polite"
+      onClick={onCardClick}
+      onKeyDown={onCardKeyDown}
+      tabIndex={notice.url ? 0 : undefined}
+    >
       <span className="notice-banner-mark" aria-hidden="true">
         <IconSparkle size={16} />
       </span>
@@ -34,11 +54,26 @@ export default function NoticeBanner() {
         {notice.body && <p>{notice.body}</p>}
       </div>
       {notice.url && (
-        <button type="button" className="btn ghost small" onClick={open}>
+        <button
+          type="button"
+          className="btn ghost small"
+          onClick={(event) => {
+            event.stopPropagation();
+            open();
+          }}
+        >
           查看
         </button>
       )}
-      <button type="button" className="notice-banner-close" onClick={close} aria-label="关闭公告">
+      <button
+        type="button"
+        className="notice-banner-close"
+        onClick={(event) => {
+          event.stopPropagation();
+          close();
+        }}
+        aria-label="关闭公告"
+      >
         <IconX size={14} />
       </button>
     </aside>
