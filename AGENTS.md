@@ -37,7 +37,7 @@ npm run check:theme    # 校验 tokens.css 与 src/themes.js 同源
 npm run check:lan-edge # 局域网面板边界用例
 npm run check:lan-sync # 局域网双向同步用例
 npm run build          # electron-vite 构建 + 全部 Windows 产物
-npm run build:vite     # 只构建渲染层到 out/renderer/
+npm run build:vite     # 只编译主进程 / preload / 渲染层到 out/，不打包安装器
 npm run build:dir      # 只出免安装目录版
 npm run build:portable # 只出单文件便携版
 npm run build:nsis     # 只出 NSIS 安装包

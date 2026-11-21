@@ -19,7 +19,7 @@
     "check:theme": "node tools/_theme-sync.mjs",
     "check:lan-edge": "node tools/_run-lan-edge.mjs",
     "check:lan-sync": "node tools/_lan-sync-check.mjs",
-    "build:vite": "electron-vite build --rendererOnly",
+    "build:vite": "electron-vite build",
     "build": "electron-vite build && node scripts/build-win.mjs",
     "build:dir": "node scripts/build-win.mjs --win dir",
     "build:portable": "node scripts/build-win.mjs --win portable",
