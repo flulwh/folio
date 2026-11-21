@@ -47,6 +47,7 @@ const val ROUTE_EPUB = "epub"
 const val ROUTE_SETTINGS = "settings"
 const val ROUTE_SYNC = "sync"
 const val ROUTE_FONT_STORE = "fonts"
+const val ROUTE_NOTICE = "notice"
 
 /**
  * 根容器：iOS 式底部 Tab Bar（书架 / 同步 / 设置）+ 压栈的阅读页。
@@ -74,6 +75,7 @@ private val Screen.routeName: String
         SettingsRoute -> ROUTE_SETTINGS
         SyncRoute -> ROUTE_SYNC
         FontStoreRoute -> ROUTE_FONT_STORE
+        NoticeRoute -> ROUTE_NOTICE
         else -> ""
     }
 
@@ -134,6 +136,7 @@ private object RootRoute : Screen {
                 },
                 onOpenSettings = { tab = 2 },
                 onOpenSyncStatus = { tab = 1 },
+                onOpenNotices = { navigator.push(NoticeRoute) },
                 bottomBar = bottomBar,
             )
 
@@ -144,6 +147,7 @@ private object RootRoute : Screen {
                 onBack = null,
                 onOpenSyncStatus = { tab = 1 },
                 onOpenFontStore = { navigator.push(FontStoreRoute) },
+                onOpenNotices = { navigator.push(NoticeRoute) },
                 bottomBar = bottomBar,
             )
         }
@@ -261,7 +265,16 @@ private object SettingsRoute : Screen {
             onBack = { navigator.pop() },
             onOpenSyncStatus = { navigator.push(SyncRoute) },
             onOpenFontStore = { navigator.push(FontStoreRoute) },
+            onOpenNotices = { navigator.push(NoticeRoute) },
         )
+    }
+}
+
+private object NoticeRoute : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        NoticeScreen(session = recallSession(), onBack = { navigator.pop() })
     }
 }
 

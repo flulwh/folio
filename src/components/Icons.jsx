@@ -6,6 +6,7 @@
  */
 import {
   ArrowLeft,
+  Bell,
   BookOpen,
   Bookmark,
   ChevronRight,
@@ -101,6 +102,10 @@ export function IconSparkle({ size = 18, ...rest }) {
 
 export function IconCloud({ size = 18, ...rest }) {
   return <Cloud size={size} {...base} {...rest} />;
+}
+
+export function IconBell({ size = 18, ...rest }) {
+  return <Bell size={size} {...base} {...rest} />;
 }
 
 export function IconRefresh({ size = 18, ...rest }) {

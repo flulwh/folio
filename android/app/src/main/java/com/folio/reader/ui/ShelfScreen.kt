@@ -87,6 +87,7 @@ import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
 import io.github.alexzhirkevich.cupertino.ExperimentalCupertinoApi
 import io.github.alexzhirkevich.cupertino.icons.CupertinoIcons
 import io.github.alexzhirkevich.cupertino.icons.outlined.ArrowClockwise
+import io.github.alexzhirkevich.cupertino.icons.outlined.BellBadge
 import io.github.alexzhirkevich.cupertino.icons.outlined.Book
 import io.github.alexzhirkevich.cupertino.icons.outlined.ChevronForward
 import io.github.alexzhirkevich.cupertino.icons.outlined.Gear
@@ -116,6 +117,7 @@ fun ShelfScreen(
     onOpenBook: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSyncStatus: () -> Unit,
+    onOpenNotices: () -> Unit,
     bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
@@ -180,9 +182,11 @@ fun ShelfScreen(
             ShelfTopBar(
                 state = state,
                 searchOpen = searchOpen,
+                hasUnreadNotices = notices.unreadCount > 0,
                 onToggleSearch = { searchOpen = !searchOpen },
                 onImport = importAction,
                 onSync = { vm.syncNow() },
+                onOpenNotices = onOpenNotices,
             )
         },
         bottomBar = bottomBar,
@@ -473,9 +477,11 @@ private fun ShelfHeader(
 private fun ShelfTopBar(
     state: ShelfUiState,
     searchOpen: Boolean,
+    hasUnreadNotices: Boolean,
     onToggleSearch: () -> Unit,
     onImport: () -> Unit,
     onSync: () -> Unit,
+    onOpenNotices: () -> Unit,
 ) {
     CupertinoTopAppBar(
         title = {
@@ -483,6 +489,12 @@ private fun ShelfTopBar(
         },
         colors = folioTopBarColors(),
         actions = {
+            NavIcon(
+                icon = CupertinoIcons.Outlined.BellBadge,
+                description = if (hasUnreadNotices) "公告（有未读）" else "公告",
+                onClick = onOpenNotices,
+                showDot = hasUnreadNotices,
+            )
             NavIcon(
                 icon = CupertinoIcons.Outlined.MagnifyingGlass,
                 description = if (searchOpen) "关闭搜索" else "搜索",
@@ -554,6 +566,7 @@ private fun NavIcon(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     description: String,
     onClick: () -> Unit,
+    showDot: Boolean = false,
 ) {
     val scheme = CupertinoTheme.colorScheme
     val source = remember { MutableInteractionSource() }
@@ -575,6 +588,16 @@ private fun NavIcon(
             modifier = Modifier.size(21.dp),
             tint = scheme.accent,
         )
+        if (showDot) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 9.dp, end = 9.dp)
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(scheme.accent),
+            )
+        }
     }
 }
 

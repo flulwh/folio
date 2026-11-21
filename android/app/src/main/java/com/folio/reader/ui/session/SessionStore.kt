@@ -484,6 +484,12 @@ class SessionStore(private val app: Application) {
         _notices.update { it.copy(lastReadId = value) }
     }
 
+    /** 公告页「全部已读」：把最新一条记成已读，按列表位置判定即整页已读。 */
+    fun markAllNoticesRead() {
+        val newest = _notices.value.notices.firstOrNull()?.id ?: return
+        dismissNotice(newest)
+    }
+
     /* ---------------- 小说阅读 ---------------- */
 
     fun openBook(book: Book) {

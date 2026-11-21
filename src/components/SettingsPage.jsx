@@ -101,7 +101,7 @@ function Row({ title, hint, children }) {
   );
 }
 
-export default function SettingsPage({ onClose }) {
+export default function SettingsPage({ onClose, onOpenNotices }) {
   const kit = useMotionKit();
   const settings = useSettings();
   const sources = useSources();
@@ -171,9 +171,7 @@ export default function SettingsPage({ onClose }) {
     notices,
     seen: seenNotices,
     loading: loadingNotices,
-    markRead: markNoticeRead,
     markAllRead: markAllNoticesRead,
-    reload: reloadNotices,
   } = useNotices();
 
   /* ---------------- 局域网面板 ---------------- */
@@ -385,6 +383,7 @@ export default function SettingsPage({ onClose }) {
 
   const cloudCount = books.filter((book) => book.kind === 'cloud').length;
   const localCount = books.length - cloudCount;
+  const unreadNoticeCount = notices.filter((item) => !seenNotices.includes(item.id)).length;
 
   return (
     <div className="settings-page">
@@ -1197,62 +1196,30 @@ export default function SettingsPage({ onClose }) {
 
                 <section className="settings-group">
                   <h3 className="settings-group-title">公告</h3>
-                  {notices.length === 0 && (
-                    <p className="settings-hint">
-                      {loadingNotices ? '正在读取公告…' : '暂时没有公告。'}
-                    </p>
-                  )}
-                  {notices.map((item) => {
-                    const unread = !seenNotices.includes(item.id);
-                    return (
-                      <div className="settings-page-row" key={item.id}>
-                        <div className="settings-page-row-text">
-                          <span>
-                            {item.title}
-                            {unread && <em className="notice-unread" aria-label="未读" />}
-                          </span>
-                          <small>
-                            {item.date ? `${item.date} · ` : ''}
-                            {item.body || '—'}
-                          </small>
-                        </div>
-                        <div className="settings-page-row-control">
-                          {item.url && (
-                            <button
-                              className="btn ghost small"
-                              onClick={() => {
-                                window.readerAPI?.openExternal?.(item.url);
-                                markNoticeRead(item.id);
-                              }}
-                            >
-                              打开
-                            </button>
-                          )}
-                          {unread && (
-                            <button className="btn ghost small" onClick={() => markNoticeRead(item.id)}>
-                              已读
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="settings-page-row">
-                    <div className="settings-page-row-text">
-                      <span>公告来源</span>
-                      <small>官网 notice.json，断网时自动跳过</small>
-                    </div>
-                    <div className="settings-page-row-control">
-                      {notices.some((item) => !seenNotices.includes(item.id)) && (
-                        <button className="btn ghost small" onClick={markAllNoticesRead}>
-                          全部已读
-                        </button>
-                      )}
-                      <button className="btn ghost small" onClick={reloadNotices}>
-                        刷新
+                  <Row
+                    title="公告中心"
+                    hint={
+                      loadingNotices
+                        ? '正在读取公告…'
+                        : notices.length === 0
+                          ? '暂时没有公告'
+                          : unreadNoticeCount
+                            ? `${unreadNoticeCount} 条未读 · 共 ${notices.length} 条`
+                            : `全部已读 · 共 ${notices.length} 条`
+                    }
+                  >
+                    {unreadNoticeCount > 0 && (
+                      <button className="btn ghost small" onClick={markAllNoticesRead}>
+                        全部已读
                       </button>
-                    </div>
-                  </div>
+                    )}
+                    <button className="btn ghost small" onClick={() => onOpenNotices?.()}>
+                      查看全部
+                    </button>
+                  </Row>
+                  <p className="settings-hint">
+                    公告来自官网 notice.json，断网时自动跳过；完整列表在公告中心。
+                  </p>
                 </section>
 
                 <section className="settings-group">
@@ -1267,6 +1234,32 @@ export default function SettingsPage({ onClose }) {
                   </Row>
                   <Row title="快捷键" hint="在任意页面按 ? 打开完整列表">
                     <kbd>?</kbd>
+                  </Row>
+                </section>
+
+                <section className="settings-group">
+                  <h3 className="settings-group-title">作者</h3>
+                  <Row title="作者" hint="Folio contributors">
+                    <span className="settings-page-muted">flulwh</span>
+                  </Row>
+                  <Row title="GitHub 主页" hint="github.com/flulwh">
+                    <button
+                      className="btn ghost small"
+                      onClick={() => window.readerAPI?.openExternal?.('https://github.com/flulwh')}
+                    >
+                      打开
+                    </button>
+                  </Row>
+                  <Row title="项目仓库" hint="github.com/flulwh/folio">
+                    <button
+                      className="btn ghost small"
+                      onClick={() => window.readerAPI?.openExternal?.('https://github.com/flulwh/folio')}
+                    >
+                      打开
+                    </button>
+                  </Row>
+                  <Row title="开源许可" hint="MIT">
+                    <span className="settings-page-muted">MIT</span>
                   </Row>
                 </section>
 

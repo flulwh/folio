@@ -10,8 +10,10 @@ import Segmented from './Segmented.jsx';
 import { SAMPLE_BOOK_CONTENT, SAMPLE_BOOK_NAME } from '../data/sampleBook.js';
 import { decodeBuffer, formatDate, formatPercent, isEbookFile, isProbablyTextFile } from '../utils/format.js';
 import { useCachedCover, useCoverReadyTick, usePrimeShelfCovers } from '../hooks/useCachedCover.js';
+import { useNotices } from '../hooks/useNotices.js';
 import { ContextMenuArea } from '../ui/Menu.jsx';
 import {
+  IconBell,
   IconBook,
   IconCloud,
   IconDatabase,
@@ -166,7 +168,7 @@ function BookCard({ book, percent, onOpen, onDelete, onCache, onSend, canSend, i
   );
 }
 
-export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) {
+export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings, onOpenNotices }) {
   const kit = useMotionKit();
   // 级联节奏：苹果 18ms 紧凑，一列列亮起来刚好能看清
   const containerVariants = useMemo(() => {
@@ -176,6 +178,11 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
   const devices = useDevices();
   const progress = useProgress();
   const sources = useSources();
+  const { notices, seen } = useNotices();
+  const hasUnreadNotices = useMemo(
+    () => notices.some((item) => !seen.includes(item.id)),
+    [notices, seen]
+  );
   const {
     addBookFromText,
     addBookFromBinary,
@@ -671,6 +678,16 @@ export default function Bookshelf({ onOpenBook, onOpenMarket, onOpenSettings }) 
               aria-label="运行日志"
             >
               <IconTerminal size={16} />
+            </button>
+
+            <button
+              className="dock-icon-btn dock-icon-bell"
+              onClick={() => onOpenNotices?.()}
+              title={hasUnreadNotices ? '公告（有未读）' : '公告'}
+              aria-label="公告"
+            >
+              <IconBell size={16} />
+              {hasUnreadNotices && <span className="dock-unread-dot" aria-hidden="true" />}
             </button>
 
             <button

@@ -1,6 +1,6 @@
 {
   "name": "immersive-reader",
-  "version": "2.16.1",
+  "version": "2.17.0",
   "description": "A minimalist, immersive e-book reader built with Electron and React.",
   "license": "MIT",
   "author": "Folio contributors",
@@ -81,6 +81,11 @@
     "files": [
       "out/**/*",
       "electron/icon.png"
+    ],
+    "asar": true,
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
     ],
     "win": {
       "target": [

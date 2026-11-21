@@ -22,6 +22,7 @@ const ComicReader = lazy(() => import('./components/ComicReader.jsx'));
 const DocumentReader = lazy(() => import('./components/DocumentReader.jsx'));
 const BookMarket = lazy(() => import('./components/BookMarket.jsx'));
 const SettingsPage = lazy(() => import('./components/SettingsPage.jsx'));
+const NoticePage = lazy(() => import('./components/NoticePage.jsx'));
 
 /** 懒加载块的占位：保持和真实内容同样的高度，避免布局跳动。 */
 function LazyFallback() {
@@ -183,7 +184,12 @@ export default function App() {
     Promise.resolve(api.windowGetUiState())
       .then((state) => {
         if (cancelled || !state) return;
-        if (state.view === 'market' || state.view === 'settings' || state.view === 'shelf') {
+        if (
+          state.view === 'market' ||
+          state.view === 'settings' ||
+          state.view === 'notices' ||
+          state.view === 'shelf'
+        ) {
           setView(state.view);
         }
         if (typeof state.activeBookId === 'string' && state.activeBookId) {
@@ -303,7 +309,23 @@ export default function App() {
             exit="exit"
           >
             <Suspense fallback={<LazyFallback />}>
-              <SettingsPage onClose={() => setView('shelf')} />
+              <SettingsPage
+                onClose={() => setView('shelf')}
+                onOpenNotices={() => setView('notices')}
+              />
+            </Suspense>
+          </motion.div>
+        ) : view === 'notices' ? (
+          <motion.div
+            key="notices"
+            className="view"
+            variants={kit.page}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            <Suspense fallback={<LazyFallback />}>
+              <NoticePage onClose={() => setView('shelf')} />
             </Suspense>
           </motion.div>
         ) : (
@@ -319,6 +341,7 @@ export default function App() {
               onOpenBook={(book) => setActiveBookId(book.id)}
               onOpenMarket={() => setView('market')}
               onOpenSettings={() => setView('settings')}
+              onOpenNotices={() => setView('notices')}
             />
           </motion.div>
         )}

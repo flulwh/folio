@@ -97,6 +97,7 @@ fun SettingsScreen(
     onBack: (() -> Unit)?,
     onOpenSyncStatus: () -> Unit,
     onOpenFontStore: () -> Unit,
+    onOpenNotices: () -> Unit,
     bottomBar: @Composable () -> Unit = {},
 ) {
     val vm = model.session
@@ -618,32 +619,79 @@ fun SettingsScreen(
             item("notices") {
                 Reveal(index = 6) {
                     CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("公告")) {
-                        if (notices.notices.isEmpty()) {
-                            Item(key = "notice-empty") {
-                                CupertinoText(
-                                    text = when {
-                                        notices.loading -> "加载中…"
-                                        notices.error.isNotBlank() -> notices.error
-                                        else -> "暂无公告"
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    fontSize = 12.5.sp,
-                                    color = scheme.secondaryLabel,
-                                )
-                            }
-                        } else {
-                            notices.notices.forEach { notice ->
-                                Item(key = "notice-${notice.id}") {
-                                    NoticeRow(
-                                        notice = notice,
-                                        read = notices.isRead(notice.id),
-                                        onClick = {
-                                            vm.dismissNotice(notice.id)
-                                            if (notice.url.isNotBlank()) openInBrowser(context, notice.url)
+                        Item(key = "notice-center") {
+                            SectionLink(
+                                onClick = onOpenNotices,
+                                caption = {
+                                    CupertinoText(
+                                        text = when {
+                                            notices.loading -> "正在读取公告…"
+                                            notices.error.isNotBlank() -> notices.error
+                                            notices.notices.isEmpty() -> "暂时没有公告"
+                                            notices.unreadCount > 0 ->
+                                                "${notices.unreadCount} 条未读 · 共 ${notices.notices.size} 条"
+
+                                            else -> "全部已读 · 共 ${notices.notices.size} 条"
                                         },
+                                        fontSize = 12.sp,
+                                    )
+                                },
+                            ) {
+                                CupertinoText(text = "公告中心", fontSize = 17.sp, color = scheme.label)
+                            }
+                        }
+                        if (notices.unreadCount > 0) {
+                            Item(key = "notice-read-all") {
+                                SectionLink(
+                                    onClick = { vm.markAllNoticesRead() },
+                                    caption = {
+                                        CupertinoText(text = "把当前公告全部标为已读", fontSize = 12.sp)
+                                    },
+                                ) {
+                                    CupertinoText(
+                                        text = "全部已读",
+                                        fontSize = 17.sp,
+                                        color = scheme.accent,
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            /* ---------------- 作者 ---------------- */
+            item("author") {
+                Reveal(index = 7) {
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("作者")) {
+                        Item(key = "author-name") {
+                            ValueRow(title = "作者", value = "flulwh")
+                        }
+                        Item(key = "author-contributors") {
+                            ValueRow(title = "贡献者", value = "Folio contributors")
+                        }
+                        Item(key = "author-github") {
+                            SectionLink(
+                                onClick = { openInBrowser(context, "https://github.com/flulwh") },
+                                caption = {
+                                    CupertinoText(text = "github.com/flulwh", fontSize = 12.sp)
+                                },
+                            ) {
+                                CupertinoText(text = "GitHub 主页", fontSize = 17.sp, color = scheme.accent)
+                            }
+                        }
+                        Item(key = "author-repo") {
+                            SectionLink(
+                                onClick = { openInBrowser(context, "https://github.com/flulwh/folio") },
+                                caption = {
+                                    CupertinoText(text = "github.com/flulwh/folio", fontSize = 12.sp)
+                                },
+                            ) {
+                                CupertinoText(text = "项目仓库", fontSize = 17.sp, color = scheme.accent)
+                            }
+                        }
+                        Item(key = "author-license") {
+                            ValueRow(title = "开源许可", value = "MIT")
                         }
                     }
                 }
@@ -944,7 +992,7 @@ private fun updateCaptionOf(state: UpdateUiState): String = when {
 
 /** 公告一行：标题 + 日期 + 正文；未读的标题加粗并带一个蓝点。 */
 @Composable
-private fun NoticeRow(notice: Notice, read: Boolean, onClick: () -> Unit) {
+internal fun NoticeRow(notice: Notice, read: Boolean, onClick: () -> Unit) {
     val scheme = CupertinoTheme.colorScheme
     Column(
         Modifier
@@ -999,7 +1047,7 @@ private fun NoticeRow(notice: Notice, read: Boolean, onClick: () -> Unit) {
 }
 
 /** 用浏览器打开下载页 / 公告链接；没有浏览器时静默失败，不打断设置页。 */
-private fun openInBrowser(context: Context, url: String) {
+internal fun openInBrowser(context: Context, url: String) {
     if (url.isBlank()) return
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

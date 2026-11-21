@@ -12,6 +12,7 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.7.2：公告独立成页（书架铃铛 + 公告中心），设置页补作者信息（versionCode 32）。
         // 4.7.1：回到 iOS 11 观感——书架 / 设置 / 同步 / 字体四个页面恢复折叠大标题，
         //        顶栏与 Tab Bar 改回半透明毛玻璃（versionCode 31）。
         // 4.7.0：排版重构——书架封面墙按宽度自适应列数、头部区合并、筛选改横滚胶囊，
@@ -28,8 +29,8 @@ android {
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 31
-        versionName = "4.7.1"
+        versionCode = 32
+        versionName = "4.7.2"
         vectorDrawables.useSupportLibrary = true
         // 只保留中英两套库字符串：AndroidX / Readium 自带六十多种语言，
         // 这个 App 的界面只有中文，多出来的 arsc 条目纯属占体积。

@@ -82,9 +82,10 @@ export default defineConfig({
           // 注意匹配顺序：react-dom 的路径里也含 'react'，先判更具体的
           if (/node_modules[\\/](react-dom|react|scheduler)[\\/]/.test(id)) return 'react';
           if (/node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'motion';
-          // EPUB / PDF 阅读器（foliate-js + pdf.js）只在打开这类书时才 import，
-          // 单独成块才能保持懒加载，否则会被并进 vendor 拖慢首屏
-          if (/node_modules[\\/](pdfjs-dist|foliate-js)[\\/]/.test(id)) return 'doc-reader';
+          // PDF / EPUB 引擎只在打开对应格式时才 import。分开成块：
+          // 读 EPUB 不会顺带下载 pdf.js，单块也小于 1MB，避免 esbuild 大文件转译。
+          if (/node_modules[\\/]pdfjs-dist[\\/]/.test(id)) return 'pdf-reader';
+          if (/node_modules[\\/]foliate-js[\\/]/.test(id)) return 'epub-reader';
           return 'vendor';
         },
         entryFileNames: 'assets/[name]-[hash].js',

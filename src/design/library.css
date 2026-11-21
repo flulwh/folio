@@ -336,6 +336,76 @@ input.switch:checked::after {
   vertical-align: middle;
 }
 
+/* --- 公告中心：整页列表，不是设置页里的一个分组 -------------------------- */
+
+.notice-page-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-5) var(--sp-6) var(--sp-8);
+}
+
+.notice-page-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.notice-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
+}
+
+.notice-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.notice-card:last-child {
+  padding-bottom: 0;
+}
+
+.notice-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+.notice-card-head strong {
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.notice-card-date {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-faint);
+}
+
+.notice-card p {
+  font-size: var(--fs-small);
+  line-height: 1.65;
+  color: var(--text-soft);
+}
+
+.notice-card-actions,
+.notice-page-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.notice-page-actions {
+  justify-content: flex-end;
+}
+
 .settings-page .settings-update-notes {
   max-height: 120px;
   overflow: auto;

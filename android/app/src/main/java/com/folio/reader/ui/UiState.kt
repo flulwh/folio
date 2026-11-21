@@ -452,9 +452,22 @@ data class NoticeUiState(
     val error: String = "",
 ) {
     /** 首屏横幅要展示的那一条：最新的未读公告。 */
-    val bannerNotice: Notice? get() = notices.firstOrNull { it.id != lastReadId }
+    val bannerNotice: Notice? get() = notices.firstOrNull { !isRead(it.id) }
 
-    fun isRead(id: String): Boolean = id == lastReadId
+    /**
+     * 已读按列表位置判定：`lastReadId` 是用户确认到的最新一条，
+     * 它和它更旧的都算已读，比它新的仍算未读。
+     * 这样公告页可以「读最新一条 = 整页已读」，旧字段也不用改格式。
+     */
+    fun isRead(id: String): Boolean {
+        val index = notices.indexOfFirst { it.id == id }
+        if (index < 0) return false
+        val readIndex = notices.indexOfFirst { it.id == lastReadId }
+        if (readIndex < 0) return false
+        return index >= readIndex
+    }
+
+    val unreadCount: Int get() = notices.count { !isRead(it.id) }
 }
 
 /** 设置页状态。 */

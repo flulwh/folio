@@ -297,8 +297,22 @@
 }
 
 .dock-icon-btn {
+  position: relative;
   width: 34px;
   padding: 0;
+}
+
+/* 公告入口的未读点：贴着铃铛右上角，用底色描一圈避免糊在图标上 */
+.dock-unread-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
+  pointer-events: none;
 }
 
 .dock-btn-primary {
