@@ -16,9 +16,9 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.15.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.15.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.15.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-Setup-2.16.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.16.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.16.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.16.0) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.16.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.16.0) | 免安装压缩包，解压后运行 `Folio.exe` |
 | [`Folio-4.5.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-4.5.0/Folio-4.5.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
@@ -228,7 +228,7 @@ cd android
 > 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
 > push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
-> 版本号只写在 `package.json`（当前 `2.15.0`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.16.0`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)

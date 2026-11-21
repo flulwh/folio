@@ -4,7 +4,7 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。桌面端版本号唯一来源是 `package.json`；
 Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
-## [Unreleased]
+## [2.16.0] — 2026-11-21
 
 **设置页新增「检查更新」与「公告」，桌面端与安卓端同一套机制。**
 
