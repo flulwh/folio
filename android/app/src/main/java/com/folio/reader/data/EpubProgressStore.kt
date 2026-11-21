@@ -10,8 +10,9 @@ import org.readium.r2.shared.util.mediatype.MediaType
 /**
  * EPUB 阅读位置：`filesDir/library/epub-progress.json`。
  *
- * **本机专用、不上传**：LY 协议同步的是桌面端的「章 + 百分比」，
- * EPUB 只在手机上有，所以位置也只存在手机上。
+ * 这份文件只存本机：`href` 是 Readium 的定位信息，桌面端用不上。
+ * 与桌面端对齐的是全书百分比——每次落盘位置时，`SessionStore` 会另写一条
+ * `ProgressEntry.percent` 进 `progress.json`，跟着进度同步走。
  *
  * 只存 Readium 定位必需的三样：`href`（章节资源路径）、标题、
  * `progression` / `totalProgression`（章内 / 全书百分比）。

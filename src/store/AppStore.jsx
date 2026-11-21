@@ -203,9 +203,15 @@ const api = {
     const hit = list.find((b) => b.filePath === filePath);
     return hit ? { content: hit.content || '' } : { error: '浏览器预览模式下读不到文件' };
   },
-  // EPUB / PDF：整份二进制（Uint8Array）交给阅读器，浏览器预览没有磁盘副本
-  readBookBinary: async (filePath) => {
-    if (window.readerAPI?.readBookBinary) return window.readerAPI.readBookBinary(filePath);
+  // EPUB / PDF：只问大小与格式，正文由阅读器按范围分段取（浏览器预览没有磁盘副本）
+  statBookBinary: async (filePath) => {
+    if (window.readerAPI?.statBookBinary) return window.readerAPI.statBookBinary(filePath);
+    return { error: '浏览器预览模式下读不到电子书文件' };
+  },
+  readBookRange: async (filePath, offset, length) => {
+    if (window.readerAPI?.readBookRange) {
+      return window.readerAPI.readBookRange(filePath, offset, length);
+    }
     return { error: '浏览器预览模式下读不到电子书文件' };
   },
   addBookBinary: async (payload) => {
@@ -1367,7 +1373,8 @@ export function AppProvider({ children }) {
       addBookFromText,
       addBookFromBinary,
       readBookText: api.readBookText,
-      readBookBinary: api.readBookBinary,
+      statBookBinary: api.statBookBinary,
+      readBookRange: api.readBookRange,
       cacheCover: api.cacheCover,
       cacheCovers: api.cacheCovers,
       clearCoverCache: api.clearCoverCache,

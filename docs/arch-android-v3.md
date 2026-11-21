@@ -73,7 +73,7 @@
 | 方法 | 路径 | 参数 | 成功响应 | 鉴权/限制 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/ping` | — | `{ok,port,version,apiVersion:2,features:["library","upload","download","range","comic"]}` | 需 token；`apiVersion<2` 时手机提示"桌面端太旧" |
-| GET | `/api/library` | — | `{ok,apiVersion:2,now,books:[{id,contentHash?,title,author,size,type,kind,format,syncable,syncableReason?,cover?}]}` | 需 token；最多 2000 本，超出 `truncated:true`；`format` 取 `txt`/`epub`/`cbz`，老数据缺省 `txt` |
+| GET | `/api/library` | — | `{ok,apiVersion:2,now,books:[{id,contentHash?,title,author,size,type,kind,format,syncable,syncableReason?,cover?}]}` | 需 token；最多 2000 本，超出 `truncated:true`；`format` 取 `txt`/`epub`/`cbz`/`pdf`，老数据缺省 `txt`；`pdf` 条目恒为 `syncable=false` 且 `syncableReason` 给出原因（安卓端没有 PDF 能力，不下发） |
 | GET | `/api/book/:id/download` | 头 `Range: bytes=N-`（可选） | 200/206 字节流；头 `X-Folio-Hash`、`X-Folio-Size`、`Accept-Ranges: bytes`、`Content-Disposition` | 需 token；`size>30MB`→413；非 local→404/409；`N>=size`→416 |
 | GET | `/api/upload/status` | `hash`(40hex) `size` | `{ok,hash,received,done}` | 需 token；`size>30MB`→413；写关闭→403 |
 | POST | `/api/upload/chunk` | 头 `X-Folio-Hash`、`X-Folio-Offset`、`X-Folio-Total`、`X-Folio-Name`(encodeURIComponent)、`X-Folio-Format`(可选，`cbz`；其余按 `txt`)、`X-Folio-Type`(可选，`0`/`2`)；body `application/octet-stream` | `{ok,received,done:false}` / 完成 `{ok,received,done:true,id,title,created}` | 需 token；body ≤6MB→否则 413；offset 不连续→409 `{received}`；hash 校验失败→422 |

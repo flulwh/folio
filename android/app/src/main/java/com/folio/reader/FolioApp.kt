@@ -57,7 +57,7 @@ class AppContainer(app: Application) {
     val files = BookFileStore(app.filesDir)
     val importer = BookImporter(books, files)
 
-    /** EPUB：原文件只在本机，解析与排版交给 Readium；位置也只存本机。 */
+    /** EPUB：解析与排版交给 Readium；章内位置存本机，全书百分比参与双端同步。 */
     val epubLibrary = EpubLibrary(app, files)
     val epubProgress = EpubProgressStore(libraryDir)
 

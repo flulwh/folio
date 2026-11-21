@@ -12,6 +12,9 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.7.4：漫画续读页号不再错一页（百分比统一 0 基、按同步进度判新旧），
+        //        本地漫画单页解压加上限，EPUB 进程重建不再崩，导入改用流式限额，
+        //        EPUB 进度按百分比双向同步、翻页停稳即落盘，漫画页序与桌面端统一（versionCode 34）。
         // 4.7.3：音量键翻页忽略长按产生的重复事件，按住不再一路翻到首页 / 末页（versionCode 33）。
         // 4.7.2：公告独立成页（书架铃铛 + 公告中心），设置页补作者信息（versionCode 32）。
         // 4.7.1：回到 iOS 11 观感——书架 / 设置 / 同步 / 字体四个页面恢复折叠大标题，
@@ -30,8 +33,8 @@ android {
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 33
-        versionName = "4.7.3"
+        versionCode = 34
+        versionName = "4.7.4"
         vectorDrawables.useSupportLibrary = true
         // 只保留中英两套库字符串：AndroidX / Readium 自带六十多种语言，
         // 这个 App 的界面只有中文，多出来的 arsc 条目纯属占体积。

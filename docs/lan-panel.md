@@ -61,8 +61,15 @@ dataDir/
 - 反向上传：`POST /api/upload/chunk` 带 `X-Folio-Format: cbz` 与 `X-Folio-Type: 2`，桌面端按 `.cbz` 落盘并登记格式；
   老客户端没有这两个头时仍按 `txt` 处理
 - 同步上限与普通书一致（30MB）：超限的漫画只在本机读，`/api/library` 会给出 `syncableReason`
-- 进度口径：本地漫画固定「全一话」（`chapter 0`），`percent = (页号 + 1) / 总页数`；页内位置只存本机的 `comicPage`，
-  不写进 `progress.json`，避免双端为翻页反复覆盖
+- 页序双端同一套规则：数字段按数值（`2.jpg` 在 `10.jpg` 前）、其余按小写后的码位、同名再按原名兜底；
+  桌面端 `electron/cbz.js` 的 `comparePageName` 与安卓端 `CbzArchive.comparePageName` 逐条对齐
+- ZIP64：桌面端读 EOCD64 与中央目录的 64 位 extra，超过 65535 个条目或目录偏移溢出 32 位的包也能打开；
+  安卓端直接走 JDK `ZipFile`，同样支持
+- PDF：桌面端本地可读，但 `/api/library` 里 `format = "pdf"` 的条目恒为 `syncable=false`
+  （`syncableReason = "PDF 只能在这台电脑上看"`），手机端不下载，也不会把它当 txt 解码
+- 进度口径：本地漫画固定「全一话」（`chapter 0`），`percent = 页号（0 基） / 总页数`——第 1 页是 0%，末页不到 100%，
+  双端读同一个百分比反解页号时不会多翻一页；页内位置只存本机的 `comicPage`（带 `comicPageAt` 时间戳，
+  只在它不比同步进度旧时优先），不写进 `progress.json`，避免双端为翻页反复覆盖
 
 进度写回时两种书都走同一个 `POST /api/progress`，云端书额外带上 `chapter` 与 `windowBase`，
 合并是浅合并，所以桌面端读到的云端书进度不会被手机上的写入抹掉章口径。

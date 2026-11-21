@@ -66,4 +66,27 @@ class ComicProgressTest {
         assertTrue("越界页下标不能超过 100，实际 $page", page <= 100.0)
         assertPercent(99.5, page)
     }
+
+    @Test
+    fun 百分比反解能还原每一页() {
+        // 单话作品：写入的百分比必须在两端都能解回同一页，否则续读会多翻/少翻
+        listOf(1, 2, 3, 7, 10, 200).forEach { total ->
+            (0 until total).forEach { page ->
+                val percent = comicPercent(0, page, total, 1)
+                assertEquals(
+                    "total=$total page=$page percent=$percent",
+                    page,
+                    comicPageFromPercent(percent, total),
+                )
+            }
+        }
+    }
+
+    @Test
+    fun 反解对脏值夹住不抛异常() {
+        assertEquals(0, comicPageFromPercent(0.0, 0))
+        assertEquals(0, comicPageFromPercent(-10.0, 10))
+        assertEquals(9, comicPageFromPercent(999.0, 10))
+        assertEquals(0, comicPageFromPercent(Double.NaN, 10))
+    }
 }

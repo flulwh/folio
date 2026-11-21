@@ -18,7 +18,10 @@ import com.folio.reader.core.SearchHit
 import com.folio.reader.core.TextParser
 import com.folio.reader.core.TextSearch
 import com.folio.reader.core.TocChapter
+import com.folio.reader.core.comicPageFromPercent
 import com.folio.reader.core.comicPercent
+import com.folio.reader.core.epubFraction
+import com.folio.reader.core.epubPercent
 import com.folio.reader.data.ComicPage
 import com.folio.reader.data.ConnectionManager
 import com.folio.reader.data.ConnectionState
@@ -415,6 +418,11 @@ class SessionStore(private val app: Application) {
     fun dismissMessage() {
         _shelf.update { it.copy(message = null) }
         _settings.update { it.copy(message = null) }
+    }
+
+    /** 书架轻提示：用于「这台设备做不了」这类即时反馈。 */
+    fun showMessage(text: String) {
+        _shelf.update { it.copy(message = text) }
     }
 
     /** 关掉「未连接桌面端」横幅（本次进程内不再弹）。 */
@@ -1200,7 +1208,9 @@ class SessionStore(private val app: Application) {
             val entry = progressMap[book.id]
             val target = entry?.chapter ?: chapters.first().index
             val position = chapters.indexOfFirst { it.index == target }.coerceAtLeast(0)
-            loadComicChapter(book, chapters, position, book.comicPage ?: 0)
+            // 本机页号只有在不比同步进度旧时才可信：桌面端读得更远时要从第 0 页进新话
+            val localPageFresh = book.comicPage != null && book.comicPageAt >= (entry?.updatedAt ?: 0L)
+            loadComicChapter(book, chapters, position, if (localPageFresh) book.comicPage ?: 0 else 0)
         }
     }
 
@@ -1218,9 +1228,13 @@ class SessionStore(private val app: Application) {
             return
         }
         val entry = progressMap[book.id]
-        // 桌面端只同步到百分比：没有本机页号时按百分比换算，续读位置才对得上
-        val fromProgress = (((entry?.percent ?: 0.0) / 100.0) * total).toInt()
-        val page = (book.comicPage ?: fromProgress).coerceIn(0, total - 1)
+        // 桌面端只同步到百分比：没有本机页号时按百分比换算，续读位置才对得上。
+        // 百分比是 0 基（第 1 页 0%），四舍五入回来正好是原页号。
+        val fromProgress = comicPageFromPercent(entry?.percent ?: 0.0, total)
+        // 本机页号过期（桌面端读得更远）时以同步进度为准，否则手机永远停在旧页并把它推回去
+        val localPageFresh = book.comicPage != null && book.comicPageAt >= (entry?.updatedAt ?: 0L)
+        val page = (if (localPageFresh) book.comicPage ?: fromProgress else fromProgress)
+            .coerceIn(0, total - 1)
         val toc = listOf(TocChapter(index = 0, title = "全一话"))
         _comic.update {
             it.copy(
@@ -1280,7 +1294,7 @@ class SessionStore(private val app: Application) {
     fun onComicPageChanged(page: Int) {
         val state = _comic.value
         val book = state.book ?: return
-        if (page == state.page || page < 0) return
+        if (page == state.page || page < 0 || page >= state.total) return
         _comic.update { it.copy(page = page) }
         recordComicProgress(book, state.toc, state.chapterIndex, state.chapterNo, page, state.total, false)
         maybePrefetchNextChapter(book, state.toc, state.chapterIndex, page, state.total)
@@ -1417,7 +1431,10 @@ class SessionStore(private val app: Application) {
         if (book != null) {
             val current = books.findById(book.id)
             if (current != null) {
-                books.upsert(current.copy(comicPage = state.page))
+                // 记下时间戳：下次打开要与同步来的进度比新旧，不能无脑信本机页号
+                books.upsert(
+                    current.copy(comicPage = state.page, comicPageAt = System.currentTimeMillis())
+                )
             }
         }
         flush()
@@ -1439,8 +1456,19 @@ class SessionStore(private val app: Application) {
             _epub.value = EpubUiState(book = book, error = "这本书没有落盘的 EPUB 文件，请重新导入")
             return
         }
-        val saved = runCatching { container.epubProgress.load(book.id)?.toLocator() }.getOrNull()
-        _epub.value = EpubUiState(book = book, loading = true, initialLocator = saved)
+        val saved = runCatching { container.epubProgress.load(book.id) }.getOrNull()
+        val synced = progressMap[book.id]
+        // 桌面端可能读得更远：同步进度比本机位置新时，按全书百分比落位
+        val syncedFraction = if (synced != null && synced.updatedAt > (saved?.updatedAt ?: 0L)) {
+            epubFraction(synced.percent)
+        } else {
+            0.0
+        }
+        _epub.value = EpubUiState(
+            book = book,
+            loading = true,
+            initialFraction = syncedFraction.takeIf { it > 0.0 },
+        )
         scope.launch {
             container.epubLibrary.open(local).fold(
                 onSuccess = { _epub.update { it.copy(loading = false) } },
@@ -1451,9 +1479,27 @@ class SessionStore(private val app: Application) {
         }
     }
 
-    /** 阅读页每翻一次记一次位置；写盘放 IO，失败不打扰阅读。 */
+    /**
+     * 记录 EPUB 位置：本机 locator 落盘，同时按全书百分比写一条同步进度。
+     *
+     * 双端读的是同一本 EPUB（同一个 id），百分比是唯一能互通的锚点：
+     * 桌面端写 `percent`，手机下次打开按它落位，反向同理。
+     */
     fun saveEpubLocator(bookId: String, locator: Locator) {
-        scope.launch(Dispatchers.IO) { container.epubProgress.save(bookId, locator) }
+        scope.launch(Dispatchers.IO) { runCatching { container.epubProgress.save(bookId, locator) } }
+        val book = books.findById(bookId) ?: return
+        val percent = epubPercent(locator.locations.totalProgression, locator.locations.progression) ?: return
+        // EPUB 没有段落号，位置只体现在 percent 里，判重要带上它
+        recordProgress(
+            book,
+            ProgressEntry(
+                id = bookId,
+                chapterTitle = locator.title,
+                percent = percent,
+                updatedAt = System.currentTimeMillis(),
+            ),
+            includePercent = true,
+        )
     }
 
     /** 离开 EPUB 阅读页：释放 Readium 的 Publication（文件句柄与已解析资源）。 */
@@ -1464,10 +1510,10 @@ class SessionStore(private val app: Application) {
 
     /* ---------------- 进度落盘与回写 ---------------- */
 
-    private fun recordProgress(book: Book, entry: ProgressEntry) {
+    private fun recordProgress(book: Book, entry: ProgressEntry, includePercent: Boolean = false) {
         // 位置没动就不写。打开书时的还原滚动、重新测量都会走到这里，
         // 每次都盖一个「现在」会把桌面端更新的位置冲掉；只有真的翻过去才回写。
-        if (ProgressMerger.samePlace(progressMap[book.id], entry)) return
+        if (ProgressMerger.samePlace(progressMap[book.id], entry, includePercent)) return
         progressMap[book.id] = entry
         _shelf.update { it.copy(progress = progressMap.toMap()) }
         persistJob?.cancel()
@@ -1630,13 +1676,11 @@ class SessionStore(private val app: Application) {
 
     private fun importOne(uri: Uri): BookImporter.Outcome {
         val name = displayNameOf(uri)
-        val bytes = runCatching {
-            app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-        }.getOrNull() ?: return BookImporter.Outcome.Failed("读不到这个文件")
-        if (bytes.size > BookImporter.INTAKE_LIMIT) {
-            return BookImporter.Outcome.Failed("这本超过 30MB，只能放在桌面端阅读")
-        }
-        return importer.importBytes(name, bytes)
+        // 不要先 readBytes：那会把 1GB 文件整块读进内存再判上限。交给 importStream 按格式限额
+        // （txt 30MB / CBZ 100MB / EPUB 200MB），读超上限立刻停下。
+        val stream = runCatching { app.contentResolver.openInputStream(uri) }.getOrNull()
+            ?: return BookImporter.Outcome.Failed("读不到这个文件")
+        return importer.importStream(name, stream)
     }
 
     private fun displayNameOf(uri: Uri): String {

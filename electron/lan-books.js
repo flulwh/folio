@@ -222,8 +222,11 @@ export function createBooksService(opts = {}) {
         author: String(book.author || ''),
         size,
         type: Number(book.type) === 2 ? 2 : 0,
-        // 手机据此决定落盘扩展名（.txt / .epub / .cbz）；老数据没有这个字段按 txt
-        format: book.format === 'epub' || book.format === 'cbz' ? book.format : 'txt',
+        // 手机据此决定落盘扩展名（.txt / .epub / .cbz / .pdf）；老数据没有这个字段按 txt
+        format:
+          book.format === 'epub' || book.format === 'cbz' || book.format === 'pdf'
+            ? book.format
+            : 'txt',
         kind,
         syncable: false,
       };
@@ -231,6 +234,9 @@ export function createBooksService(opts = {}) {
 
       if (kind !== 'local') {
         item.syncableReason = '云端书只能连桌面端在线读';
+      } else if (item.format === 'pdf') {
+        // 安卓端没有 PDF 阅读器：宁可在清单里喊明，也别把二进制当 txt 同步过去
+        item.syncableReason = 'PDF 只能在这台电脑上看';
       } else if (!copy) {
         item.syncableReason = '这本书没有正文副本';
       } else if (!size) {

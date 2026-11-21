@@ -456,14 +456,18 @@ private fun VerticalPages(
     book: Book,
 ) {
     val listState = rememberLazyListState()
+    // 恢复位置期间不要监听滚动：LazyList 的初始 index 是 0，提前上报会把续读页冲成第 1 页
+    var restored by remember(comic.chapterNo) { mutableStateOf(false) }
 
     LaunchedEffect(comic.chapterNo) {
         if (comic.page > 0 && comic.total > comic.page) {
             listState.scrollToItem(comic.page)
         }
+        restored = true
     }
 
-    LaunchedEffect(listState, comic.chapterNo) {
+    LaunchedEffect(listState, comic.chapterNo, restored) {
+        if (!restored) return@LaunchedEffect
         snapshotFlow { listState.firstVisibleItemIndex }
             .distinctUntilChanged()
             .collect { index -> vm.onComicPageChanged(index) }

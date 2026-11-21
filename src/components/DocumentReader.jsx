@@ -41,8 +41,39 @@ function applyEpubStyles(view, host, settings) {
   `);
 }
 
+/**
+ * 把主进程的分段读取伪装成 Blob：foliate 的 zip.js 只用到 `size`、
+ * `slice(start, end).arrayBuffer()`（偶尔整份 `arrayBuffer()`）。
+ * 这样 EPUB 的中央目录与单章资源是现读的，不用把整本先塞进渲染层内存。
+ */
+function makeRangeBackedFile({ filePath, name, type, size, readRange }) {
+  const clamp = (value, fallback) => {
+    const num = Math.floor(Number(value));
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(0, Math.min(size, num));
+  };
+  const readSlice = async (start, end) => {
+    const from = clamp(start, 0);
+    const to = Math.max(from, clamp(end, size));
+    if (to <= from) return new ArrayBuffer(0);
+    const res = await readRange(filePath, from, to - from);
+    if (res?.error) throw new Error(res.error);
+    const data = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data || []);
+    // 主进程截断时宁可报错，也不能把半份 zip 数据交给解包器
+    if (data.byteLength !== to - from) throw new Error('读取电子书内容失败，文件可能已被移动或损坏');
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  };
+  return {
+    name,
+    type,
+    size,
+    slice: (start, end) => ({ arrayBuffer: () => readSlice(start, end) }),
+    arrayBuffer: () => readSlice(0, size),
+  };
+}
+
 export default function DocumentReader({ book, onClose }) {
-  const { saveProgress, readBookBinary } = useAppActions();
+  const { saveProgress, statBookBinary, readBookRange } = useAppActions();
   const progress = useProgress();
   const settings = useSettings();
   const kit = useMotionKit();
@@ -92,7 +123,17 @@ export default function DocumentReader({ book, onClose }) {
   const onEpubRelocate = useCallback(
     (event) => {
       const detail = event.detail || {};
-      const fraction = typeof detail.fraction === 'number' ? detail.fraction : 0;
+      const raw = typeof detail.fraction === 'number' && Number.isFinite(detail.fraction)
+        ? detail.fraction
+        : null;
+      const section = detail.section;
+      const derived = section && Number(section.total) > 0
+        ? Number(section.current) / Number(section.total)
+        : null;
+      // foliate 对固定版式（pre-paginated）上报的 fraction 恒为 0，此时用章节位置兜底，
+      // 否则每翻一页都会把进度写成 0
+      const fraction = raw == null ? derived : raw === 0 && derived ? derived : raw;
+      if (fraction == null) return; // 拿不到位置就保留旧进度，别写一个假的 0
       const title = detail.tocItem?.label || '';
       const value = Math.min(100, Math.max(0, fraction * 100));
       setPercent(value);
@@ -117,15 +158,21 @@ export default function DocumentReader({ book, onClose }) {
     setError('');
     (async () => {
       try {
-        const res = await readBookBinary(book.filePath);
-        if (res?.error) throw new Error(res.error);
+        const info = await statBookBinary(book.filePath);
+        if (info?.error) throw new Error(info.error);
+        const size = Number(info?.size) || 0;
+        if (!size) throw new Error('这本书是空的');
         if (cancelled || !stageRef.current) return;
-        const bytes = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data || []);
         // view.js 负责注册 <foliate-view>，并自带 zip.js 解包
         await import('foliate-js/view.js');
         if (cancelled || !stageRef.current) return;
-        const file = new File([bytes], `${book.name || 'book'}.epub`, {
+        // 用分段读取替身代替 File：zip.js 只按需读中央目录与当前章节
+        const file = makeRangeBackedFile({
+          filePath: book.filePath,
+          name: `${book.name || 'book'}.epub`,
           type: 'application/epub+zip',
+          size,
+          readRange: readBookRange,
         });
         view = document.createElement('foliate-view');
         view.setAttribute('flow', 'paginated');
@@ -143,6 +190,16 @@ export default function DocumentReader({ book, onClose }) {
         applyEpubStyles(view, rootRef.current, settings);
         const location = savedRef.current?.location;
         await view.init(location ? { lastLocation: location } : {});
+        if (cancelled) return;
+        // 进度可能来自安卓端：那里只有全书百分比、没有 CFI，按比例落到最接近的位置
+        const savedPercent = Number(savedRef.current?.percent) || 0;
+        if (!location && savedPercent > 0) {
+          try {
+            await view.goToFraction(Math.min(100, savedPercent) / 100);
+          } catch {
+            /* 落位失败就从开头读，不影响打开 */
+          }
+        }
         if (cancelled) return;
         setStatus('ready');
       } catch (err) {
@@ -162,30 +219,60 @@ export default function DocumentReader({ book, onClose }) {
     };
     // settings 只影响样式，由下面的样式 effect 单独处理，避免换主题时重载整本书
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [book.filePath, book.name, book.id, isEpub, onEpubRelocate, readBookBinary]);
+  }, [book.filePath, book.name, book.id, isEpub, onEpubRelocate, statBookBinary, readBookRange]);
 
   /* ------------------------------ PDF ------------------------------ */
   useEffect(() => {
     if (isEpub) return undefined;
     let cancelled = false;
     let doc = null;
+    let task = null;
+    let transport = null;
     setStatus('loading');
     setError('');
     (async () => {
       try {
-        const res = await readBookBinary(book.filePath);
-        if (res?.error) throw new Error(res.error);
+        const info = await statBookBinary(book.filePath);
+        if (info?.error) throw new Error(info.error);
+        const size = Number(info?.size) || 0;
+        if (!size) throw new Error('这本书是空的');
         if (cancelled) return;
-        const bytes = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data || []);
         const pdfjs = await import('pdfjs-dist');
         const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-        doc = await pdfjs.getDocument({ data: bytes }).promise;
+        // 只把 pdf.js 要的那几段（xref、对象流、当前页资源）现读过来，
+        // 整本 PDF 不进主进程堆，也不整份穿过 IPC。
+        transport = new pdfjs.PDFDataRangeTransport(size, null);
+        transport.requestDataRange = (begin, end) => {
+          readBookRange(book.filePath, begin, end - begin)
+            .then((res) => {
+              if (cancelled) return;
+              if (res?.error) {
+                transport.abort();
+                return;
+              }
+              const data = res.data instanceof Uint8Array ? res.data : new Uint8Array(res.data || []);
+              transport.onDataRange(begin, data);
+            })
+            .catch(() => {
+              if (!cancelled) transport.abort();
+            });
+        };
+        task = pdfjs.getDocument({
+          range: transport,
+          rangeChunkSize: 256 * 1024,
+          disableStream: true,
+          disableAutoFetch: true,
+        });
+        doc = await task.promise;
         if (cancelled) return;
         pdfRef.current = doc;
         setPageCount(doc.numPages);
         const saved = savedRef.current;
-        const fromPercent = Math.round((Number(saved?.percent) || 0) * (doc.numPages / 100));
+        // 百分比是 0 基：第 1 页 0%，最后一页 100%
+        const fromPercent = Math.round(
+          ((Number(saved?.percent) || 0) / 100) * Math.max(0, doc.numPages - 1)
+        ) + 1;
         const start = Number(saved?.page) || fromPercent || 1;
         setPageNum(Math.min(doc.numPages, Math.max(1, start)));
         setStatus('ready');
@@ -198,13 +285,15 @@ export default function DocumentReader({ book, onClose }) {
     return () => {
       cancelled = true;
       try {
-        doc?.destroy?.();
+        transport?.abort();
+        // PDFDocumentProxy 没有 destroy；销毁 worker 走 loadingTask
+        task?.destroy?.();
       } catch {
         /* 已销毁 */
       }
       if (pdfRef.current === doc) pdfRef.current = null;
     };
-  }, [book.filePath, book.id, isEpub, readBookBinary]);
+  }, [book.filePath, book.id, isEpub, statBookBinary, readBookRange]);
 
   /* ------------------------------ PDF 单页渲染 ------------------------------ */
   useEffect(() => {
@@ -252,7 +341,8 @@ export default function DocumentReader({ book, onClose }) {
   /* ------------------------------ 进度显示 / 回写（PDF） ------------------------------ */
   useEffect(() => {
     if (isEpub || !pageCount) return;
-    const value = Math.min(100, (pageNum / pageCount) * 100);
+    // 0 基百分比：第 1 页 0%，最后一页 100%，与进度条的阅读直觉一致
+    const value = Math.min(100, ((pageNum - 1) / Math.max(1, pageCount - 1)) * 100);
     setPercent(value);
     const title = `第 ${pageNum} / ${pageCount} 页`;
     setChapterTitle(title);
@@ -273,14 +363,33 @@ export default function DocumentReader({ book, onClose }) {
 
   /* ------------------------------ 窗口尺寸 ------------------------------ */
   useEffect(() => {
+    let timer = 0;
     const onResize = () => {
-      const view = viewRef.current;
-      if (view) view.setAttribute('max-column-count', window.innerWidth > 1080 ? '2' : '1');
-      setResizeTick((tick) => tick + 1);
+      // 拖拽窗口时每个像素都会触发 resize：150ms 合并一次，避免反复重排/重绘 PDF
+      if (timer) clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        const view = viewRef.current;
+        if (view) view.setAttribute('max-column-count', window.innerWidth > 1080 ? '2' : '1');
+        setResizeTick((tick) => tick + 1);
+      }, 150);
     };
     window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      if (timer) clearTimeout(timer);
+    };
   }, []);
+
+  /* 直接关窗口时组件来不及 handleClose，把 700ms 防抖里的进度立刻落盘 */
+  useEffect(() => {
+    const onHide = () => flushProgress();
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('beforeunload', onHide);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('beforeunload', onHide);
+    };
+  }, [flushProgress]);
 
   /* ------------------------------ 交互 ------------------------------ */
   const wake = useCallback(() => {

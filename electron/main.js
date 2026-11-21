@@ -14,7 +14,8 @@ import { createBooksStore } from './lan-books.js';
 import { createDeviceStore } from './devicestore.js';
 import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
 import { configureBookFile } from './bookfile.js';
-import { pageCount as comicPageCount, readPage as readComicPage } from './cbz.js';
+import { normalizeRange } from './bookrange.js';
+import { pageCount as comicPageCount, readPage as readComicPage, forgetComic } from './cbz.js';
 import { createJsonStore } from './json-store.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
@@ -1926,14 +1927,56 @@ ipcMain.handle('comic:local-pages', async (_e, bookId) => {
   }
 });
 
-/** EPUB / PDF：整份二进制交给渲染层（Buffer 经 IPC 序列化成 Uint8Array） */
-ipcMain.handle('book:read-binary', async (_e, filePath) => {
+/**
+ * EPUB / PDF：只回文件大小与格式，具体内容按范围读（见下面的 `book:read-range`）。
+ * 整本 readFileSync 会把大 PDF 一次塞进主进程堆，再经 IPC 克隆一遍，
+ * 打开一本 500MB 的画册就是 1GB 峰值内存。
+ */
+ipcMain.handle('book:stat-binary', async (_e, filePath) => {
   try {
     if (!isKnownBookPath(filePath)) {
       return { error: '这个文件不在书架目录里，拒绝读取' };
     }
-    const data = fs.readFileSync(filePath);
-    return { data, size: data.length, format: detectEbookFormat(filePath) };
+    const stats = await fs.promises.stat(filePath);
+    return { size: stats.size, format: detectEbookFormat(filePath) };
+  } catch (err) {
+    return { error: `读不到这本书（${path.basename(String(filePath || ''))}）：${err.message}` };
+  }
+});
+
+/**
+ * EPUB / PDF 分段读取：`[offset, offset + length)` 的字节。
+ * 异步 fs.promises + 单次上限，既不阻塞主进程，也不给渲染层"一次要整本"的机会。
+ */
+ipcMain.handle('book:read-range', async (_e, filePath, rawOffset, rawLength) => {
+  try {
+    if (!isKnownBookPath(filePath)) {
+      return { error: '这个文件不在书架目录里，拒绝读取' };
+    }
+    const stats = await fs.promises.stat(filePath);
+    const range = normalizeRange(stats.size, rawOffset, rawLength);
+    if (range.error) return { error: range.error };
+    const handle = await fs.promises.open(filePath, 'r');
+    try {
+      const buffer = Buffer.allocUnsafe(range.length);
+      let filled = 0;
+      while (filled < range.length) {
+        const { bytesRead } = await handle.read(
+          buffer,
+          filled,
+          range.length - filled,
+          range.offset + filled
+        );
+        if (bytesRead <= 0) break;
+        filled += bytesRead;
+      }
+      return {
+        data: filled === range.length ? buffer : buffer.subarray(0, filled),
+        size: stats.size,
+      };
+    } finally {
+      await handle.close();
+    }
   } catch (err) {
     return { error: `读不到这本书（${path.basename(String(filePath || ''))}）：${err.message}` };
   }
@@ -1953,6 +1996,8 @@ ipcMain.handle('book:delete-file', async (_e, filePath) => {
     const target = path.resolve(String(filePath || ''));
     if (!isInside(booksDir, target)) return { ok: false, reason: 'not-in-books-dir' };
     if (fs.existsSync(target)) fs.unlinkSync(target);
+    // 解析缓存按路径存：删了文件就一起清，重新导入同名文件时不会读到旧页序
+    forgetComic(target);
     return { ok: true };
   } catch (err) {
     return { ok: false, reason: err.message };

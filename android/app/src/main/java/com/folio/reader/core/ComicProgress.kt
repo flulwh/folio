@@ -46,3 +46,16 @@ fun comicPercent(
     }
     return ((chapter + inner) / chapterCount * 100.0).coerceIn(0.0, 100.0)
 }
+
+/**
+ * [comicPercent] 的逆运算：单话作品从百分比反解出页下标（0 基）。
+ *
+ * 桌面端只把百分比同步过来，本机没有页号时靠它续读。用四舍五入而不是截断：
+ * `1 / 3 × 100 = 33.33…` 再乘回去是 `0.999…`，截断会退到上一页。
+ * 越界与脏值一律夹到 `0..pageCount-1`，`pageCount <= 0` 返回 0。
+ */
+fun comicPageFromPercent(percent: Double, pageCount: Int): Int {
+    if (pageCount <= 0) return 0
+    val value = if (percent.isFinite()) percent else 0.0
+    return Math.round(value / 100.0 * pageCount).toInt().coerceIn(0, pageCount - 1)
+}

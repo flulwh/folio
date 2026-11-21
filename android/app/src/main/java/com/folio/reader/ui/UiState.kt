@@ -15,7 +15,6 @@ import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.InstalledFont
 import com.folio.reader.data.SyncStateStore
 import com.folio.reader.net.Notice
-import org.readium.r2.shared.publication.Locator
 
 /**
  * 书架条目右上角的角标。
@@ -275,8 +274,8 @@ data class EpubUiState(
     val book: Book? = null,
     val loading: Boolean = false,
     val error: String? = null,
-    /** 上次读到的地方（本机 `epub-progress.json`）。 */
-    val initialLocator: Locator? = null,
+    /** 桌面端进度更新过时，按全书比例落位（0–1）；null 表示用本机 locator。 */
+    val initialFraction: Double? = null,
 )
 
 /**

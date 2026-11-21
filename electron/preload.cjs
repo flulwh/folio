@@ -19,7 +19,9 @@ contextBridge.exposeInMainWorld('readerAPI', {
   addBookContent: (payload) => ipcRenderer.invoke('book:add-content', payload),
   addBookBinary: (payload) => ipcRenderer.invoke('book:add-binary', payload),
   readBookText: (filePath) => ipcRenderer.invoke('book:read', filePath),
-  readBookBinary: (filePath) => ipcRenderer.invoke('book:read-binary', filePath),
+  statBookBinary: (filePath) => ipcRenderer.invoke('book:stat-binary', filePath),
+  readBookRange: (filePath, offset, length) =>
+    ipcRenderer.invoke('book:read-range', filePath, offset, length),
   // 本地漫画：只回总页数，图片由 folio-comic:// 协议按页取
   localComicPages: (bookId) => ipcRenderer.invoke('comic:local-pages', bookId),
   deleteBookFile: (filePath) => ipcRenderer.invoke('book:delete-file', filePath),

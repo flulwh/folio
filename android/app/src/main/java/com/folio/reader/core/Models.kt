@@ -98,8 +98,11 @@ data class LocalBook(
     /**
      * 漫画读到第几页（0 基）。**只存本机，绝不参与同步**：
      * 双端进度对齐到「话」级，话内页号是纯本地偏好，传上去只会制造无意义写入。
+     * 与桌面端同步来的 [ProgressEntry.updatedAt] 比新旧用 [comicPageAt]。
      */
     val comicPage: Int? = null,
+    /** [comicPage] 的落盘时间；没有这个字段的老数据按 0 处理（优先信同步进度）。 */
+    val comicPageAt: Long = 0L,
 ) {
     /** 桌面端那侧的类别；没同步过时按 local 处理（手机导入的都是本地 txt）。 */
     val kind: String get() = remoteKind ?: BookKind.LOCAL
@@ -111,6 +114,9 @@ data class LocalBook(
     val isEpub: Boolean get() = format == "epub"
 
     val isCbz: Boolean get() = format == "cbz"
+
+    /** 桌面端的 PDF：手机没有阅读器，只能提示「在电脑上看」。 */
+    val isPdf: Boolean get() = format == "pdf"
 
     /** 冲突判定用的键：书名规整后比较，见 [titleKeyOf]。 */
     val titleKey: String get() = titleKeyOf(title)
@@ -137,6 +143,7 @@ data class LocalBook(
         cover?.let { json.put("cover", it) }
         remoteId?.let { json.put("remoteId", it) }
         comicPage?.let { json.put("comicPage", it) }
+        if (comicPageAt > 0L) json.put("comicPageAt", comicPageAt)
         return json
     }
 
@@ -179,7 +186,8 @@ data class LocalBook(
                 contentHash = hash.takeIf { it.length == 40 },
                 size = json.optLong("size", 0L).coerceAtLeast(0L),
                 encoding = json.optString("encoding").takeIf { it.isNotBlank() && it != "null" },
-                format = json.optString("format").takeIf { it == "epub" || it == "cbz" } ?: "txt",
+                format = json.optString("format")
+                    .takeIf { it == "epub" || it == "cbz" || it == "pdf" } ?: "txt",
                 hasLocalFile = json.optBoolean("hasLocalFile", false),
                 cover = json.optString("cover")
                     .takeIf { it.isNotBlank() && (it.startsWith("http") || it.startsWith("/")) },
@@ -192,6 +200,7 @@ data class LocalBook(
                 } else {
                     null
                 },
+                comicPageAt = json.optLong("comicPageAt", 0L).coerceAtLeast(0L),
             )
         }
 

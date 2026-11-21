@@ -99,7 +99,7 @@ tools/               回归与验证脚本（见 performance.md）
 
 | 决定 | 原因 |
 | --- | --- |
-| **纯文本走章节正则，电子书走成熟库** | TXT / Markdown 用正则章节匹配，段落索引就是进度锚点。EPUB 是 ZIP 容器、PDF 是分页描述文件，自研解析成本高且易错，因此分别交给 foliate-js 与 pdf.js，渲染层只做外壳（进度、目录、翻页）；`progress.json` 额外写 `location`（EPUB CFI）/ `page`（PDF 页码），原有字段语义不变 |
+| **纯文本走章节正则，电子书走成熟库** | TXT / Markdown 用正则章节匹配，段落索引就是进度锚点。EPUB 是 ZIP 容器、PDF 是分页描述文件，自研解析成本高且易错，因此分别交给 foliate-js 与 pdf.js，渲染层只做外壳（进度、目录、翻页）；`progress.json` 额外写 `location`（EPUB CFI）/ `page`（PDF 页码），原有字段语义不变。文件内容按 `book:read-range` 分段现读，PDF 只取当前页所需的对象流、EPUB 只解当前章节，整本不驻留主进程内存 |
 | **进度锚在段落而非像素** | 字号与栏宽随时可调，段落索引是唯一稳定的坐标 |
 | **段落间距用 `padding`** | 虚拟滚动是绝对定位的，`margin` 不计入 `offsetHeight`，会让相邻段落重叠 |
 | **自动滚动用浮点游标 + 绝对赋值** | Chromium 会丢弃 `scrollTop += 0.02` 这类亚像素增量，逐帧累加只会原地不动；内部维护浮点游标，每帧把 `cursor + speed × dt` 直接赋给 `scrollTop` |

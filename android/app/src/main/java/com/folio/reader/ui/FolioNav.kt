@@ -128,6 +128,9 @@ private object RootRoute : Screen {
                             navigator.push(EpubRoute)
                         }
 
+                        // PDF 没有安卓阅读器：别落进文本通道把二进制解成乱码
+                        book.isPdf -> session.showMessage("PDF 只能在这台电脑上看")
+
                         else -> {
                             session.openBook(book)
                             navigator.push(ReaderRoute)

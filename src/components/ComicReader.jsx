@@ -45,6 +45,10 @@ export default function ComicReader({ book, onClose }) {
   // 放大层：缩放/平移交给 react-zoom-pan-pinch，这里只留展示用的比例读数
   const [zoomScale, setZoomScale] = useState(1);
   const [showTop, setShowTop] = useState(false);
+  // 预取失败 / 图片解码失败的页（key 是页序号字符串），用来结束「加载中」并给重试入口
+  const [failed, setFailed] = useState({});
+  // 「重试」按钮改这个值触发重新加载：setIndex(v => v) 同值会被 React 直接忽略
+  const [reloadKey, setReloadKey] = useState(0);
 
   const fit = settings.comicFit === 'original' ? 'original' : 'width';
   const scrollRef = useRef(null);
@@ -63,6 +67,8 @@ export default function ComicReader({ book, onClose }) {
   const resumePercentRef = useRef(Math.max(0, Number(saved.percent) || 0));
   const resumePageRef = useRef(0);
   const restoredRef = useRef(false);
+  // 当前章节的 referer：单页重试时要带上，否则图源会 403
+  const refererRef = useRef('');
 
   useEffect(() => {
     aliveRef.current = true;
@@ -93,6 +99,7 @@ export default function ComicReader({ book, onClose }) {
     (async () => {
       setLoading(true);
       setError(null);
+      setFailed({});
       try {
         const res = await dataApi.localComicPages(book.id);
         if (cancelled) return;
@@ -101,10 +108,11 @@ export default function ComicReader({ book, onClose }) {
           { length: res.total },
           (_, i) => `folio-comic://page/${encodeURIComponent(book.id)}/${i}`
         );
+        // 百分比是 0 基（第 1 页 = 0%），与安卓 comicPercent 同口径
         const start = resumePercentRef.current
-          ? Math.min(res.total - 1, Math.floor((resumePercentRef.current / 100) * res.total))
+          ? Math.round((resumePercentRef.current / 100) * res.total)
           : 0;
-        resumePageRef.current = Math.max(0, start);
+        resumePageRef.current = Math.max(0, Math.min(res.total - 1, start));
         setToc([{ index: 0, title: book.name || '全一话', url: '' }]);
         setIndex(0);
         setImages(urls);
@@ -119,7 +127,7 @@ export default function ComicReader({ book, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [book.id, book.name, localComic]);
+  }, [book.id, book.name, localComic, reloadKey]);
 
   /* 续读：进度里只有百分比，等页面节点渲染后滚到对应页 */
   useEffect(() => {
@@ -202,12 +210,15 @@ export default function ComicReader({ book, onClose }) {
     setError(null);
     setImages([]);
     setLocals({});
+    setFailed({});
+    refererRef.current = '';
     if (scroll) scroll.scrollTop = 0;
 
     (async () => {
       try {
         const payload = await loadChapter(index);
         if (cancelled || !payload) return;
+        refererRef.current = payload.referer || '';
         setImages(payload.urls);
         // 清单到手立刻渲染占位页，图片边下边出
         setLoading(false);
@@ -222,6 +233,15 @@ export default function ComicReader({ book, onClose }) {
                 const merged = { ...res.urls, ...prev };
                 for (const [k, v] of Object.entries(res.urls)) if (v) merged[k] = v;
                 return merged;
+              });
+              // 预取没有回 url 的页就是失败了：记下来结束「加载中」并给重试入口
+              setFailed((prev) => {
+                const next = { ...prev };
+                payload.urls.forEach((_, i) => {
+                  if (res.urls[String(i)]) delete next[String(i)];
+                  else next[String(i)] = true;
+                });
+                return next;
               });
             })
             .catch(() => {});
@@ -257,22 +277,24 @@ export default function ComicReader({ book, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [book.id, index, toc, loadChapter, localComic]);
+  }, [book.id, index, toc, loadChapter, localComic, reloadKey]);
 
   /* ------------------------------ 进度保存 ------------------------------ */
   useEffect(() => {
     if (!toc.length || localComic) return;
     const chapter = toc[index];
+    // 与安卓 comicPercent 同口径：话位置 + 话内页比例（0 基）
+    const inner = images.length ? Math.min(page, images.length - 1) / images.length : 0;
     saveProgress(book.id, {
       chapter: index,
       windowBase: index,
       paraIndex: index,
-      percent: Math.min(100, ((index + 1) / toc.length) * 100),
+      percent: Math.min(100, ((index + inner) / toc.length) * 100),
       chapterIndex: index,
       chapterTitle: chapter?.title || '',
       updatedAt: Date.now(),
     });
-  }, [book.id, index, toc, saveProgress, localComic]);
+  }, [book.id, index, toc, images.length, page, saveProgress, localComic]);
 
   /* 本地漫画按「页 / 总页数」记百分比，双端只对齐到话级 */
   useEffect(() => {
@@ -281,7 +303,7 @@ export default function ComicReader({ book, onClose }) {
       chapter: 0,
       windowBase: 0,
       paraIndex: 0,
-      percent: Math.min(100, ((page + 1) / images.length) * 100),
+      percent: Math.min(100, (page / images.length) * 100),
       chapterIndex: 0,
       chapterTitle: toc[0]?.title || '',
       updatedAt: Date.now(),
@@ -321,6 +343,30 @@ export default function ComicReader({ book, onClose }) {
   const scrollToTop = useCallback(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
+
+  /** 单页重试：远端页重新预取；本地漫画清掉失败标记后 <img> 会重新请求。 */
+  const retryPage = useCallback(
+    async (i) => {
+      const src = images[i];
+      if (!src) return;
+      setFailed((prev) => {
+        const next = { ...prev };
+        delete next[String(i)];
+        return next;
+      });
+      if (localComic || !dataApi.prefetchImages) return;
+      const res = await dataApi.prefetchImages({
+        key: `${jobRef.current}-retry-${i}`,
+        items: [{ id: String(i), url: src, referer: refererRef.current }],
+        referer: refererRef.current,
+      });
+      if (!aliveRef.current) return;
+      const url = res?.urls?.[String(i)];
+      if (url) setLocals((prev) => ({ ...prev, [String(i)]: url }));
+      else setFailed((prev) => ({ ...prev, [String(i)]: true }));
+    },
+    [images, localComic]
+  );
 
   const toggleFit = useCallback(() => {
     patchSettings({ comicFit: fit === 'width' ? 'original' : 'width' });
@@ -467,6 +513,12 @@ export default function ComicReader({ book, onClose }) {
     [images, locals]
   );
 
+  // 既没出图也没判失败的页：这些还在下载，全部落地后「加载中」必须消失
+  const pendingCount = useMemo(
+    () => images.reduce((n, _, i) => (locals[String(i)] || failed[String(i)] ? n : n + 1), 0),
+    [images, locals, failed]
+  );
+
   return (
     <div className={`comic${uiVisible ? '' : ' zen'}`}>      <div
         className="comic-scroll"
@@ -475,7 +527,7 @@ export default function ComicReader({ book, onClose }) {
         onClick={() => setUiVisible((v) => !v)}
       >
         <div className={`comic-stage fit-${fit}`}>
-          {(loading || (images.length > 0 && readyCount < images.length)) && (
+          {(loading || pendingCount > 0) && (
             <div className="comic-hint">
               <span className="reader-measuring-dot" />
               {loading ? '正在取图' : '加载中'}
@@ -486,7 +538,7 @@ export default function ComicReader({ book, onClose }) {
             <div className="comic-error">
               <p>{error}</p>
               <div className="comic-error-actions">
-                <button className="btn primary" onClick={() => setIndex((v) => v)}>
+                <button className="btn primary" onClick={() => setReloadKey((v) => v + 1)}>
                   重试
                 </button>
                 <button className="btn ghost" onClick={() => goTo(index + 1)}>
@@ -500,20 +552,37 @@ export default function ComicReader({ book, onClose }) {
           )}
           {!error &&
             images.map((src, i) => {
-              const local = locals[String(i)];
+              const local = failed[String(i)] ? null : locals[String(i)];
               return (
-                <div className="comic-page" key={`${index}-${i}`}>
+                <div
+                  className="comic-page"
+                  key={`${index}-${i}${failed[String(i)] ? '-retry' : ''}`}
+                >
                   {local ? (
                     <img
                       src={local}
                       alt={`第 ${i + 1} 页`}
                       loading="lazy"
                       draggable={false}
+                      onError={() => setFailed((prev) => ({ ...prev, [String(i)]: true }))}
                       onClick={(event) => {
                         event.stopPropagation();
                         setZoomed(local);
                       }}
                     />
+                  ) : failed[String(i)] ? (
+                    <div className="comic-page-placeholder">
+                      <span>{`第 ${i + 1} 页加载失败`}</span>
+                      <button
+                        className="btn small ghost"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          retryPage(i);
+                        }}
+                      >
+                        重试
+                      </button>
+                    </div>
                   ) : (
                     <div className="comic-page-placeholder">{`第 ${i + 1} 页`}</div>
                   )}

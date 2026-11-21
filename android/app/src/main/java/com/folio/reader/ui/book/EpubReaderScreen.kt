@@ -80,7 +80,7 @@ fun EpubReaderScreen(model: EpubModel, onBack: () -> Unit) {
                         FragmentContainerView(ctx).apply {
                             id = R.id.epub_container
                             // post：等视图挂到窗口上再提交事务，否则找不到容器 id
-                            post { installHost(activity, book.id, palette.isDark) }
+                            post { installHost(activity, book.id, palette.isDark, state.initialFraction) }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -166,13 +166,22 @@ private fun EpubError(
     }
 }
 
-private fun installHost(activity: FragmentActivity, bookId: String, dark: Boolean) {
+private fun installHost(
+    activity: FragmentActivity,
+    bookId: String,
+    dark: Boolean,
+    initialFraction: Double?,
+) {
     val fm = activity.supportFragmentManager
     if (fm.isStateSaved || fm.findFragmentByTag(EPUB_HOST_TAG) != null) return
     runCatching {
         fm.commitNow {
             setReorderingAllowed(true)
-            add(R.id.epub_container, EpubHostFragment.newInstance(bookId, dark), EPUB_HOST_TAG)
+            add(
+                R.id.epub_container,
+                EpubHostFragment.newInstance(bookId, dark, initialFraction),
+                EPUB_HOST_TAG,
+            )
         }
     }
 }

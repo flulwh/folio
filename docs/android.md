@@ -92,8 +92,11 @@ EPUB 由 [Readium](https://github.com/readium/kotlin-toolkit) 渲染，Compose �
 - `ui/book/EpubHostFragment.kt` 用 `EpubNavigatorFactory` 生成子 Fragment（**在 `super.onCreate` 前设置工厂**，
   否则旋屏恢复时拿不到）；
 - `ui/book/EpubReaderScreen.kt` 通过 `FragmentContainerView`（固定 id `epub_container`）把宿主挂进 Compose
-- 阅读位置写在本机 `files/library/epub-progress.json`（`href` / `progression` / `totalProgression`），
-  不进 `progress.json`，也不参与双端同步
+- 阅读位置：本机 `files/library/epub-progress.json` 存 `href` / `progression` / `totalProgression`（精确到章内），
+  同时把全书百分比写进 `progress.json` 参与双端同步——桌面端只有百分比、没有 `href`，按比例落位
+- 位置写盘：宿主 Fragment 用 `viewLifecycleOwner.lifecycleScope` 订阅 `EpubNavigatorFragment.currentLocator`，
+  翻页停止 2 秒后写一次（连续翻页只落最后一处），离开页面 / `onPause` 时立即再写一次；
+  scope 跟随宿主销毁，不再用未托管 `CoroutineScope` 兜底
 
 ## 连接桌面端
 
@@ -270,5 +273,6 @@ EPUB 的阅读位置单独存 `epub-progress.json`；
 - **明文 HTTP**：局域网内不加密，访问码是唯一的门，别把端口映射到公网。
 - **云端书必须连着桌面端**：想整本离线请用本机导入（云端书不做离线副本）。
 - **超过 30MB 的书不同步**，只在本机读；封面取不到时退回首字色块。
-- **EPUB 只在本机**：不参与桌面端同步，阅读位置也只存在本机；桌面端虽然能读 EPUB / PDF（foliate-js + pdf.js），但两端的电子书进度互不同步。
+- **EPUB 进度按百分比同步**：手机导入的 EPUB 文件不上传，但桌面端已有的 EPUB 可以整包下到手机；
+  两端读同一本书时用 `percent` 互相续读（桌面端没有 CFI 就按比例落到最接近的位置）。PDF 仍只在桌面端读。
 - **字体下载要能连上 GitHub 或桌面端**：两条都不通时商店能开（缓存目录）但装不了；已装字体不受影响。
