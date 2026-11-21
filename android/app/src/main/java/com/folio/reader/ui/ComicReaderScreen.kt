@@ -60,6 +60,7 @@ import coil3.request.ImageRequest
 import com.folio.reader.core.Book
 import com.folio.reader.core.TocChapter
 import com.folio.reader.data.ComicPage
+import com.folio.reader.data.LocalComicPage
 import com.folio.reader.data.SettingsStore
 import me.saket.telephoto.zoomable.coil3.ZoomableAsyncImage
 import me.saket.telephoto.zoomable.rememberZoomableImageState
@@ -527,10 +528,15 @@ private fun ComicPageBox(
     var reload by remember(book.id, chapterNo, page) { mutableIntStateOf(0) }
     val zoomState = rememberZoomableImageState()
 
-    // 请求交给 Coil：采样、并发、去重、内存上限都在 ImageLoader 里。
-    val request = remember(book.id, chapterNo, page, reload) {
+    // 请求交给 Coil：本地 CBZ 与云端页各有自己的 Fetcher，上层只换数据键。
+    val pageKey = if (book.isCloud) {
+        ComicPage.of(book.id, chapterNo, page)
+    } else {
+        LocalComicPage.of(book.id, page)
+    }
+    val request = remember(book.id, chapterNo, page, book.isCloud, reload) {
         ImageRequest.Builder(context)
-            .data(ComicPage.of(book.id, chapterNo, page))
+            .data(pageKey)
             .listener(
                 onSuccess = { _, _ -> error = null },
                 onError = { _, result ->

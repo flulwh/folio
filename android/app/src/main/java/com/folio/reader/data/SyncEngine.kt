@@ -363,7 +363,9 @@ class SyncEngine(
     override suspend fun pullByHash(hash: String): TransferResult = withContext(Dispatchers.IO) {
         val key = hash.trim().lowercase()
         val existing = books.read().firstOrNull { it.contentHash?.lowercase() == key }
-        if (existing != null && files.exists(existing.id)) return@withContext TransferResult.Done
+        if (existing != null && files.existsBook(existing.id, existing.format)) {
+            return@withContext TransferResult.Done
+        }
 
         val client = clientProvider()
         try {
@@ -397,7 +399,7 @@ class SyncEngine(
             // 已经下到一半的 .part 也算作自己的可用余量，否则断点续传会被自己挡在门外
             val need = (size * LocalBook.SPACE_HEADROOM).toLong()
             val free = files.freeBytes()
-            val partial = files.partSizeOf(item.book.id)
+            val partial = files.partSizeOfBook(item.book.id, item.book.format)
             if (free > 0L && free + partial < need) {
                 return@withContext TransferResult.Failed(
                     code = CommandError.INSUFFICIENT_SPACE,
@@ -430,7 +432,7 @@ class SyncEngine(
         val key = hash.trim().lowercase()
         val book = books.read().firstOrNull { it.contentHash?.lowercase() == key }
             ?: return@withContext TransferResult.Failed(CommandError.SOURCE_GONE, "手机上已经没有这本书")
-        val file = files.fileFor(book.id)
+        val file = files.fileForBook(book.id, book.format)
         if (!file.isFile || file.length() <= 0L) {
             // 元数据还在但正文不在：桌面端要的是字节，这里只能算「对端没有副本」
             return@withContext TransferResult.Failed(CommandError.SOURCE_GONE, "手机上没有这本书的正文")
@@ -519,7 +521,7 @@ class SyncEngine(
                 books = local,
                 storageTotal = files.root().totalSpace,
                 storageFree = files.freeBytes(),
-                booksBytes = local.filter { it.hasLocalFile }.sumOf { files.sizeOf(it.id) },
+                booksBytes = local.filter { it.hasLocalFile }.sumOf { files.sizeOfBook(it.id, it.format) },
                 appVersion = DeviceIdentity.APP_VERSION,
                 apiVersion = com.folio.reader.net.Capabilities.REQUIRED_API_VERSION,
             )
@@ -582,17 +584,21 @@ class SyncEngine(
         }
 
         // 断点：上一轮留下的 .part 有多大就从哪继续
-        val part = files.partFor(remote.id)
+        val part = files.partForBook(remote.id, remote.format)
         var offset = if (part.isFile) part.length() else 0L
         if (offset >= size) {
             // 尺寸已经够了但没提交：从头来，免得把一个可疑文件当成品
             offset = 0L
-            files.resetPart(remote.id)
+            files.resetPartFor(remote.id, remote.format)
         }
 
         syncState.markTransferring(remote.id, size)
         books.upsert(
-            books.findById(remote.id)?.copy(syncState = SyncState.TRANSFERRING)
+            books.findById(remote.id)?.copy(
+                syncState = SyncState.TRANSFERRING,
+                format = remote.format,
+                type = remote.type,
+            )
                 ?: LocalBook(
                     id = remote.id,
                     title = remote.title,
@@ -602,6 +608,7 @@ class SyncEngine(
                     type = remote.type,
                     contentHash = hash,
                     size = size,
+                    format = remote.format,
                     hasLocalFile = false,
                     cover = remote.cover,
                     remoteId = remote.id,
@@ -625,7 +632,7 @@ class SyncEngine(
                     }
                 },
             )
-            val target = files.commitPart(remote.id)
+            val target = files.commitPartFor(remote.id, remote.format)
                 ?: return PullResult.Failed("正文改名失败")
             if (!target.isFile) return PullResult.Failed("正文没有落盘")
 
@@ -639,6 +646,7 @@ class SyncEngine(
                     type = remote.type,
                     contentHash = hash,
                     size = result.size,
+                    format = remote.format,
                     hasLocalFile = true,
                     cover = remote.cover,
                     remoteId = remote.id,
@@ -648,7 +656,14 @@ class SyncEngine(
                     hasLocalFile = true,
                     size = result.size,
                     contentHash = result.hash,
-                    encoding = com.folio.reader.core.TextDecoder.ENCODING_UTF8,
+                    format = remote.format,
+                    type = remote.type,
+                    // 只有纯文本需要记编码；CBZ / EPUB 是原字节
+                    encoding = if (remote.format == "txt") {
+                        com.folio.reader.core.TextDecoder.ENCODING_UTF8
+                    } else {
+                        remote.encoding
+                    },
                     remoteId = remote.id,
                     remoteKind = remote.kind,
                     syncState = SyncState.SYNCED,
@@ -658,7 +673,7 @@ class SyncEngine(
             PullResult.Done
         } catch (err: FolioException) {
             // 网络断在中间：留着 .part 与 bytesDone，下次接着传
-            val done = files.partSizeOf(remote.id)
+            val done = files.partSizeOfBook(remote.id, remote.format)
             books.updateSyncState(remote.id, SyncState.FAILED)
             syncState.markFailed(remote.id, err.message ?: "下载失败", done, size)
             PullResult.Failed(err.message ?: "下载失败", failureCodeOf(err))
@@ -672,7 +687,7 @@ class SyncEngine(
      */
     private fun pushOne(client: FolioClient, book: LocalBook): String? {
         val hash = book.contentHash ?: return null
-        val file = files.fileFor(book.id)
+        val file = files.fileForBook(book.id, book.format)
         if (!file.isFile) return null
         val total = file.length()
         if (total <= 0L) return null
@@ -706,6 +721,8 @@ class SyncEngine(
                         hash = hash,
                         total = total,
                         name = book.title,
+                        format = book.format,
+                        type = book.type.wire,
                     )
                 } catch (conflict: UploadConflictException) {
                     // 服务端说位置不对：以它为准，重算一次再继续
@@ -747,8 +764,8 @@ class SyncEngine(
             if (renamed != null) {
                 progress.renameKey(book.id, remoteId)
                 // 正文文件也换个名字，免得旧 id 的文件永远没人引用
-                files.fileFor(book.id).takeIf { it.isFile }?.let { old ->
-                    runCatching { old.renameTo(files.fileFor(remoteId)) }
+                files.fileForBook(book.id, book.format).takeIf { it.isFile }?.let { old ->
+                    runCatching { old.renameTo(files.fileForBook(remoteId, book.format)) }
                 }
                 current = renamed
             }
@@ -772,7 +789,7 @@ class SyncEngine(
     /** 用磁盘实际情况校正 `hasLocalFile`，避免书籍条目与文件脱节。 */
     private fun reconcileLocalFiles(list: List<LocalBook>): List<LocalBook> =
         list.map { book ->
-            val exists = files.exists(book.id)
+            val exists = files.existsBook(book.id, book.format)
             if (book.hasLocalFile == exists) book else book.copy(hasLocalFile = exists)
         }
 

@@ -85,8 +85,13 @@ export function isProbablyTextFile(name) {
   );
 }
 
-/** EPUB / PDF：走二进制导入，阅读器按格式分派 */
+/** EPUB / PDF / CBZ：走二进制导入，阅读器按格式分派 */
 export function isEbookFile(name) {
   const lower = String(name || '').toLowerCase();
-  return lower.endsWith('.epub') || lower.endsWith('.pdf');
+  return (
+    lower.endsWith('.epub') ||
+    lower.endsWith('.pdf') ||
+    lower.endsWith('.cbz') ||
+    lower.endsWith('.zip')
+  );
 }

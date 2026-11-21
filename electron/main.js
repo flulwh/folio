@@ -14,6 +14,7 @@ import { createBooksStore } from './lan-books.js';
 import { createDeviceStore } from './devicestore.js';
 import { createComicService, MAX_IMAGE as COMIC_MAX_IMAGE } from './lan-comic.js';
 import { configureBookFile } from './bookfile.js';
+import { pageCount as comicPageCount, readPage as readComicPage } from './cbz.js';
 import { createJsonStore } from './json-store.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
@@ -116,6 +117,28 @@ const files = {
 // 书的内容放在这里（每本一个 .txt 副本），books.json 只存元数据。
 // 这样书架文件恒定是几十 KB，删掉 json 也不会丢正文，用户还能直接用编辑器打开看。
 const booksDir = path.join(dataDir, 'books');
+
+/**
+ * 本地漫画副本：只认 books.json 里 format === 'cbz' 且路径落在 books/ 内的书。
+ * 渲染层的 folio-comic:// 协议与页数 IPC 共用这一处校验，避免任意路径被读。
+ */
+function localComicFile(book) {
+  if (!book || book.format !== 'cbz') return null;
+  const file = String(book.filePath || '');
+  if (!file) return null;
+  const target = path.resolve(file);
+  if (!isInside(booksDir, target)) return null;
+  return fs.existsSync(target) ? target : null;
+}
+
+function findLocalComic(bookId) {
+  const id = String(bookId || '');
+  if (!id) return null;
+  const book = ensureBooksStore().list().find((item) => item?.id === id) || null;
+  const file = localComicFile(book);
+  return file ? { book, file } : null;
+}
+
 // 云端书的封面缓存：按 URL 的 sha1 命名，一次下载长期复用，断网也能显示。
 const coversDir = path.join(dataDir, 'covers');
 // 用户安装的字体：字体文件本体放 fonts/，元信息（族名、格式、大小）放 fonts.json。
@@ -211,6 +234,11 @@ protocol.registerSchemesAsPrivileged([
   // 这样 @font-face 就能直接吃到本地字体文件，不用转 base64。
   {
     scheme: 'folio-font',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
+  // 本地漫画：folio-comic://page/<书 id>/<页号>，只读 books/ 里的 CBZ 副本。
+  {
+    scheme: 'folio-comic',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
 ]);
@@ -456,6 +484,7 @@ function detectEbookFormat(filePath) {
   const ext = path.extname(String(filePath || '')).toLowerCase();
   if (ext === '.epub') return 'epub';
   if (ext === '.pdf') return 'pdf';
+  if (ext === '.cbz' || ext === '.zip') return 'cbz';
   return 'text';
 }
 
@@ -513,6 +542,8 @@ function importBinaryBook({ id, name, buffer, format, sourcePath }) {
     size: buffer.length,
     addedAt: Date.now(),
     format,
+    // 漫画：渲染层与局域网都靠 type === 2 认出「这是图片书」
+    ...(format === 'cbz' ? { type: 2 } : {}),
   };
 }
 
@@ -542,7 +573,7 @@ function importBookFromPath(filePath) {
   if (isProbablyBinary(buffer)) {
     return {
       error:
-        '暂不支持该二进制格式。可以导入 TXT / Markdown，或 EPUB / PDF 电子书。',
+        '暂不支持该二进制格式。可以导入 TXT / Markdown，或 EPUB / PDF / CBZ 电子书。',
     };
   }
   const content = decodeText(buffer);
@@ -976,6 +1007,28 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
       const file = path.join(fontsDir, name);
       if (!fs.existsSync(file)) return new Response('not found', { status: 404 });
       return await net.fetch(pathToFileURL(file).toString());
+    } catch {
+      return new Response('error', { status: 500 });
+    }
+  });
+
+  // 本地漫画协议：每次只回一页图片字节，页面地址不落盘、不出机器。
+  protocol.handle('folio-comic', async (request) => {
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== 'page') return new Response('bad request', { status: 400 });
+      const segments = url.pathname.replace(/^\/+/, '').split('/');
+      if (segments.length !== 2) return new Response('bad request', { status: 400 });
+      const bookId = decodeURIComponent(segments[0]);
+      const index = Number(segments[1]);
+      if (!Number.isInteger(index) || index < 0) return new Response('bad request', { status: 400 });
+      const hit = findLocalComic(bookId);
+      if (!hit) return new Response('not found', { status: 404 });
+      const page = readComicPage(hit.file, index);
+      if (!page) return new Response('not found', { status: 404 });
+      return new Response(new Uint8Array(page.buffer), {
+        headers: { 'Content-Type': page.type, 'Cache-Control': 'no-cache' },
+      });
     } catch {
       return new Response('error', { status: 500 });
     }
@@ -1779,10 +1832,11 @@ ipcMain.handle('book:pick', async () => {
     title: '导入电子书',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: '电子书', extensions: ['epub', 'pdf', 'txt', 'md', 'markdown', 'text'] },
+      { name: '电子书', extensions: ['epub', 'pdf', 'cbz', 'zip', 'txt', 'md', 'markdown', 'text'] },
       { name: '纯文本电子书', extensions: ['txt', 'md', 'markdown', 'text'] },
       { name: 'EPUB 电子书', extensions: ['epub'] },
       { name: 'PDF 文档', extensions: ['pdf'] },
+      { name: '漫画压缩包', extensions: ['cbz', 'zip'] },
       { name: '所有文件', extensions: ['*'] },
     ],
   });
@@ -1814,7 +1868,7 @@ ipcMain.handle('book:add-binary', async (_e, payload) => {
     const name = path.basename(String(payload?.name || '未命名'));
     const buffer = Buffer.from(payload?.data || []);
     const format = detectEbookFormat(name);
-    if (format === 'text') return { error: '只支持导入 EPUB / PDF 电子书' };
+    if (format === 'text') return { error: '只支持导入 EPUB / PDF / CBZ 电子书' };
     if (!buffer.length) return { error: '这个文件是空的' };
     const id = `${name}::${buffer.length}::${shortHash(buffer)}`;
     return importBinaryBook({
@@ -1848,6 +1902,17 @@ ipcMain.handle('book:read', async (_e, filePath) => {
     return readBookContent(filePath);
   } catch (err) {
     return { error: `读不到这本书的正文（${path.basename(String(filePath || ''))}）：${err.message}` };
+  }
+});
+
+/** 本地漫画：先问总页数，每一页再走 folio-comic:// 协议，避免大块走 IPC。 */
+ipcMain.handle('comic:local-pages', async (_e, bookId) => {
+  const hit = findLocalComic(bookId);
+  if (!hit) return { ok: false, error: '这本漫画不在书架目录里' };
+  try {
+    return { ok: true, total: comicPageCount(hit.file) };
+  } catch (err) {
+    return { ok: false, error: err.message || '读不到这本漫画' };
   }
 });
 

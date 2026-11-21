@@ -992,7 +992,17 @@ export function createLanService(opts) {
       return;
     }
 
-    const result = bookService.appendChunk({ hash, offset, total, title, chunk: body });
+    // 手机上传本地漫画时带 X-Folio-Format: cbz；老客户端没有这个头，按纯文本处理
+    const format = header('x-folio-format').toLowerCase() === 'cbz' ? 'cbz' : 'txt';
+    const result = bookService.appendChunk({
+      hash,
+      offset,
+      total,
+      title,
+      chunk: body,
+      format,
+      type: format === 'cbz' ? 2 : 0,
+    });
     if (result.ok) {
       sendJson(res, 200, result);
       return;
@@ -1490,11 +1500,11 @@ export function createLanService(opts) {
         });
         return;
       }
-      // EPUB / PDF 是二进制，面板按纯文本读会是一堆乱码，直接请在桌面端打开
-      if (hit.book?.format === 'epub' || hit.book?.format === 'pdf') {
+      // EPUB / PDF / CBZ 是二进制，面板按纯文本读会是一堆乱码，直接请在桌面端打开
+      if (hit.book?.format === 'epub' || hit.book?.format === 'pdf' || hit.book?.format === 'cbz') {
         sendJson(res, 415, {
           ok: false,
-          error: 'EPUB / PDF 请在桌面端阅读',
+          error: 'EPUB / PDF / CBZ 请在桌面端阅读',
           book: slimBook(hit.book),
         });
         return;

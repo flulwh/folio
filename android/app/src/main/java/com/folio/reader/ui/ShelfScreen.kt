@@ -1087,10 +1087,13 @@ private fun ConfirmSheet(
     }
 }
 
-/** SAF 允许的类型：纯文本、EPUB，兜底给一个二进制流。 */
+/** SAF 允许的类型：纯文本、EPUB、CBZ/ZIP 漫画，兜底给一个二进制流。 */
 private val IMPORT_MIME_TYPES = arrayOf(
     "text/plain",
     "text/*",
     "application/epub+zip",
+    "application/vnd.comicbook+zip",
+    "application/x-cbz",
+    "application/zip",
     "application/octet-stream",
 )

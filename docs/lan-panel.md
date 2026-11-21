@@ -50,6 +50,20 @@ dataDir/
 云端书的正文不落到 `books/`，每次按需现抓；目录和章节都带缓存（桌面端自己的缓存目录），
 所以手机连着翻章不会反复打源站。抓不到时接口返回 `{error}`，面板直接显示原因，不会假装有内容。
 
+### 本地漫画（CBZ / ZIP）走的是第三条路
+
+桌面端「导入」可以直接选 `.cbz` / `.zip`，书架上按普通本地书登记（`format = "cbz"`、`type = 2`），
+但正文不再按纯文本提供：
+
+- 网页面板点开：`GET /api/book/:id` 返回 `415`「EPUB / PDF / CBZ 请在桌面端阅读」，不做二进制转文本
+- 安卓端同步：`GET /api/library` 的 `format` 告诉手机落盘成 `.cbz`，再用 `GET /api/book/:id/download` 整包拉取，
+  下完由手机本地按页解压读取（`/api/comic/*` 仍只服务云端书源漫画）
+- 反向上传：`POST /api/upload/chunk` 带 `X-Folio-Format: cbz` 与 `X-Folio-Type: 2`，桌面端按 `.cbz` 落盘并登记格式；
+  老客户端没有这两个头时仍按 `txt` 处理
+- 同步上限与普通书一致（30MB）：超限的漫画只在本机读，`/api/library` 会给出 `syncableReason`
+- 进度口径：本地漫画固定「全一话」（`chapter 0`），`percent = (页号 + 1) / 总页数`；页内位置只存本机的 `comicPage`，
+  不写进 `progress.json`，避免双端为翻页反复覆盖
+
 进度写回时两种书都走同一个 `POST /api/progress`，云端书额外带上 `chapter` 与 `windowBase`，
 合并是浅合并，所以桌面端读到的云端书进度不会被手机上的写入抹掉章口径。
 

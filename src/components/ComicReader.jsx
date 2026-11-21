@@ -29,6 +29,8 @@ export default function ComicReader({ book, onClose }) {
   const { saveProgress, notify, patchSettings } = useAppActions();
   const saved = progress[book.id] || {};
   const savedIndex = Math.max(0, Number(saved.chapter ?? saved.windowBase ?? 0) || 0);
+  // 本地 CBZ：单话，页序来自压缩包；云端漫画仍按章节走
+  const localComic = book.format === 'cbz';
 
   const [toc, setToc] = useState([]);
   const [index, setIndex] = useState(savedIndex);
@@ -57,6 +59,10 @@ export default function ComicReader({ book, onClose }) {
   // 当前章节的图片预取任务 key；warmRef 是下一章预热任务，切章时一起取消
   const jobRef = useRef('');
   const warmRef = useRef(new Set());
+  // 本地漫画续读：先记住进度百分比，拿到总页数后再换算成页号
+  const resumePercentRef = useRef(Math.max(0, Number(saved.percent) || 0));
+  const resumePageRef = useRef(0);
+  const restoredRef = useRef(false);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -80,8 +86,56 @@ export default function ComicReader({ book, onClose }) {
     };
   }, []);
 
+  /* ------------------------------ 本地漫画 ------------------------------ */
+  useEffect(() => {
+    if (!localComic) return undefined;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await dataApi.localComicPages(book.id);
+        if (cancelled) return;
+        if (!res?.ok || !res.total) throw new Error(res?.error || '这本漫画没有可读的页面');
+        const urls = Array.from(
+          { length: res.total },
+          (_, i) => `folio-comic://page/${encodeURIComponent(book.id)}/${i}`
+        );
+        const start = resumePercentRef.current
+          ? Math.min(res.total - 1, Math.floor((resumePercentRef.current / 100) * res.total))
+          : 0;
+        resumePageRef.current = Math.max(0, start);
+        setToc([{ index: 0, title: book.name || '全一话', url: '' }]);
+        setIndex(0);
+        setImages(urls);
+        setLocals(Object.fromEntries(urls.map((url, i) => [String(i), url])));
+        setPage(Math.max(0, start));
+      } catch (err) {
+        if (!cancelled) setError(err.message || '这本漫画读不出来');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [book.id, book.name, localComic]);
+
+  /* 续读：进度里只有百分比，等页面节点渲染后滚到对应页 */
+  useEffect(() => {
+    if (!localComic || !images.length || restoredRef.current) return;
+    restoredRef.current = true;
+    const target = resumePageRef.current;
+    if (!target) return;
+    requestAnimationFrame(() => {
+      const node = scrollRef.current?.querySelectorAll('.comic-page')?.[target];
+      node?.scrollIntoView({ block: 'start' });
+    });
+  }, [localComic, images.length]);
+
   /* ------------------------------ 加载目录 ------------------------------ */
   useEffect(() => {
+    if (localComic) return undefined;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -108,7 +162,7 @@ export default function ComicReader({ book, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [book.id, book.bookUrl, book.sourceId, book.name, book.author, book.raw, settings.proxy]);
+  }, [book.id, book.bookUrl, book.sourceId, book.name, book.author, book.raw, settings.proxy, localComic]);
 
   /* ------------------------------ 加载图片 ------------------------------ */
   const loadChapter = useCallback(
@@ -134,7 +188,7 @@ export default function ComicReader({ book, onClose }) {
   );
 
   useEffect(() => {
-    if (!toc.length) return undefined;
+    if (localComic || !toc.length) return undefined;
     let cancelled = false;
     const scroll = scrollRef.current;
     const jobKey = `comic-${book.id}-${index}`;
@@ -203,11 +257,11 @@ export default function ComicReader({ book, onClose }) {
     return () => {
       cancelled = true;
     };
-  }, [book.id, index, toc, loadChapter]);
+  }, [book.id, index, toc, loadChapter, localComic]);
 
   /* ------------------------------ 进度保存 ------------------------------ */
   useEffect(() => {
-    if (!toc.length) return;
+    if (!toc.length || localComic) return;
     const chapter = toc[index];
     saveProgress(book.id, {
       chapter: index,
@@ -218,7 +272,21 @@ export default function ComicReader({ book, onClose }) {
       chapterTitle: chapter?.title || '',
       updatedAt: Date.now(),
     });
-  }, [book.id, index, toc, saveProgress]);
+  }, [book.id, index, toc, saveProgress, localComic]);
+
+  /* 本地漫画按「页 / 总页数」记百分比，双端只对齐到话级 */
+  useEffect(() => {
+    if (!localComic || !images.length) return;
+    saveProgress(book.id, {
+      chapter: 0,
+      windowBase: 0,
+      paraIndex: 0,
+      percent: Math.min(100, ((page + 1) / images.length) * 100),
+      chapterIndex: 0,
+      chapterTitle: toc[0]?.title || '',
+      updatedAt: Date.now(),
+    });
+  }, [book.id, localComic, images.length, page, toc, saveProgress]);
 
   /* ------------------------------ 交互 ------------------------------ */
   const wake = useCallback(() => {
@@ -388,7 +456,11 @@ export default function ComicReader({ book, onClose }) {
 
   const chapter = toc[index];
   const total = toc.length;
-  const progressPercent = total ? Math.round(((index + 1) / total) * 1000) / 10 : 0;
+  const progressPercent = localComic
+    ? Math.min(100, Math.round(((page + 1) / Math.max(1, images.length)) * 1000) / 10)
+    : total
+      ? Math.round(((index + 1) / total) * 1000) / 10
+      : 0;
 
   const readyCount = useMemo(
     () => images.filter((_, i) => locals[String(i)]).length,
@@ -448,7 +520,7 @@ export default function ComicReader({ book, onClose }) {
                 </div>
               );
             })}
-          {!loading && !error && images.length > 0 && (
+          {!localComic && !loading && !error && images.length > 0 && (
             <div className="comic-tail">
               <button className="btn ghost" onClick={() => goTo(index + 1)} disabled={index + 1 >= total}>
                 下一章
@@ -483,7 +555,7 @@ export default function ComicReader({ book, onClose }) {
                 </span>
               )}
               <span className="comic-count">
-                {total ? `第 ${index + 1} / ${total} 章` : '—'}
+                {localComic ? (images.length ? `共 ${images.length} 页` : '—') : total ? `第 ${index + 1} / ${total} 章` : '—'}
               </span>
               <button
                 className={`icon-btn${fit === 'original' ? ' active' : ''}`}
@@ -492,9 +564,11 @@ export default function ComicReader({ book, onClose }) {
               >
                 <IconMaximize size={16} />
               </button>
-              <button className="icon-btn" onClick={() => setTocOpen(true)} title="目录( T )">
-                <IconList size={17} />
-              </button>
+              {!localComic && (
+                <button className="icon-btn" onClick={() => setTocOpen(true)} title="目录( T )">
+                  <IconList size={17} />
+                </button>
+              )}
             </div>
           </motion.header>
         )}
@@ -516,19 +590,29 @@ export default function ComicReader({ book, onClose }) {
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.18 }}
           >
-            <button className="btn small ghost" onClick={() => goTo(index - 1)} disabled={index <= 0}>
-              上一章
-            </button>
+            {localComic ? (
+              <span className="comic-count">
+                {images.length ? `第 ${Math.min(page + 1, images.length)} / ${images.length} 页` : '—'}
+              </span>
+            ) : (
+              <button className="btn small ghost" onClick={() => goTo(index - 1)} disabled={index <= 0}>
+                上一章
+              </button>
+            )}
             <div className="comic-bar">
               <span className="comic-bar-fill" style={{ width: `${progressPercent}%` }} />
             </div>
-            <button
-              className="btn small ghost"
-              onClick={() => goTo(index + 1)}
-              disabled={index + 1 >= total}
-            >
-              下一章
-            </button>
+            {localComic ? (
+              <span className="comic-count">{Math.round(progressPercent)}%</span>
+            ) : (
+              <button
+                className="btn small ghost"
+                onClick={() => goTo(index + 1)}
+                disabled={index + 1 >= total}
+              >
+                下一章
+              </button>
+            )}
           </motion.footer>
         )}
       </AnimatePresence>

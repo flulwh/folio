@@ -9,6 +9,7 @@ import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import com.folio.reader.net.FolioClient
 import com.folio.reader.net.PageStream
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import okio.FileSystem
@@ -26,6 +27,17 @@ data class ComicPage(val bookId: String, val chapter: Int, val page: Int) {
         fun of(bookId: String, chapter: Int, page: Int): ComicPage = ComicPage(
             bookId = bookId.trim(),
             chapter = chapter.coerceAtLeast(0),
+            page = page.coerceAtLeast(0),
+        )
+    }
+}
+
+/** 本地 CBZ 的页键：没有「话」的概念，整本就是一个列表。 */
+data class LocalComicPage(val bookId: String, val page: Int) {
+
+    companion object {
+        fun of(bookId: String, page: Int): LocalComicPage = LocalComicPage(
+            bookId = bookId.trim(),
             page = page.coerceAtLeast(0),
         )
     }
@@ -64,6 +76,35 @@ class ComicImageFetcher(
                 page.close()
                 throw err
             }
+        }
+}
+
+/**
+ * 本地 CBZ 的页源：从 `.cbz` 里解出一页，直接交给 Coil。
+ *
+ * 每页单独开 ZipFile 再关：打开成本只是一次中央目录扫描，
+ * 换来的是不长期占用书库文件的句柄。
+ */
+class LocalComicImageFetcher(
+    private val store: LocalComicStore,
+    private val maxBytes: Long = MAX_COMIC_PAGE_BYTES,
+) : Fetcher.Factory<LocalComicPage> {
+
+    override fun create(data: LocalComicPage, options: Options, imageLoader: ImageLoader): Fetcher =
+        Fetcher {
+            val page = store.readPage(data.bookId, data.page)
+                ?: throw IOException("这一页不存在或漫画文件还没同步到手机")
+            if (page.bytes.size > maxBytes) {
+                throw IOException("这一页超过 ${maxBytes / 1024 / 1024}MiB，无法显示")
+            }
+            SourceFetchResult(
+                source = ImageSource(
+                    source = ByteArrayInputStream(page.bytes).source().buffer(),
+                    fileSystem = FileSystem.SYSTEM,
+                ),
+                mimeType = page.mime,
+                dataSource = DataSource.MEMORY,
+            )
         }
 }
 

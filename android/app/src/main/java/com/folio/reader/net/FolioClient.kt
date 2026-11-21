@@ -799,6 +799,8 @@ class FolioClient(
         hash: String,
         total: Long,
         name: String,
+        format: String = "txt",
+        type: Int = 0,
         timeoutMs: Int = 90000,
     ): ChunkResult {
         val conn = open("/api/upload/chunk", "POST", timeoutMs)
@@ -808,6 +810,9 @@ class FolioClient(
         conn.setRequestProperty("X-Folio-Offset", offset.toString())
         conn.setRequestProperty("X-Folio-Total", total.toString())
         conn.setRequestProperty("X-Folio-Name", encode(name))
+        // 桌面端按这两个头决定落盘扩展名与新条目的 format/type（缺省 txt/0）
+        conn.setRequestProperty("X-Folio-Format", format)
+        conn.setRequestProperty("X-Folio-Type", type.toString())
         conn.setFixedLengthStreamingMode(length)
         try {
             RandomAccessFile(file, "r").use { raf ->

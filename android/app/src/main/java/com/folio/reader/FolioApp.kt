@@ -18,6 +18,8 @@ import com.folio.reader.data.EpubLibrary
 import com.folio.reader.data.EpubProgressStore
 import com.folio.reader.data.FontRepository
 import com.folio.reader.data.FontStore
+import com.folio.reader.data.LocalComicImageFetcher
+import com.folio.reader.data.LocalComicStore
 import com.folio.reader.data.MarkStore
 import com.folio.reader.data.MarksSync
 import com.folio.reader.data.Migration
@@ -116,6 +118,7 @@ class FolioApp : Application() {
             ImageLoader.Builder(context)
                 .components {
                     add(ComicImageFetcher(client = { container.connection.client() }))
+                    add(LocalComicImageFetcher(LocalComicStore(container.files)))
                     add(CoverImageFetcher { container.connection.client() })
                 }
                 .diskCache(null)

@@ -368,6 +368,11 @@ const api = {
     if (!window.readerAPI?.onImageProgress) return () => {};
     return window.readerAPI.onImageProgress(callback);
   },
+  /** 本地漫画：总页数由主进程读 CBZ 目录得出，单页走 folio-comic:// 协议。 */
+  localComicPages: async (bookId) => {
+    if (!window.readerAPI?.localComicPages) return { ok: false, error: NEED_ELECTRON };
+    return window.readerAPI.localComicPages(bookId);
+  },
 
   cloudCacheStats: async (payload) => {
     if (!window.readerAPI?.cloudCacheStats) return { cached: 0, total: 0 };
@@ -945,7 +950,11 @@ export function AppProvider({ children }) {
         hue: Math.floor(Math.random() * 360),
       };
       // 电子书格式：缺省视为纯文本，旧数据/旧端读到未知字段会忽略
-      if (book.format === 'epub' || book.format === 'pdf') entry.format = book.format;
+      if (book.format === 'epub' || book.format === 'pdf' || book.format === 'cbz') {
+        entry.format = book.format;
+      }
+      // 本地漫画：type 2 与云端漫画同口径，打开时才会进 ComicReader
+      if (book.format === 'cbz') entry.type = 2;
       // 有磁盘副本时不再把正文塞进 books.json（浏览器预览没有副本才内联）
       if (!entry.filePath) entry.content = book.content || '';
       setBooks((prev) => {

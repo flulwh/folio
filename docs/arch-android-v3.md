@@ -73,12 +73,12 @@
 | 方法 | 路径 | 参数 | 成功响应 | 鉴权/限制 |
 | --- | --- | --- | --- | --- |
 | GET | `/api/ping` | — | `{ok,port,version,apiVersion:2,features:["library","upload","download","range","comic"]}` | 需 token；`apiVersion<2` 时手机提示"桌面端太旧" |
-| GET | `/api/library` | — | `{ok,apiVersion:2,now,books:[{id,contentHash?,title,author,size,type,kind,syncable,syncableReason?,cover?}]}` | 需 token；最多 2000 本，超出 `truncated:true` |
+| GET | `/api/library` | — | `{ok,apiVersion:2,now,books:[{id,contentHash?,title,author,size,type,kind,format,syncable,syncableReason?,cover?}]}` | 需 token；最多 2000 本，超出 `truncated:true`；`format` 取 `txt`/`epub`/`cbz`，老数据缺省 `txt` |
 | GET | `/api/book/:id/download` | 头 `Range: bytes=N-`（可选） | 200/206 字节流；头 `X-Folio-Hash`、`X-Folio-Size`、`Accept-Ranges: bytes`、`Content-Disposition` | 需 token；`size>30MB`→413；非 local→404/409；`N>=size`→416 |
 | GET | `/api/upload/status` | `hash`(40hex) `size` | `{ok,hash,received,done}` | 需 token；`size>30MB`→413；写关闭→403 |
-| POST | `/api/upload/chunk` | 头 `X-Folio-Hash`、`X-Folio-Offset`、`X-Folio-Total`、`X-Folio-Name`(encodeURIComponent)；body `application/octet-stream` | `{ok,received,done:false}` / 完成 `{ok,received,done:true,id,title,created}` | 需 token；body ≤6MB→否则 413；offset 不连续→409 `{received}`；hash 校验失败→422 |
+| POST | `/api/upload/chunk` | 头 `X-Folio-Hash`、`X-Folio-Offset`、`X-Folio-Total`、`X-Folio-Name`(encodeURIComponent)、`X-Folio-Format`(可选，`cbz`；其余按 `txt`)、`X-Folio-Type`(可选，`0`/`2`)；body `application/octet-stream` | `{ok,received,done:false}` / 完成 `{ok,received,done:true,id,title,created}` | 需 token；body ≤6MB→否则 413；offset 不连续→409 `{received}`；hash 校验失败→422 |
 | DELETE | `/api/upload/:hash` | — | `{ok:true}` | 需 token；失败清理用 |
-| GET | `/api/comic/:id/pages` | `i`(话序号) | `{ok,i,total,fromCache}` —— **不含源站 URL** | 需 token；非 `type=2`→400；云端未接入→501；解析失败→502 |
+| GET | `/api/comic/:id/pages` | `i`(话序号) | `{ok,i,total,fromCache}` —— **不含源站 URL** | 需 token；非 `type=2`→400；云端未接入→501；解析失败→502。**本地 CBZ 漫画不走这里**，整包同步后在手机本地按页读 |
 | GET | `/api/comic/:id/page` | `i`(话) `p`(页，0 基) | 200 `image/*` 字节 + `X-Folio-Page: K/Total` | 需 token；`p` 越界→400 `{total}`；单页 >6MB→413；源站失败→502 |
 | GET | `/api/state` | — | 原样 + `server.apiVersion:2` | **仅用于进度对齐**，手机不再用它当书架真相 |
 | POST | `/api/progress` | 原样 | 原样 | 不变（`mergeProgressEntry` 新者赢 + 浅合并） |
@@ -101,7 +101,7 @@
 | `syncedFrom` | `"android"?` | 手机端上传来的书，仅做展示 |
 | `contentVersion` | `number` | 每次正文被覆盖 +1，用于客户端缓存失效（默认 1） |
 
-**上传落盘规则**：`id = "sha1-" + hash`；`filePath = books/<safeBase(title)>-<hash 前 8>.txt`；若 `books.json` 已有同 hash 但不同 id 的书 → **复用已有 id**（响应回 `id`，手机据此迁移本地 id 与进度 key）；同名不同 hash → 文件名带 hash 后缀并存（`writeBookCopy` 已有该逻辑）。
+**上传落盘规则**：`id = "sha1-" + hash`；`filePath = books/<safeBase(title)>-<hash 前 8>.<format>`（`format` 取 `txt` / `cbz`，缺省 `txt`）；若 `books.json` 已有同 hash 但不同 id 的书 → **复用已有 id**（响应回 `id`，手机据此迁移本地 id 与进度 key），若旧条目 `format` 与本次不一致则一并纠正 `format` / `filePath` / `type`；同名不同 hash → 文件名带 hash 后缀并存（`writeBookCopy` 已有该逻辑）。
 
 **旧数据兼容**：读取时不改任何老字段；`contentHash` 缺失只在 `/api/library` 或上传比对时**懒补齐**并原子写回，写失败只记日志不阻断；`content` 内联老数据沿用现有 `migrateInlineBookContent`。
 

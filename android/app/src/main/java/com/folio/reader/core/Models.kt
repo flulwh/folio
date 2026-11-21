@@ -83,10 +83,10 @@ data class LocalBook(
     val size: Long = 0L,
     val encoding: String? = null,
     /**
-     * 正文格式：`txt`（纯文本 / Markdown）或 `epub`。
+     * 正文格式：`txt`（纯文本 / Markdown）、`epub` 或 `cbz`。
      *
      * EPUB 是本机专用格式（原文件落盘、Readium 解析），**不参与同步**；
-     * 缺省 `txt`，老数据读进来不会受影响。
+     * CBZ 是漫画容器，30MB 以内与桌面端整包同步。缺省 `txt`，老数据不受影响。
      */
     val format: String = "txt",
     val hasLocalFile: Boolean = false,
@@ -109,6 +109,8 @@ data class LocalBook(
     val isComic: Boolean get() = type == BookType.COMIC
 
     val isEpub: Boolean get() = format == "epub"
+
+    val isCbz: Boolean get() = format == "cbz"
 
     /** 冲突判定用的键：书名规整后比较，见 [titleKeyOf]。 */
     val titleKey: String get() = titleKeyOf(title)
@@ -177,7 +179,7 @@ data class LocalBook(
                 contentHash = hash.takeIf { it.length == 40 },
                 size = json.optLong("size", 0L).coerceAtLeast(0L),
                 encoding = json.optString("encoding").takeIf { it.isNotBlank() && it != "null" },
-                format = json.optString("format").takeIf { it == "epub" } ?: "txt",
+                format = json.optString("format").takeIf { it == "epub" || it == "cbz" } ?: "txt",
                 hasLocalFile = json.optBoolean("hasLocalFile", false),
                 cover = json.optString("cover")
                     .takeIf { it.isNotBlank() && (it.startsWith("http") || it.startsWith("/")) },

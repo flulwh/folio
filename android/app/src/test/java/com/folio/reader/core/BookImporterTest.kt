@@ -58,6 +58,41 @@ class BookImporterTest {
     }
 
     @Test
+    fun 导入CBZ漫画并去重() {
+        val bytes = comicZip("002.jpg", "001.png", "notes.txt")
+        val outcome = importer.importBytes("海贼王.cbz", bytes)
+        val book = (outcome as BookImporter.Outcome.Imported).book
+        assertEquals(BookType.COMIC, book.type)
+        assertEquals("cbz", book.format)
+        assertEquals(HashUtils.sha1(bytes), book.contentHash)
+        assertEquals(bytes.size.toLong(), book.size)
+        assertTrue(book.hasLocalFile)
+        assertTrue("原文件应落在 books/<id>.cbz", files.cbzExists(book.id))
+        assertEquals(SyncState.NOT_SYNCED, book.syncState)
+
+        val again = importer.importBytes("海贼王.zip", bytes)
+        assertTrue("同一份压缩包不能再进一条", again is BookImporter.Outcome.Duplicate)
+    }
+
+    @Test
+    fun 没有图片的压缩包不算漫画() {
+        val outcome = importer.importBytes("空.zip", comicZip("readme.txt"))
+        assertTrue("应拒绝无图片包：$outcome", outcome is BookImporter.Outcome.Failed)
+    }
+
+    private fun comicZip(vararg names: String): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(out).use { zip ->
+            names.forEach { name ->
+                zip.putNextEntry(java.util.zip.ZipEntry(name))
+                zip.write(byteArrayOf(1, 2, 3))
+                zip.closeEntry()
+            }
+        }
+        return out.toByteArray()
+    }
+
+    @Test
     fun contentHash是UTF8正文的sha1而不是原始字节() {
         val text = "第二章 落雨\n雨点敲在窗上。"
         val gbk = Charset.forName("GBK")

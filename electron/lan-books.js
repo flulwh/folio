@@ -222,6 +222,8 @@ export function createBooksService(opts = {}) {
         author: String(book.author || ''),
         size,
         type: Number(book.type) === 2 ? 2 : 0,
+        // 手机据此决定落盘扩展名（.txt / .epub / .cbz）；老数据没有这个字段按 txt
+        format: book.format === 'epub' || book.format === 'cbz' ? book.format : 'txt',
         kind,
         syncable: false,
       };
@@ -366,8 +368,10 @@ export function createBooksService(opts = {}) {
     }
 
     const title = String(input.title || '').trim() || '手机导入的书';
+    const format = input.format === 'cbz' ? 'cbz' : 'txt';
+    const type = format === 'cbz' ? 2 : 0;
     // 落盘文件名固定带 hash 前 8 位：同名不同内容并存，且短得能一眼认出
-    const target = path.join(booksDir, `${safeBase(title)}-${hash.slice(0, 8)}.txt`);
+    const target = path.join(booksDir, `${safeBase(title)}-${hash.slice(0, 8)}.${format}`);
     const commit = kit.commitUpload(hash, { target });
     if (!commit.ok) {
       if (commit.reason === 'hash') {
@@ -379,7 +383,7 @@ export function createBooksService(opts = {}) {
       return { ok: false, status: 500, error: commit.error || '正文落盘失败' };
     }
 
-    return register({ hash, size: commit.size, file: commit.path, title });
+    return register({ hash, size: commit.size, file: commit.path, title, format, type });
   }
 
   /**
@@ -387,7 +391,7 @@ export function createBooksService(opts = {}) {
    * 幂等三件套之二：同内容（同 hash）已有条目就复用它的 id —— 手机据此把本地 id
    * 与进度 key 迁到桌面 id，不会凭空多出一本重复书。
    */
-  function register({ hash, size, file, title }) {
+  function register({ hash, size, file, title, format = 'txt', type = 0 }) {
     const all = list();
     let existing = all.find((book) => book?.id === `sha1-${hash}`) || null;
     if (!existing) {
@@ -427,9 +431,20 @@ export function createBooksService(opts = {}) {
         existing.size = size;
         changed = true;
       }
+      // 早期上传没带格式头，漫画可能被登记成 txt；同 hash 再来一次时纠正，
+      // 并把 filePath 换成这次按正确扩展名落盘的副本（否则还会去读旧 .txt）
+      const formatChanged = (existing.format || 'txt') !== format;
       // 老条目指向的副本可能早被删了（用户手删过 books/），把这次的新副本挂上去
-      if (!copyOf(existing)) {
+      if (!copyOf(existing) || formatChanged) {
         existing.filePath = file;
+        changed = true;
+      }
+      if (formatChanged) {
+        existing.format = format;
+        changed = true;
+      }
+      if (Number(existing.type || 0) !== type) {
+        existing.type = type;
         changed = true;
       }
       if (changed) {
@@ -456,8 +471,8 @@ export function createBooksService(opts = {}) {
       filePath: file,
       size,
       contentHash: hash,
-      format: 'txt',
-      type: 0,
+      format,
+      type,
       addedAt: Date.now(),
       syncedFrom: 'android',
       contentVersion: 1,

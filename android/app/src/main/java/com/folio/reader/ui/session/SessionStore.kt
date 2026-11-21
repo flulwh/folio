@@ -70,6 +70,7 @@ class SessionStore(private val app: Application) {
     private val progressStore = container.progress
     private val syncState = container.syncState
     private val files = container.files
+    private val localComics = com.folio.reader.data.LocalComicStore(container.files)
     private val importer = container.importer
     private val cloud = container.cloud
     private val connection = container.connection
@@ -1091,6 +1092,14 @@ class SessionStore(private val app: Application) {
             loading = true,
             direction = settings.comicDirection,
         )
+        // 本地 CBZ：整包已在手机里，不依赖桌面端在线
+        if (!book.isCloud) {
+            scope.launch {
+                books.touchRead(book.id)
+                openLocalComic(book)
+            }
+            return
+        }
         scope.launch {
             books.touchRead(book.id)
             if (!_shelf.value.online) {
@@ -1111,6 +1120,40 @@ class SessionStore(private val app: Application) {
             val position = chapters.indexOfFirst { it.index == target }.coerceAtLeast(0)
             loadComicChapter(book, chapters, position, book.comicPage ?: 0)
         }
+    }
+
+    /** 本地漫画：整本压缩包按页读，固定一话（chapter 0）。 */
+    private suspend fun openLocalComic(book: Book) {
+        val total = withContext(Dispatchers.IO) { localComics.pageCount(book.id) }
+        if (total == null) {
+            _comic.update {
+                it.copy(loading = false, error = "这本漫画还没同步到手机，连接桌面端后重试")
+            }
+            return
+        }
+        if (total <= 0) {
+            _comic.update { it.copy(loading = false, error = "漫画文件里没有可读的图片") }
+            return
+        }
+        val entry = progressMap[book.id]
+        // 桌面端只同步到百分比：没有本机页号时按百分比换算，续读位置才对得上
+        val fromProgress = (((entry?.percent ?: 0.0) / 100.0) * total).toInt()
+        val page = (book.comicPage ?: fromProgress).coerceIn(0, total - 1)
+        val toc = listOf(TocChapter(index = 0, title = "全一话"))
+        _comic.update {
+            it.copy(
+                book = book,
+                toc = toc,
+                chapterIndex = 0,
+                chapterNo = 0,
+                chapterTitle = toc[0].title,
+                total = total,
+                page = page,
+                loading = false,
+                error = null,
+            )
+        }
+        recordComicProgress(book, toc, 0, 0, page, total, immediate = true)
     }
 
     private suspend fun loadComicChapter(

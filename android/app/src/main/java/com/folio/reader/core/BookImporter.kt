@@ -42,8 +42,10 @@ class BookImporter(
         if (bytes.isEmpty()) return Outcome.Failed("这本书是空的")
         // EPUB 是 zip 容器，必须按原字节保存（Readium 直接读它），不能走文本解码。
         if (isEpub(displayName, bytes)) return importEpub(displayName, bytes)
+        // 漫画同样按容器原字节保存；先判 EPUB，避免 .zip 结尾的 EPUB 被当漫画
+        if (isCbz(displayName)) return importCbz(displayName, bytes)
         if (TextDecoder.looksBinary(bytes)) {
-            return Outcome.Failed("暂不支持该格式。可以导入 TXT / Markdown / EPUB 电子书。")
+            return Outcome.Failed("暂不支持该格式。可以导入 TXT / Markdown / EPUB / CBZ 漫画。")
         }
 
         // 1. 解码（顺序与桌面端 decodeText 一致）
@@ -94,10 +96,10 @@ class BookImporter(
      */
     fun importStream(displayName: String, input: InputStream): Outcome =
         input.use { stream ->
-            val limit = if (displayName.endsWith(".epub", ignoreCase = true)) {
-                EPUB_INTAKE_LIMIT
-            } else {
-                INTAKE_LIMIT
+            val limit = when {
+                displayName.endsWith(".epub", ignoreCase = true) -> EPUB_INTAKE_LIMIT
+                isCbz(displayName) -> CBZ_INTAKE_LIMIT
+                else -> INTAKE_LIMIT
             }
             val buffer = java.io.ByteArrayOutputStream()
             val chunk = ByteArray(HashUtils.BUFFER_BYTES)
@@ -123,6 +125,42 @@ class BookImporter(
     private fun titleOf(displayName: String): String {
         val base = displayName.substringBeforeLast('.', displayName).trim()
         return base.ifBlank { "未命名" }
+    }
+
+    /** 漫画压缩包：CBZ 与普通 ZIP 都收，内容由 [CbzArchive] 再验一遍。 */
+    private fun isCbz(displayName: String): Boolean =
+        displayName.endsWith(".cbz", ignoreCase = true) ||
+            displayName.endsWith(".zip", ignoreCase = true)
+
+    /** 漫画容器：原字节落盘；30MB 以内参与同步，超过只在本机读。 */
+    private fun importCbz(displayName: String, bytes: ByteArray): Outcome {
+        if (CbzArchive.probe(bytes) == 0) {
+            return Outcome.Failed("这个压缩包里没有图片，暂时无法作为漫画导入")
+        }
+        val hash = HashUtils.sha1(bytes)
+        val id = "sha1-$hash"
+        books.findByHash(hash)?.let { existing -> return Outcome.Duplicate(existing.id) }
+        files.writeCbz(id, bytes) ?: return Outcome.Failed("写入漫画失败，检查手机存储空间")
+        val size = bytes.size.toLong()
+        val book = LocalBook(
+            id = id,
+            title = titleOf(displayName),
+            author = null,
+            origin = Origin.LOCAL,
+            type = BookType.COMIC,
+            contentHash = hash,
+            size = size,
+            format = "cbz",
+            hasLocalFile = true,
+            addedAt = System.currentTimeMillis(),
+            syncState = if (size <= LocalBook.MAX_SYNC_BYTES) {
+                SyncState.NOT_SYNCED
+            } else {
+                SyncState.EXCLUDED
+            },
+        )
+        books.upsert(book)
+        return Outcome.Imported(book)
     }
 
     /** EPUB 判定：扩展名优先，其次看 zip 头与规范要求的 `application/epub+zip`。 */
@@ -168,5 +206,8 @@ class BookImporter(
 
         /** EPUB 上限：本机专用、不同步，只受内存与磁盘限制。 */
         const val EPUB_INTAKE_LIMIT = 200 * 1024 * 1024
+
+        /** 漫画上限：超过 30MB 仍可本机读，只是不参与同步。 */
+        const val CBZ_INTAKE_LIMIT = 100 * 1024 * 1024
     }
 }

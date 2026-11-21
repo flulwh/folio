@@ -16,10 +16,10 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 | 产物 | 适用场景 |
 | --- | --- |
-| [`Folio-Setup-2.14.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
-| [`Folio-Portable-2.14.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | 单文件便携版，双击即用，不写注册表 |
-| [`Folio-2.14.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.14.0) | 免安装压缩包，解压后运行 `Folio.exe` |
-| [`Folio-4.4.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-4.4.0/Folio-4.4.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
+| [`Folio-Setup-2.15.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | **推荐**。NSIS 安装包，可选安装目录，创建桌面/开始菜单快捷方式，卸载保留用户数据 |
+| [`Folio-Portable-2.15.0.exe`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | 单文件便携版，双击即用，不写注册表 |
+| [`Folio-2.15.0-win-x64.zip`](https://github.com/flulwh/folio/releases/tag/v2.15.0) | 免安装压缩包，解压后运行 `Folio.exe` |
+| [`Folio-4.5.0-android.apk`](https://github.com/flulwh/folio/releases/download/android-4.5.0/Folio-4.5.0-android.apk) | **Android 8.0+**。原生客户端，离线读本地书，连上桌面端同步进度与阅读痕迹 |
 
 历史版本见 [Releases](https://github.com/flulwh/folio/releases)。升级不丢数据：`appId` 与包名不变，`books.json` / `progress.json` / `marks.json` / `settings.json` / `sources.json` / `rules.json` 格式保持兼容。
 
@@ -67,6 +67,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 
 - 导入本地 `.txt` / `.md`（含 Markdown），支持**编码嗅探**（UTF-8 / UTF-8 BOM / GBK / UTF-16 自动识别）
 - 导入 `.epub` / `.pdf`：EPUB 用 [foliate-js](https://github.com/johnfactotum/foliate-js) 分页渲染（目录、CFI 定位），PDF 用 [pdf.js](https://github.com/mozilla/pdf.js) 逐页渲染
+- 导入 `.cbz` / `.zip` 本地漫画：内置只读 ZIP 解析器按页取图（自然排序、store/deflate），直接进漫画阅读器，可缩放、可续读，也能整包同步到安卓端
 - 书卡由书名哈希落到六组封面配色，悬停浮起 + 扫光
 - **继续阅读**大卡：一键回到上次读到的那一行
 - 搜索（按 `/` 聚焦）、排序（最近阅读 / 添加时间 / 书名）、删除确认
@@ -119,6 +120,7 @@ Windows 10/11 x64。**便携版双击即用，不用装。**
 ```
 
 - **本地书双端离线**：正文下到手机私有目录，飞机上、地铁里都能读；进度先存本地，连上 Wi-Fi 自动补写
+- **本地漫画同等待遇**：`.cbz` / `.zip` 可在手机直接导入，桌面端导入的漫画整包同步过来后离线按页阅读，进度双向对齐
 - **云端书联网即读**：目录与章节由桌面端现抓，手机上照常翻章、跳章、拖进度条
 - **进度不会打结**：合并规则仍是 `updatedAt` 新的赢，字段浅合并 —— 手机读一段，桌面端书架跟着变，反之亦然
 - **书签 / 划线 / 笔记双端对齐**：按段落锚点合并，`updatedAt` 新者胜；桌面端删掉的痕迹不会在手机上复活，反之亦然
@@ -226,7 +228,7 @@ cd android
 > 打 `android-*` tag 会触发 [Android Release](.github/workflows/android-release.yml) 自动构建 APK 并创建 Release；
 > push / PR 改到 `android/` 时会跑 [Android CI](.github/workflows/android.yml)。
 
-> 版本号只写在 `package.json`（当前 `2.14.0`），用 `npm version <new> --no-git-tag-version` 改。
+> 版本号只写在 `package.json`（当前 `2.15.0`），用 `npm version <new> --no-git-tag-version` 改。
 > 界面里的版本由 Vite 的 `__APP_VERSION__` 注入，不要手动硬编码。
 
 - 架构与目录职责 → [docs/architecture.md](docs/architecture.md)

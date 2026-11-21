@@ -73,7 +73,7 @@ export default function App() {
     if (!activeBook) return undefined;
     const { id, kind, content, filePath, format } = activeBook;
     if (kind !== 'local' || content || !filePath) return undefined;
-    if (format === 'epub' || format === 'pdf') return undefined;
+    if (format === 'epub' || format === 'pdf' || format === 'cbz') return undefined;
     if (texts[id] !== undefined || readingIds.current.has(id)) return undefined;
     readingIds.current.add(id);
     let cancelled = false;
@@ -103,8 +103,10 @@ export default function App() {
   const bookForReader = useMemo(() => {
     if (!activeBook) return null;
     if (activeBook.kind !== 'local') return activeBook;
-    // EPUB / PDF 不需要预读正文，直接交给文档阅读器
-    if (activeBook.format === 'epub' || activeBook.format === 'pdf') return activeBook;
+    // EPUB / PDF / CBZ 不需要预读正文，直接交给对应阅读器
+    if (activeBook.format === 'epub' || activeBook.format === 'pdf' || activeBook.format === 'cbz') {
+      return activeBook;
+    }
     if (activeBook.content) return activeBook;
     const cached = texts[activeBook.id];
     return cached ? { ...activeBook, content: cached } : null;
@@ -264,7 +266,9 @@ export default function App() {
               </Suspense>
             ) : (
               <Suspense fallback={<LazyFallback />}>
-                {bookForReader.format === 'epub' || bookForReader.format === 'pdf' ? (
+                {bookForReader.format === 'cbz' ? (
+                  <ComicReader book={bookForReader} onClose={() => setActiveBookId(null)} />
+                ) : bookForReader.format === 'epub' || bookForReader.format === 'pdf' ? (
                   <DocumentReader book={bookForReader} onClose={() => setActiveBookId(null)} />
                 ) : (
                   <Reader book={bookForReader} onClose={() => setActiveBookId(null)} />
