@@ -109,10 +109,11 @@ fun FolioSheet(
                             (maxH.toPx() * progress.value + drag).toInt().toFloat()
                         }
                     },
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                shape = RoundedCornerShape(topStart = SheetRadius, topEnd = SheetRadius),
                 color = scheme.secondarySystemGroupedBackground,
                 contentColor = scheme.label,
-                shadowElevation = 16.dp,
+                // iOS 11 的面板靠遮罩分层，不靠重投影；8dp 够托起一层。
+                shadowElevation = 8.dp,
             ) {
                 Column(
                     Modifier

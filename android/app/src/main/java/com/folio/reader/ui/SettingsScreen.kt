@@ -52,6 +52,7 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControl
 import io.github.alexzhirkevich.cupertino.CupertinoSegmentedControlTab
@@ -123,6 +124,7 @@ fun SettingsScreen(
         containerColor = scheme.systemBackground,
         appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
+        hasNavigationTitle = true,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -131,6 +133,13 @@ fun SettingsScreen(
                 bottom = padding.calculateBottomPadding() + 24.dp,
             ),
         ) {
+            // iOS 11 的大标题：顶部 34sp，上滑后收进顶栏。
+            item("nav-title") {
+                CupertinoNavigationTitle {
+                    CupertinoText(text = "设置")
+                }
+            }
+
             /* ---------------- 连接 ---------------- */
             item("connect") {
                 Reveal(index = 0) {

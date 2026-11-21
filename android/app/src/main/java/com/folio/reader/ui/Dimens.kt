@@ -21,6 +21,15 @@ val GroupRadius: Dp = 10.dp
 val SheetPadding: Dp = 16.dp
 
 /**
+ * 底部面板圆角：iOS 11 的 sheet 是 14dp。
+ * 原来写 20dp，观感更接近 iOS 15 的抽屉，和 11 的紧凑感不符。
+ */
+val SheetRadius: Dp = 14.dp
+
+/** 阅读器浮层（顶栏 / 底栏卡片）圆角，与面板同一档。 */
+val HudRadius: Dp = 14.dp
+
+/**
  * 正文列最宽：平板 / 横屏上把行宽收在 680dp。
  *
  * 中文一行超过 40 字就难回行，宽屏上满幅铺开会让眼睛在行尾找不回下一行。

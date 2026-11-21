@@ -42,6 +42,7 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
@@ -80,6 +81,7 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
         containerColor = scheme.systemGroupedBackground,
         appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
+        hasNavigationTitle = true,
     ) { padding ->
         Column(
             Modifier
@@ -90,6 +92,10 @@ fun FontStoreScreen(model: FontsModel, onBack: () -> Unit) {
                     bottom = padding.calculateBottomPadding() + 24.dp,
                 ),
         ) {
+            CupertinoNavigationTitle {
+                CupertinoText(text = "字体")
+            }
+
             CupertinoText(
                 text = "与桌面端同一份目录 · 装好即用",
                 modifier = Modifier.fillMaxWidth().padding(horizontal = PageMargin, vertical = 10.dp),

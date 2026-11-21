@@ -50,6 +50,18 @@ val BrandAccentDark = Color(0xFF0A84FF)
 /** 失败状态：systemRed。界面上仅剩这一种语义色。 */
 val BrandNegative = Color(0xFFFF3B30)
 
+/* --------------------------- 沉浸式阅读遮罩 --------------------------- */
+
+/** 漫画 / 图片阅读器顶栏的渐变起色：压住状态栏与返回键，让它们始终可读。 */
+val ScrimTop = Color(0xE6000000)
+/** 底栏渐变终色，比顶栏更实一点，保证进度条与页码可读。 */
+val ScrimBottom = Color(0xF2000000)
+/** 没有渐变的提示条底色（翻话失败等）。 */
+val ScrimBar = Color(0xCC000000)
+
+/** 模态遮罩：iOS 11 的 alert 底下是 40% 黑，比面板遮罩更淡。 */
+val ModalScrim = Color(0x66000000)
+
 /** 阅读底色预设（同时决定阅读器与整个 App 的明暗）。 */
 @Immutable
 data class ReadingPalette(
@@ -136,18 +148,24 @@ fun readingPalette(id: String?): ReadingPalette =
 /** 当前生效的纸色，组件与阅读器共用。 */
 val LocalReadingPalette = staticCompositionLocalOf { WHITE_PALETTE }
 
-/* -------------------------------- 实色栏 -------------------------------- */
+/* ------------------------------- 半透明栏 ------------------------------- */
 
 /**
  * 顶栏与 Tab Bar 的底色不透明度：1f = 完全不透明。
  *
- * 老版 iOS（iOS 6 及更早）的导航栏是实色的，不透出滚动内容；
- * scaffold 默认 0.5f 会把下方内容糊成毛玻璃，这里直接拉满。
+ * iOS 11 的两条栏都是「毛玻璃 + 半透明」：内容滚到栏下会透出一层虚化的颜色。
+ * 0.72f 保留这层层次，又比库默认的 0.5f 少一点糊；系统开启「降低透明度」时
+ * CupertinoScaffold 会自行把透明度提到 0.85f。
  */
-val FolioAppBarAlpha: Float = 1f
+val FolioAppBarAlpha: Float = 0.72f
 
-/** 实色栏不需要模糊卷积：半径固定 0，滚动时省掉整块 GPU 开销。 */
-val FolioAppBarBlurRadius: Dp = 0.dp
+/**
+ * 模糊半径：16dp。
+ *
+ * 这一层每帧都要重新采样栏下的滚动内容，半径越大越吃 GPU；16dp 配上 0.72f 的
+ * 半透明底，观感仍是 iOS 11 的毛玻璃，但滚动时的掉帧风险比 24dp 小一档。
+ */
+val FolioAppBarBlurRadius: Dp = 16.dp
 
 /**
  * 顶栏底色：卡片白。

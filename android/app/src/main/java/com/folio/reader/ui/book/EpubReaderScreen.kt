@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -33,6 +34,7 @@ import com.folio.reader.ui.model.EpubModel
 import com.folio.reader.ui.readingPalette
 import io.github.alexzhirkevich.cupertino.CupertinoActivityIndicator
 import io.github.alexzhirkevich.cupertino.CupertinoButton
+import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
 import io.github.alexzhirkevich.cupertino.CupertinoIconButton
 import io.github.alexzhirkevich.cupertino.CupertinoText
@@ -135,18 +137,31 @@ private fun EpubError(
     soft: androidx.compose.ui.graphics.Color,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(28.dp),
+        modifier = Modifier.fillMaxSize().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
+        // iOS 11 的错误页：一行 17sp 标题 + 一行 13sp 说明 + 实心按钮，
+        // 不做插画也不做红字，失败原因交给正文。
+        CupertinoText(
+            text = "打不开这本书",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = ink,
+        )
+        Spacer(Modifier.height(6.dp))
         CupertinoText(
             text = message,
             fontSize = 13.sp,
             color = soft,
+            textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(16.dp))
-        CupertinoButton(onClick = onRetry) {
-            CupertinoText(text = "重试", fontSize = 14.sp, color = ink)
+        Spacer(Modifier.height(18.dp))
+        CupertinoButton(
+            onClick = onRetry,
+            colors = CupertinoButtonDefaults.filledButtonColors(),
+        ) {
+            CupertinoText(text = "重试", fontSize = 14.sp)
         }
     }
 }

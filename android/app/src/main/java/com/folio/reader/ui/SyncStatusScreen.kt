@@ -38,6 +38,7 @@ import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoText
 import io.github.alexzhirkevich.cupertino.CupertinoTopAppBar
@@ -72,6 +73,7 @@ fun SyncStatusScreen(
         containerColor = scheme.systemGroupedBackground,
         appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
+        hasNavigationTitle = true,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -80,6 +82,12 @@ fun SyncStatusScreen(
                 bottom = padding.calculateBottomPadding() + 24.dp,
             ),
         ) {
+            item("nav-title") {
+                CupertinoNavigationTitle {
+                    CupertinoText(text = "同步")
+                }
+            }
+
             item("stats") {
                 IosCard {
                     Row(

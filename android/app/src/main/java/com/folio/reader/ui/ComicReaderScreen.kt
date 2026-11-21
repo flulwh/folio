@@ -161,7 +161,7 @@ fun ComicReaderScreen(
                     .fillMaxWidth()
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(Color(0xE6000000), Color(0x00000000))
+                            listOf(ScrimTop, Color.Transparent)
                         )
                     ),
             ) {
@@ -202,7 +202,7 @@ fun ComicReaderScreen(
                     .navigationBarsPadding()
                     .padding(bottom = if (comic.controls) 150.dp else 18.dp)
                     .fillMaxWidth()
-                    .background(Color(0xCC000000))
+                    .background(ScrimBar)
                     .padding(start = 16.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -240,7 +240,7 @@ fun ComicReaderScreen(
                     .fillMaxWidth()
                     .background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(Color(0x00000000), Color(0xF2000000))
+                            listOf(Color.Transparent, ScrimBottom)
                         )
                     )
                     .padding(horizontal = 20.dp)
@@ -370,7 +370,7 @@ private fun ComicTocSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 2.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(GroupRadius))
                         .background(
                             if (selected) scheme.accent.copy(alpha = 0.12f)
                             else scheme.secondarySystemGroupedBackground

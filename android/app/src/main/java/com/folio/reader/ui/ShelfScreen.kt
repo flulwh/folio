@@ -79,6 +79,7 @@ import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoDropdownMenu
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
 import io.github.alexzhirkevich.cupertino.CupertinoIcon
+import io.github.alexzhirkevich.cupertino.CupertinoNavigationTitle
 import io.github.alexzhirkevich.cupertino.CupertinoScaffold
 import io.github.alexzhirkevich.cupertino.CupertinoSearchTextField
 import io.github.alexzhirkevich.cupertino.CupertinoText
@@ -150,9 +151,9 @@ fun ShelfScreen(
         state.online,
     ) { state.sections }
 
-    // 封面墙里翻到新导入的书：先按「头部区 + 分区标题 + 每本一格」换算成网格下标。
+    // 封面墙里翻到新导入的书：先按「大标题 + 头部区 + 分区标题 + 每本一格」换算成网格下标。
     // 头部区（统计 / 搜索 / 筛选 / 横幅 / 导入）合成了一整块，只占一格。
-    val headerItems = 1
+    val headerItems = 2
     LaunchedEffect(state.highlightId, sections) {
         val id = state.highlightId ?: return@LaunchedEffect
         var index = headerItems + if (sections.any { it.key == "continue" }) 1 else 0
@@ -188,6 +189,8 @@ fun ShelfScreen(
         containerColor = scheme.systemGroupedBackground,
         appBarsBlurAlpha = FolioAppBarAlpha,
         appBarsBlurRadius = FolioAppBarBlurRadius,
+        // 首屏是大标题「书架」，滚动到顶栏下时自动换成顶栏里的小标题（iOS 11 行为）。
+        hasNavigationTitle = true,
     ) { padding ->
         // 列数跟着可用宽度走：手机 3 列、横屏 4–5 列、平板 6 列。
         // 固定 3 列在平板上会把封面拉到 200dp 以上，一屏只剩 6 本。
@@ -205,6 +208,15 @@ fun ShelfScreen(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                item(key = "shelf-nav-title", span = { GridItemSpan(maxLineSpan) }) {
+                    CupertinoNavigationTitle(
+                        // 网格本身已有 PageMargin，这里不再叠一层横向内边距。
+                        paddingValues = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                    ) {
+                        CupertinoText(text = "书架")
+                    }
+                }
+
                 item(key = "shelf-header", span = { GridItemSpan(maxLineSpan) }) {
                     ShelfHeader(
                         state = state,
@@ -380,7 +392,15 @@ private fun ShelfHeader(
 ) {
     val scheme = CupertinoTheme.colorScheme
     Column(Modifier.fillMaxWidth()) {
-        ShelfStats(state = state, onOpenSyncStatus = onOpenSyncStatus)
+        ShelfStats(
+            bookCount = state.books.size,
+            localBytes = state.localBytes,
+            online = state.online,
+            connection = state.connection,
+            connectionLabel = state.connectionLabel,
+            syncing = state.syncing,
+            onOpenSyncStatus = onOpenSyncStatus,
+        )
 
         AnimatedVisibility(
             visible = searchOpen,
@@ -443,9 +463,10 @@ private fun ShelfHeader(
 /* ---------------- 顶栏 ---------------- */
 
 /**
- * 顶栏：实色底、标题常显，动作按钮用无底色 tinted 图标。
+ * 顶栏：半透明毛玻璃、标题在小标题与大标题之间切换，动作按钮用无底色 tinted 图标。
  *
- * 老版 iOS 没有折叠大标题，栏的高度与标题位置全程不变。
+ * iOS 11 的形态是「内容顶部一行 34sp 大标题 + 顶栏里一颗小标题」：
+ * 上滑时大标题被顶栏裁掉，小标题淡入，栏底从透明变成毛玻璃。
  */
 @OptIn(ExperimentalCupertinoApi::class)
 @Composable
@@ -485,8 +506,24 @@ private fun ShelfTopBar(
  * 老版 iOS 的栏里只有标题，这行元信息放到内容顶部，点一下进同步页。
  */
 @Composable
-private fun ShelfStats(state: ShelfUiState, onOpenSyncStatus: () -> Unit) {
+private fun ShelfStats(
+    bookCount: Int,
+    localBytes: Long,
+    online: Boolean,
+    connection: ConnectionState,
+    connectionLabel: String,
+    syncing: Boolean,
+    onOpenSyncStatus: () -> Unit,
+) {
     val scheme = CupertinoTheme.colorScheme
+    // 只依赖六个值：搜索框每敲一个字、封面滚动时都不必重排这一行。
+    val connectionText = when {
+        syncing -> "同步中…"
+        online -> connectionLabel
+        connection == ConnectionState.NEED_RECONNECT -> ConnectionState.NEED_RECONNECT.label
+        connection == ConnectionState.UNKNOWN -> "未连接桌面端"
+        else -> connectionLabel
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -498,12 +535,11 @@ private fun ShelfStats(state: ShelfUiState, onOpenSyncStatus: () -> Unit) {
             Modifier
                 .size(7.dp)
                 .clip(CircleShape)
-                .background(if (state.online) scheme.accent else scheme.secondaryLabel)
+                .background(if (online) scheme.accent else scheme.secondaryLabel)
         )
         Spacer(Modifier.width(6.dp))
         CupertinoText(
-            text = "${state.books.size} 本 · ${mbOf(state.localBytes)} MB · " +
-                connectionTextOf(state),
+            text = "$bookCount 本 · ${mbOf(localBytes)} MB · $connectionText",
             style = CupertinoTheme.typography.footnote,
             color = scheme.secondaryLabel,
             maxLines = 1,
@@ -540,14 +576,6 @@ private fun NavIcon(
             tint = scheme.accent,
         )
     }
-}
-
-private fun connectionTextOf(state: ShelfUiState): String = when {
-    state.syncing -> "同步中…"
-    state.online -> state.connectionLabel
-    state.connection == ConnectionState.NEED_RECONNECT -> ConnectionState.NEED_RECONNECT.label
-    state.connection == ConnectionState.UNKNOWN -> "未连接桌面端"
-    else -> state.connectionLabel
 }
 
 private fun mbOf(bytes: Long): String =
@@ -856,7 +884,7 @@ private fun ContinueCard(
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(source, pressedScale = 0.985f)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(GroupRadius))
             .background(scheme.secondarySystemGroupedBackground)
             .clickable(
                 interactionSource = source,
@@ -1014,13 +1042,21 @@ private fun BookCell(
                 )
             }
             // ⋯：封面右上角常驻，点一下就是旧版列表里的那套菜单。
-            Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+            // 圆点视觉仍是 24dp，触控区放到 36dp——封面墙一格不到 110dp，手指按 24dp 太挤。
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(2.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onToggleMenu),
+                contentAlignment = Alignment.Center,
+            ) {
                 Box(
                     Modifier
                         .size(24.dp)
                         .clip(CircleShape)
-                        .background(scheme.secondarySystemGroupedBackground.copy(alpha = 0.82f))
-                        .clickable(onClick = onToggleMenu),
+                        .background(scheme.secondarySystemGroupedBackground.copy(alpha = 0.82f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     CupertinoText(
@@ -1143,11 +1179,16 @@ private fun CoverArt(
     radius: Dp = 6.dp,
     initialSize: TextUnit = 22.sp,
 ) {
-    val hue = (book.title.hashCode().absoluteValue % 360).toFloat()
-    val paperTop = Color.hsl(hue, 0.18f, 0.87f)
-    val paperBottom = Color.hsl(hue, 0.24f, 0.74f)
-    val inkTone = Color.hsl(hue, 0.34f, 0.24f)
-    val shape = RoundedCornerShape(radius)
+    // 一组 HSL 换算 + 一个 ImageRequest 对象：都只跟书有关，不该跟着每次重组重算。
+    val hue = remember(book.title) { (book.title.hashCode().absoluteValue % 360).toFloat() }
+    val paperTop = remember(hue) { Color.hsl(hue, 0.18f, 0.87f) }
+    val paperBottom = remember(hue) { Color.hsl(hue, 0.24f, 0.74f) }
+    val inkTone = remember(hue) { Color.hsl(hue, 0.34f, 0.24f) }
+    val shape = remember(radius) { RoundedCornerShape(radius) }
+    val context = LocalContext.current
+    val request = remember(book.cover, book.id) {
+        ImageRequest.Builder(context).data(CoverImage.of(book)).build()
+    }
     Box(
         modifier
             .shadow(elevation = if (dimmed) 0.dp else 3.dp, shape = shape, clip = false)
@@ -1172,9 +1213,7 @@ private fun CoverArt(
         // 有封面就盖在纸色底上；加载失败时这张图不画，回落到书名首字。
         if (book.cover != null) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(CoverImage.of(book))
-                    .build(),
+                model = request,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,

@@ -12,6 +12,8 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.7.1：回到 iOS 11 观感——书架 / 设置 / 同步 / 字体四个页面恢复折叠大标题，
+        //        顶栏与 Tab Bar 改回半透明毛玻璃（versionCode 31）。
         // 4.7.0：排版重构——书架封面墙按宽度自适应列数、头部区合并、筛选改横滚胶囊，
         //        设置页拆成排版 / 翻页 / 外观三组，正文在宽屏收进 680dp 的阅读列（versionCode 30）。
         // 4.6.1：发布包开启 R8 与资源压缩、接入 Baseline Profile，后台停止 Compose 收集，
@@ -26,9 +28,17 @@ android {
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 30
-        versionName = "4.7.0"
+        versionCode = 31
+        versionName = "4.7.1"
         vectorDrawables.useSupportLibrary = true
+        // 只保留中英两套库字符串：AndroidX / Readium 自带六十多种语言，
+        // 这个 App 的界面只有中文，多出来的 arsc 条目纯属占体积。
+        resourceConfigurations += listOf("zh", "en")
+    }
+
+    // 依赖元数据只对商店分析有用，侧载 APK 里那一段直接去掉。
+    dependenciesInfo {
+        includeInApk = false
     }
 
     signingConfigs {
@@ -82,6 +92,12 @@ android {
 
     packaging {
         resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+        // 运行时用不到的元数据（Kotlin 模块记录、协程调试探针）不参与打包。
+        resources.excludes += setOf(
+            "META-INF/*.version",
+            "META-INF/*.kotlin_module",
+            "DebugProbesKt.bin",
+        )
     }
 
     testOptions {
