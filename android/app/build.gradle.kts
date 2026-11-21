@@ -12,6 +12,8 @@ android {
         applicationId = "com.folio.reader"
         minSdk = 26
         targetSdk = 35
+        // 4.6.0：设置页新增「检查更新」（查 GitHub Release、跳浏览器下载）与公告列表，
+        //        书架首屏顶部显示第一条未读公告横幅，已读按 id 记住（versionCode 28）。
         // 4.5.0：支持导入、阅读本地 CBZ/ZIP 漫画，并与桌面端整包同步（versionCode 27）。
         // 4.4.0：顶栏 / Tab Bar 改不透明实色，去掉折叠大标题与毛玻璃（versionCode 26）。
         // 4.3.0：毛玻璃半径减半、去掉重复全屏背景、封面菜单按需组合，降功耗（versionCode 25）。
@@ -20,8 +22,8 @@ android {
         //        设置 / 同步改底部 Tab Bar（versionCode 23）。
         // 4.0.0：界面换 Cupertino、导航换 Voyager、图片换 Coil/Telephoto、新增 EPUB（versionCode 22）。
         // 3.6.1：Release 构建必须带签名，关闭 allowBackup（versionCode 21）。
-        versionCode = 27
-        versionName = "4.5.0"
+        versionCode = 28
+        versionName = "4.6.0"
         vectorDrawables.useSupportLibrary = true
     }
 

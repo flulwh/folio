@@ -7,6 +7,7 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import com.folio.reader.FolioApp
+import com.folio.reader.BuildConfig
 import com.folio.reader.core.Book
 import com.folio.reader.core.BookImporter
 import com.folio.reader.core.JsonIo
@@ -24,16 +25,19 @@ import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.DeleteConfirmer
 import com.folio.reader.data.SettingsStore
 import com.folio.reader.net.LanDiscovery
+import com.folio.reader.net.UpdateCenter
 import com.folio.reader.ui.ComicUiState
 import com.folio.reader.ui.DeleteConfirmQueue
 import com.folio.reader.ui.DeleteConfirmState
 import com.folio.reader.ui.EpubUiState
 import com.folio.reader.ui.FontStoreUiState
+import com.folio.reader.ui.NoticeUiState
 import com.folio.reader.ui.PageTurn
 import com.folio.reader.ui.ReaderUiState
 import com.folio.reader.ui.SearchUiState
 import com.folio.reader.ui.SettingsUiState
 import com.folio.reader.ui.ShelfUiState
+import com.folio.reader.ui.UpdateUiState
 import android.view.KeyEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +90,8 @@ class SessionStore(private val app: Application) {
     private var searchJob: Job? = null
     private var marksSyncJob: Job? = null
     private var fontCatalogJob: Job? = null
+    private var updateJob: Job? = null
+    private var noticeJob: Job? = null
 
     private val _shelf = MutableStateFlow(ShelfUiState())
     val shelf: StateFlow<ShelfUiState> = _shelf.asStateFlow()
@@ -106,6 +112,14 @@ class SessionStore(private val app: Application) {
     /** 字体商店：目录 + 已安装 + 当前下载进度。 */
     private val _fontStore = MutableStateFlow(FontStoreUiState())
     val fontStore: StateFlow<FontStoreUiState> = _fontStore.asStateFlow()
+
+    /** 检查更新：只在用户点「检查更新」时走网络。 */
+    private val _update = MutableStateFlow(UpdateUiState())
+    val updateState: StateFlow<UpdateUiState> = _update.asStateFlow()
+
+    /** 公告：启动时拉一次，设置页可回看，首屏横幅只显示第一条未读。 */
+    private val _notices = MutableStateFlow(NoticeUiState())
+    val noticeState: StateFlow<NoticeUiState> = _notices.asStateFlow()
 
     /** T11：桌面端要求删「唯一副本」时，等用户点确认的弹层状态。 */
     private val deleteConfirms = DeleteConfirmQueue()
@@ -171,6 +185,7 @@ class SessionStore(private val app: Application) {
     init {
         reloadLocal()
         loadSettingsState()
+        refreshNotices()
         if (settings.hasServer) {
             scope.launch { bootstrap() }
         }
@@ -409,6 +424,63 @@ class SessionStore(private val app: Application) {
     /** 列表已经滚到要高亮的那本之后调用。 */
     fun clearHighlight() {
         _shelf.update { it.copy(highlightId = null) }
+    }
+
+    /* ---------------- 检查更新 / 公告 ---------------- */
+
+    /**
+     * 检查最新版本：只查一次，进行中重复点按直接忽略。
+     *
+     * 网络与 JSON 解析都在 [Dispatchers.IO]，`UpdateCenter` 保证不抛异常，
+     * 这里只负责把结果搬回主线程。
+     */
+    fun checkUpdate() {
+        if (_update.value.checking) return
+        _update.update { it.copy(checking = true, error = "") }
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                UpdateCenter.check(BuildConfig.VERSION_NAME)
+            }
+            _update.update {
+                it.copy(
+                    checking = false,
+                    checked = true,
+                    hasUpdate = result.hasUpdate,
+                    latestVersion = result.latestVersion,
+                    releaseUrl = result.releaseUrl,
+                    apkUrl = result.apkUrl,
+                    notes = result.notes,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    /** 启动时拉一次公告；设置页的「刷新」也走这里。 */
+    fun refreshNotices() {
+        if (_notices.value.loading) return
+        _notices.update { it.copy(loading = true, error = "") }
+        noticeJob?.cancel()
+        noticeJob = scope.launch {
+            val result = withContext(Dispatchers.IO) { UpdateCenter.fetchNotices() }
+            _notices.update {
+                it.copy(
+                    loading = false,
+                    notices = result.notices,
+                    lastReadId = settings.lastNoticeId,
+                    error = result.error,
+                )
+            }
+        }
+    }
+
+    /** 关掉首屏横幅 / 在设置里标记已读：只记 id，不存公告内容。 */
+    fun dismissNotice(id: String) {
+        val value = id.trim()
+        if (value.isEmpty()) return
+        settings.lastNoticeId = value
+        _notices.update { it.copy(lastReadId = value) }
     }
 
     /* ---------------- 小说阅读 ---------------- */

@@ -33,6 +33,9 @@ Thumbs.db
 .memory/
 .trae/
 
+# Python 字节码缓存（tools/_announce.py 运行时生成）
+__pycache__/
+
 # 工作区里与本仓库无关的本地项目 / 分享产物
 blog/
 portfolio/

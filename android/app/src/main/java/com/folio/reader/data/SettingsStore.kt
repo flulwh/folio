@@ -186,6 +186,16 @@ class SettingsStore(context: Context) {
         set(value) = prefs.edit().putString(KEY_CONNECTION_STATE, value).apply()
 
     /**
+     * 最后一条已读公告的 id（空串 = 还没读过任何公告）。
+     *
+     * 公告来自静态 `notice.json`，id 由发布方保证稳定；只记 id 不记内容，
+     * 公告正文改版或过期后不需要任何迁移。
+     */
+    var lastNoticeId: String
+        get() = prefs.getString(KEY_LAST_NOTICE_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_NOTICE_ID, value.trim()).apply()
+
+    /**
      * 设备身份（T07）：桌面端「设备管理」靠它认出这台手机。
      *
      * 第一次读时生成 UUID 并**立刻落盘**，之后永不变更 —— 桌面端用这个 id 记住
@@ -275,6 +285,7 @@ class SettingsStore(context: Context) {
         private const val KEY_LAST_SYNC = "last_sync_at"
         private const val KEY_LAST_HEALTH = "last_health_at"
         private const val KEY_CONNECTION_STATE = "connection_state"
+        private const val KEY_LAST_NOTICE_ID = "last_notice_id"
         private const val KEY_INSTALL_ID = "install_id"
         private const val KEY_DEVICE_NAME = "device_name"
     }

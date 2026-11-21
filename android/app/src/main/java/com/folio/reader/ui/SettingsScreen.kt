@@ -2,6 +2,9 @@ package com.folio.reader.ui
 
 import com.folio.reader.ui.model.SettingsModel
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -34,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextIndent
@@ -43,6 +47,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.SettingsStore
+import com.folio.reader.net.Notice
 import io.github.alexzhirkevich.cupertino.CupertinoButton
 import io.github.alexzhirkevich.cupertino.CupertinoButtonDefaults
 import io.github.alexzhirkevich.cupertino.CupertinoHorizontalDivider
@@ -95,6 +100,9 @@ fun SettingsScreen(
     val vm = model.session
     val state by vm.settingsState.collectAsState()
     val shelf by vm.shelf.collectAsState()
+    val update by vm.updateState.collectAsState()
+    val notices by vm.noticeState.collectAsState()
+    val context = LocalContext.current
     val scheme = CupertinoTheme.colorScheme
     var showDiagnostics by remember { mutableStateOf(false) }
 
@@ -479,6 +487,50 @@ fun SettingsScreen(
                             }
                         }
                         Item(key = "version") { ValueRow(title = "本机版本", value = state.appVersion) }
+                        Item(key = "check-update") {
+                            SectionLink(
+                                onClick = { vm.checkUpdate() },
+                                enabled = !update.checking,
+                                caption = {
+                                    CupertinoText(
+                                        text = updateCaptionOf(update),
+                                        fontSize = 12.sp,
+                                        color = if (update.error.isNotBlank()) BrandNegative else scheme.secondaryLabel,
+                                    )
+                                },
+                            ) {
+                                CupertinoText(
+                                    text = if (update.checking) "检查中…" else "检查更新",
+                                    fontSize = 17.sp,
+                                    color = scheme.label,
+                                )
+                            }
+                        }
+                        if (update.hasUpdate) {
+                            val downloadUrl = update.apkUrl.ifBlank { update.releaseUrl }
+                            Item(key = "download-update") {
+                                SectionLink(
+                                    onClick = { openInBrowser(context, downloadUrl) },
+                                    enabled = downloadUrl.isNotBlank(),
+                                    caption = {
+                                        CupertinoText(
+                                            text = update.notes.lineSequence()
+                                                .firstOrNull { it.isNotBlank() }
+                                                ?.trim()
+                                                ?.take(60)
+                                                .orEmpty(),
+                                            fontSize = 12.sp,
+                                        )
+                                    },
+                                ) {
+                                    CupertinoText(
+                                        text = "下载 v${update.latestVersion}",
+                                        fontSize = 17.sp,
+                                        color = scheme.accent,
+                                    )
+                                }
+                            }
+                        }
                         Item(key = "server-version") {
                             ValueRow(
                                 title = "桌面端",
@@ -530,6 +582,41 @@ fun SettingsScreen(
                                     fontSize = 12.sp,
                                     color = scheme.accent,
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* ---------------- 公告 ---------------- */
+            item("notices") {
+                Reveal(index = 4) {
+                    CupertinoSection(style = SectionStyle.InsetGrouped, title = sectionTitle("公告")) {
+                        if (notices.notices.isEmpty()) {
+                            Item(key = "notice-empty") {
+                                CupertinoText(
+                                    text = when {
+                                        notices.loading -> "加载中…"
+                                        notices.error.isNotBlank() -> notices.error
+                                        else -> "暂无公告"
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    fontSize = 12.5.sp,
+                                    color = scheme.secondaryLabel,
+                                )
+                            }
+                        } else {
+                            notices.notices.forEach { notice ->
+                                Item(key = "notice-${notice.id}") {
+                                    NoticeRow(
+                                        notice = notice,
+                                        read = notices.isRead(notice.id),
+                                        onClick = {
+                                            vm.dismissNotice(notice.id)
+                                            if (notice.url.isNotBlank()) openInBrowser(context, notice.url)
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
@@ -816,4 +903,79 @@ private fun formatSize(bytes: Long): String {
     val kb = bytes / 1024.0
     if (kb < 1024) return String.format(Locale.US, "%.0f KB", kb)
     return String.format(Locale.US, "%.1f MB", kb / 1024.0)
+}
+
+/* ---------------- 检查更新 / 公告 ---------------- */
+
+/** 「检查更新」行的副标题：当前版本 + 一句状态，失败时只给短原因。 */
+private fun updateCaptionOf(state: UpdateUiState): String = when {
+    state.checking -> "正在检查…"
+    state.error.isNotBlank() -> state.error
+    state.hasUpdate -> "发现新版本 v${state.latestVersion}（当前 v${state.currentVersion}）"
+    state.checked -> "已是最新（v${state.currentVersion}）"
+    else -> "当前版本 v${state.currentVersion}"
+}
+
+/** 公告一行：标题 + 日期 + 正文；未读的标题加粗并带一个蓝点。 */
+@Composable
+private fun NoticeRow(notice: Notice, read: Boolean, onClick: () -> Unit) {
+    val scheme = CupertinoTheme.colorScheme
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (!read) {
+                Box(
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(scheme.accent)
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            CupertinoText(
+                text = notice.title,
+                modifier = Modifier.weight(1f),
+                fontSize = 17.sp,
+                fontWeight = if (read) FontWeight.Normal else FontWeight.SemiBold,
+                color = scheme.label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (notice.date.isNotBlank()) {
+                Spacer(Modifier.width(8.dp))
+                CupertinoText(
+                    text = notice.date,
+                    fontSize = 12.sp,
+                    color = scheme.secondaryLabel,
+                    maxLines = 1,
+                )
+            }
+        }
+        if (notice.body.isNotBlank()) {
+            Spacer(Modifier.height(4.dp))
+            CupertinoText(
+                text = notice.body,
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = scheme.secondaryLabel,
+            )
+        }
+        if (!read) {
+            Spacer(Modifier.height(4.dp))
+            CupertinoText(text = "点按标记已读", fontSize = 11.sp, color = scheme.accent)
+        }
+    }
+}
+
+/** 用浏览器打开下载页 / 公告链接；没有浏览器时静默失败，不打断设置页。 */
+private fun openInBrowser(context: Context, url: String) {
+    if (url.isBlank()) return
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }

@@ -1,6 +1,6 @@
 # tools/
 
-`tools/` 下是 39 个脚本（外加若干截图产物），按用途分四类。文件名带 `_` 前缀的一律是**手动运行**的工具；不带前缀的只有 `apply-patch.mjs`、`probe-sources.mjs` 与三个 `.bat`。
+`tools/` 下是 41 个脚本（外加若干截图产物），按用途分五类。文件名带 `_` 前缀的一律是**手动运行**的工具；不带前缀的只有 `apply-patch.mjs`、`probe-sources.mjs` 与四个 `.bat`。
 
 回归脚本同时挂在 `package.json` 上，日常只需要跑 `npm run check:theme` / `check:lan-edge` / `check:lan-sync`；这三条已由 `.github/workflows/regress.yml` 在 push / PR 到 main 时自动执行。
 
@@ -62,6 +62,13 @@
 | `run-dev.bat` | `npm run dev` 的 Windows 启动器，日志写 `tools/dev-run.log` |
 | `诊断启动.bat` | 诊断启动：带 `--no-sandbox --disable-gpu --enable-logging` 启动，日志在 `%TEMP%\folio-diag.log` |
 | `Folio-兼容模式.bat` | 受限账户 / 安全软件环境下用 `--no-sandbox --disable-gpu` 启动 `Folio.exe` |
+
+## 5. 发公告
+
+| 文件 | 用途 | 入口 |
+| --- | --- | --- |
+| `_announce.py` | 公告编辑器：编辑 `site/notice.json`，按桌面端 / 安卓端同一套规则校验，一键 add + commit + push；`--check` 只校验不开窗 | `python tools/_announce.py` |
+| `announce.bat` | 双击启动公告窗口（优先 `pythonw`，不弹控制台） | 双击 |
 
 ## 截图产物
 

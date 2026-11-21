@@ -19,6 +19,7 @@ import Segmented from './Segmented.jsx';
 import FontManager from './FontManager.jsx';
 import DevicesPanel, { IconPhone } from './DevicesPanel.jsx';
 import { fontStackFor } from '../hooks/useFontLoader.js';
+import { useNotices } from '../hooks/useNotices.js';
 import { resetCoverMemo } from '../hooks/useCachedCover.js';
 import {
   IconArrowLeft,
@@ -163,6 +164,18 @@ export default function SettingsPage({ onClose }) {
   const [cacheBusy, setCacheBusy] = useState(false);
   const [themeDraft, setThemeDraft] = useState(null);
 
+  /* ---------------- 更新与公告 ---------------- */
+  const [update, setUpdate] = useState(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const {
+    notices,
+    seen: seenNotices,
+    loading: loadingNotices,
+    markRead: markNoticeRead,
+    markAllRead: markAllNoticesRead,
+    reload: reloadNotices,
+  } = useNotices();
+
   /* ---------------- 局域网面板 ---------------- */
   // settings.lan 可能是老版本留下的 undefined，统一兜一层
   const lanSettings = settings.lan || {};
@@ -247,6 +260,31 @@ export default function SettingsPage({ onClose }) {
     if (port === Number(lanSettings.port || 7788)) return;
     applyLan({ ...lanSettings, port, enabled: lanSettings.enabled === true });
   }, [applyLan, lanPortDraft, lanSettings, notify]);
+
+  /** 更新检查：版本读 GitHub Releases，结果只影响这一块 UI，失败按提示处理。 */
+  const checkUpdateNow = useCallback(async () => {
+    const api = window.readerAPI;
+    if (!api?.checkUpdate) {
+      notify('当前环境不支持检查更新', 'error');
+      return;
+    }
+    setCheckingUpdate(true);
+    try {
+      const result = await api.checkUpdate();
+      setUpdate(result);
+      if (!result?.ok) notify(`检查更新失败：${result?.error || '网络不可用'}`, 'error');
+      else if (result.hasUpdate) notify(`发现新版本 v${result.latest}`);
+      else notify('已是最新版本');
+    } catch (err) {
+      notify(`检查更新失败：${err?.message || err}`, 'error');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }, [notify]);
+
+  const openUpdatePage = useCallback(() => {
+    if (update?.url) window.readerAPI?.openExternal?.(update.url);
+  }, [update]);
 
   useEffect(() => {
     window.readerAPI?.appInfo?.().then(setInfo).catch(() => {});
@@ -1124,6 +1162,96 @@ export default function SettingsPage({ onClose }) {
                     <span>
                       v{info?.version || __APP_VERSION__} · {info?.platform || 'win32'}
                     </span>
+                  </div>
+                </section>
+
+                <section className="settings-group">
+                  <h3 className="settings-group-title">更新</h3>
+                  <Row
+                    title={`当前版本 v${info?.version || __APP_VERSION__}`}
+                    hint={
+                      checkingUpdate
+                        ? '正在查询 GitHub Releases…'
+                        : update?.ok
+                          ? update.hasUpdate
+                            ? `发现新版本 v${update.latest}${update.publishedAt ? `（${update.publishedAt.slice(0, 10)} 发布）` : ''}`
+                            : '已是最新版本'
+                          : update
+                            ? `检查失败：${update.error}`
+                            : '从 GitHub Releases 读取桌面端最新版本'
+                    }
+                  >
+                    {update?.ok && update.hasUpdate && (
+                      <button className="btn ghost small" onClick={openUpdatePage}>
+                        前往下载
+                      </button>
+                    )}
+                    <button className="btn ghost small" onClick={checkUpdateNow} disabled={checkingUpdate}>
+                      {checkingUpdate ? '检查中…' : '检查更新'}
+                    </button>
+                  </Row>
+                  {update?.ok && update.hasUpdate && update.notes && (
+                    <p className="settings-hint settings-update-notes">{update.notes}</p>
+                  )}
+                </section>
+
+                <section className="settings-group">
+                  <h3 className="settings-group-title">公告</h3>
+                  {notices.length === 0 && (
+                    <p className="settings-hint">
+                      {loadingNotices ? '正在读取公告…' : '暂时没有公告。'}
+                    </p>
+                  )}
+                  {notices.map((item) => {
+                    const unread = !seenNotices.includes(item.id);
+                    return (
+                      <div className="settings-page-row" key={item.id}>
+                        <div className="settings-page-row-text">
+                          <span>
+                            {item.title}
+                            {unread && <em className="notice-unread" aria-label="未读" />}
+                          </span>
+                          <small>
+                            {item.date ? `${item.date} · ` : ''}
+                            {item.body || '—'}
+                          </small>
+                        </div>
+                        <div className="settings-page-row-control">
+                          {item.url && (
+                            <button
+                              className="btn ghost small"
+                              onClick={() => {
+                                window.readerAPI?.openExternal?.(item.url);
+                                markNoticeRead(item.id);
+                              }}
+                            >
+                              打开
+                            </button>
+                          )}
+                          {unread && (
+                            <button className="btn ghost small" onClick={() => markNoticeRead(item.id)}>
+                              已读
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="settings-page-row">
+                    <div className="settings-page-row-text">
+                      <span>公告来源</span>
+                      <small>官网 notice.json，断网时自动跳过</small>
+                    </div>
+                    <div className="settings-page-row-control">
+                      {notices.some((item) => !seenNotices.includes(item.id)) && (
+                        <button className="btn ghost small" onClick={markAllNoticesRead}>
+                          全部已读
+                        </button>
+                      )}
+                      <button className="btn ghost small" onClick={reloadNotices}>
+                        刷新
+                      </button>
+                    </div>
                   </div>
                 </section>
 

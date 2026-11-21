@@ -19,6 +19,7 @@ import { createJsonStore } from './json-store.js';
 import { isInside, samePath } from './paths.js';
 import { readFontMeta as readFontMetaFile, readFontCoverage as readFontCoverageFile, familyFromFilename } from './fontmeta.js';
 import { createFontStore } from './font-store.js';
+import { checkForUpdates, fetchNotices } from './update.js';
 
 const { app, BrowserWindow, Menu, ipcMain, dialog, shell, protocol, net, clipboard } = electron;
 
@@ -1633,7 +1634,8 @@ ipcMain.handle('lan:status', () => {
   if (!lanService) return base;
   return { ...base, ...lanService.status() };
 });
-ipcMain.handle('lan:open', async (_e, url) => {
+/** 只放行 http(s) 外链：渲染层拿不到「用 url 执行任意协议」的能力。 */
+async function openExternalUrl(url) {
   const target = String(url || '');
   if (!/^https?:\/\//i.test(target)) return { ok: false };
   try {
@@ -1642,7 +1644,15 @@ ipcMain.handle('lan:open', async (_e, url) => {
   } catch (err) {
     return { ok: false, error: err?.message || String(err) };
   }
-});
+}
+
+ipcMain.handle('lan:open', (_e, url) => openExternalUrl(url));
+
+/* ---------- 更新检查 / 公告 ---------- */
+/* 两者都只读 GitHub 的静态资源，失败按「没查到」处理，不打扰用户。 */
+ipcMain.handle('app:check-update', () => checkForUpdates(app.getVersion()));
+ipcMain.handle('app:notices', () => fetchNotices());
+ipcMain.handle('app:open-external', (_e, url) => openExternalUrl(url));
 
 /* ---------- 设备管理（渲染层 IPC） ---------- */
 

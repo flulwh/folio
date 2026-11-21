@@ -2,6 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('readerAPI', {
   appInfo: () => ipcRenderer.invoke('app:info'),
+  // 更新与公告：都只读 GitHub 静态资源，失败按「没查到」处理
+  checkUpdate: () => ipcRenderer.invoke('app:check-update'),
+  fetchNotices: () => ipcRenderer.invoke('app:notices'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
 
   // 窗口控制：自绘的 macOS 风格交通灯（红黄绿）需要自己接管这三个动作。
   // 只暴露动作，不暴露窗口对象本身，渲染层拿不到任何特权句柄。

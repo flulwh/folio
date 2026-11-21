@@ -7,6 +7,7 @@ import Reader from './components/Reader.jsx';
 import ShortcutHelp from './components/ShortcutHelp.jsx';
 import TrafficLights from './components/TrafficLights.jsx';
 import { ToastBridge, Toaster } from './ui/Toast.jsx';
+import NoticeBanner from './components/NoticeBanner.jsx';
 import { IconBook } from './components/Icons.jsx';
 import { applyTheme } from './themes.js';
 
@@ -322,6 +323,7 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      {loaded && !bookForReader && <NoticeBanner />}
       <Toaster />
       <ToastBridge />
       <ShortcutHelp open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

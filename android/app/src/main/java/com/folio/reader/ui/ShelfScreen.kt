@@ -117,6 +117,7 @@ fun ShelfScreen(
 ) {
     val vm = model.session
     val state by vm.shelf.collectAsState()
+    val notices by vm.noticeState.collectAsState()
     val gridState = rememberLazyGridState()
     val scheme = CupertinoTheme.colorScheme
 
@@ -229,12 +230,30 @@ fun ShelfScreen(
             }
 
             item(key = "shelf-banner", span = { GridItemSpan(maxLineSpan) }) {
-                AnimatedVisibility(
-                    visible = state.showBanner,
-                    enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
-                    exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
-                ) {
-                    OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
+                Column {
+                    // 公告横幅只挂在书架首屏：第一条未读，关掉即记 id 不再出现。
+                    val notice = notices.bannerNotice
+                    AnimatedVisibility(
+                        visible = notice != null,
+                        enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+                        exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+                    ) {
+                        if (notice != null) {
+                            NoticeBanner(
+                                title = notice.title,
+                                body = notice.body,
+                                date = notice.date,
+                                onDismiss = { vm.dismissNotice(notice.id) },
+                            )
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = state.showBanner,
+                        enter = fadeIn(tween(FolioMotion.Normal)) + expandVertically(tween(FolioMotion.Normal)),
+                        exit = fadeOut(tween(FolioMotion.Instant)) + shrinkVertically(tween(FolioMotion.Normal)),
+                    ) {
+                        OfflineBanner(onConnect = onOpenSettings, onDismiss = vm::dismissBanner)
+                    }
                 }
             }
 
@@ -525,6 +544,79 @@ private fun OfflineBanner(onConnect: () -> Unit, onDismiss: () -> Unit) {
             CupertinoIcon(
                 CupertinoIcons.Outlined.Xmark,
                 "不再提示",
+                Modifier.size(13.dp),
+                tint = scheme.secondaryLabel,
+            )
+        }
+    }
+}
+
+/* ---------------- 公告横幅 ---------------- */
+
+/**
+ * 启动公告横幅：第一条未读公告，右侧 X 关掉后写入已读 id。
+ *
+ * 与未连接横幅同一种视觉（systemFill 底 + 圆角），不抢封面墙的注意力。
+ */
+@Composable
+private fun NoticeBanner(
+    title: String,
+    body: String,
+    date: String,
+    onDismiss: () -> Unit,
+) {
+    val scheme = CupertinoTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .clip(RoundedCornerShape(GroupRadius))
+            .background(scheme.systemFill)
+            .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CupertinoText(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = scheme.label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (date.isNotBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    CupertinoText(
+                        text = date,
+                        fontSize = 11.sp,
+                        color = scheme.secondaryLabel,
+                        maxLines = 1,
+                    )
+                }
+            }
+            if (body.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                CupertinoText(
+                    text = body,
+                    fontSize = 12.sp,
+                    color = scheme.secondaryLabel,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        Box(
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            CupertinoIcon(
+                CupertinoIcons.Outlined.Xmark,
+                "关闭公告",
                 Modifier.size(13.dp),
                 tint = scheme.secondaryLabel,
             )

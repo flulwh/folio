@@ -14,6 +14,7 @@ import com.folio.reader.data.CatalogFont
 import com.folio.reader.data.ConnectionState
 import com.folio.reader.data.InstalledFont
 import com.folio.reader.data.SyncStateStore
+import com.folio.reader.net.Notice
 import org.readium.r2.shared.publication.Locator
 
 /**
@@ -422,6 +423,44 @@ data class FontStoreUiState(
     val bytesReceived: Long = 0L,
     val bytesTotal: Long = 0L,
 )
+
+/**
+ * 检查更新状态。
+ *
+ * [checked] 用来区分「还没查过」与「查过且已是最新」——两者都不显示下载入口，
+ * 但副标题文案不同。网络失败只留一句 [error]，不展示整段异常。
+ */
+data class UpdateUiState(
+    val checking: Boolean = false,
+    /** 至少完成过一次检查（成功或失败）。 */
+    val checked: Boolean = false,
+    val hasUpdate: Boolean = false,
+    val latestVersion: String = "",
+    val currentVersion: String = BuildConfig.VERSION_NAME,
+    val releaseUrl: String = "",
+    val apkUrl: String = "",
+    val notes: String = "",
+    val error: String = "",
+)
+
+/**
+ * 公告状态。
+ *
+ * [notices] 已按日期倒序、过期条目已剔除；[lastReadId] 来自 `SettingsStore`，
+ * 首屏横幅只展示第一条未读公告。
+ */
+data class NoticeUiState(
+    val loading: Boolean = false,
+    val notices: List<Notice> = emptyList(),
+    /** 最后一条已读公告的 id；空串 = 还没读过。 */
+    val lastReadId: String = "",
+    val error: String = "",
+) {
+    /** 首屏横幅要展示的那一条：最新的未读公告。 */
+    val bannerNotice: Notice? get() = notices.firstOrNull { it.id != lastReadId }
+
+    fun isRead(id: String): Boolean = id == lastReadId
+}
 
 /** 设置页状态。 */
 data class SettingsUiState(
