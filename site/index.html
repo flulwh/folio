@@ -5,763 +5,1343 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Folio · 把书架放回你自己的硬盘</title>
 <meta name="description" content="Folio 是本地优先的双端阅读器：Windows 桌面端与原生安卓端各自存书，只在局域网里同步进度、书签与阅读痕迹。免费、无账号、离线可读。" />
-<meta name="theme-color" content="#141413" />
+<meta name="theme-color" content="#f2ecdd" />
 <meta property="og:title" content="Folio · 本地优先的双端阅读器" />
 <meta property="og:description" content="书架在自己硬盘上，进度只在局域网里走。Windows + Android，免费开源。" />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="https://flulwh.github.io/folio/assets/bookshelf.png" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23141413'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23faf9f5'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23d97757'/%3E%3C/svg%3E" />
-<script src="./vendor/motion.js"></script>
-<script>
-  if (window.Motion && !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
-    document.documentElement.classList.add('has-motion');
-  }
-</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2315110c'/%3E%3Cpath d='M9 8h9a4 4 0 0 1 4 4v12H13a4 4 0 0 1-4-4V8z' fill='%23f2ecdd'/%3E%3Cpath d='M22 12h1v12h-1z' fill='%23b8371f'/%3E%3C/svg%3E" />
+<link rel="preload" href="./fonts/bodoni-moda-400.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="./fonts/bodoni-moda-400-italic.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="./fonts/plex-mono-400.woff2" as="font" type="font/woff2" crossorigin />
+<script>document.documentElement.classList.add('js');</script>
 <style>
+  @font-face {
+    font-family: "Bodoni Moda";
+    src: url("./fonts/bodoni-moda-400.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Bodoni Moda";
+    src: url("./fonts/bodoni-moda-400-italic.woff2") format("woff2");
+    font-weight: 400; font-style: italic; font-display: swap;
+  }
+  @font-face {
+    font-family: "Plex Mono";
+    src: url("./fonts/plex-mono-400.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Plex Mono";
+    src: url("./fonts/plex-mono-500.woff2") format("woff2");
+    font-weight: 500; font-style: normal; font-display: swap;
+  }
+
   :root {
-    --bg: #faf9f5;
-    --ink: #141413;
-    --mid: #b0aea5;
-    --soft: #e8e6dc;
-    --clay: #d97757;
-    --blue: #6a9bcc;
-    --green: #788c5d;
+    --paper: #f2ecdd;
+    --paper-hi: #faf5e9;
+    --paper-lo: #e5dcc7;
+    --ink: #15110c;
+    --ink-2: #443d31;
+    --ink-3: #877c68;
+    --red: #b8371f;
+    --red-2: #d4694f;
+    --olive: #6d7352;
+    --rule: rgba(21, 17, 12, 0.14);
+    --rule-2: rgba(21, 17, 12, 0.34);
+    --cream: #f2ecdd;
+    --cream-2: rgba(242, 236, 221, 0.66);
+    --cream-3: rgba(242, 236, 221, 0.4);
+    --cream-rule: rgba(242, 236, 221, 0.16);
 
-    --text-2: rgba(20, 20, 19, 0.64);
-    --text-3: rgba(20, 20, 19, 0.42);
-    --line: rgba(20, 20, 19, 0.13);
-    --line-soft: rgba(20, 20, 19, 0.07);
-    --cream-2: rgba(250, 249, 245, 0.68);
-    --cream-3: rgba(250, 249, 245, 0.42);
-    --cream-line: rgba(250, 249, 245, 0.14);
+    --serif: "Bodoni Moda", "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+    --sans: "PingFang SC", "HarmonyOS Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "Plex Mono", "SFMono-Regular", Consolas, "Microsoft YaHei", monospace;
 
-    --sans: "Poppins", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
-    --serif: "Lora", "Songti SC", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
-    --wrap: 1200px;
-    --head-h: 76px;
-    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --gutter: clamp(20px, 4.4vw, 72px);
+    --maxw: 1320px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(1100px 700px at 8% -10%, #fbf7ea 0%, rgba(251, 247, 234, 0) 60%),
+      radial-gradient(900px 620px at 100% 2%, #e8dfca 0%, rgba(232, 223, 202, 0) 58%),
+      var(--paper);
     color: var(--ink);
     font-family: var(--sans);
     font-size: 16px;
     line-height: 1.7;
+    overflow-x: clip;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    overflow-x: clip;
+  }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    pointer-events: none;
+    opacity: 0.42;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.2'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
   }
   a { color: inherit; text-decoration: none; }
   img, svg { display: block; }
-  figure { margin: 0; }
-  ::selection { background: var(--clay); color: #fff; }
+  figure, blockquote, h1, h2, h3, p, dl, dd { margin: 0; }
+  ol, ul { margin: 0; padding: 0; list-style: none; }
+  ::selection { background: var(--red); color: var(--paper-hi); }
+  :focus-visible { outline: 2px solid var(--red); outline-offset: 4px; }
 
   .wrap {
     width: 100%;
-    max-width: var(--wrap);
+    max-width: var(--maxw);
     margin: 0 auto;
-    padding: 0 36px;
+    padding: 0 var(--gutter);
+  }
+  .mono {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
   }
 
-  /* ---------- header ---------- */
-  .site-head {
+  /* ---------- rail ---------- */
+  .rail {
     position: fixed;
     inset: 0 0 auto 0;
-    z-index: 40;
-    padding: 22px 0;
-    color: var(--bg);
-    border-bottom: 1px solid transparent;
-    transition: background 0.4s var(--ease), padding 0.4s var(--ease), color 0.4s var(--ease), border-color 0.4s var(--ease);
-  }
-  .site-head.is-stuck {
-    padding: 13px 0;
-    color: var(--ink);
-    background: rgba(250, 249, 245, 0.9);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom-color: var(--line-soft);
-  }
-  .head-inner { display: flex; align-items: center; gap: 34px; }
-  .brand {
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-  }
-  .brand-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--clay); }
-  .nav {
-    margin-left: auto;
-    display: flex;
+    z-index: 70;
+    height: 70px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 30px;
-    font-size: 13px;
-    color: inherit;
+    padding: 0 var(--gutter);
+    color: var(--ink-2);
+    background: linear-gradient(to bottom, rgba(242, 236, 221, 0.86), rgba(242, 236, 221, 0.62));
+    backdrop-filter: blur(14px) saturate(1.15);
+    -webkit-backdrop-filter: blur(14px) saturate(1.15);
+    border-bottom: 1px solid transparent;
+    transition: height 0.4s var(--ease), background 0.4s var(--ease), border-color 0.4s var(--ease);
   }
-  .nav a { transition: opacity 0.25s var(--ease); }
-  .nav a:not(.nav-gh):not(.nav-me) { opacity: 0.72; }
-  .nav a:hover { opacity: 1; }
-  .nav-gh {
-    padding: 7px 16px;
-    border: 1px solid currentColor;
-    border-radius: 999px;
-    opacity: 1;
+  .rail.is-stuck {
+    height: 58px;
+    background: rgba(242, 236, 221, 0.95);
+    border-bottom-color: var(--rule);
   }
-  .nav-gh:hover { background: rgba(217, 119, 87, 0.14); }
-  .nav-me {
+  .rail__bar {
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: var(--red);
+    transform: scaleX(var(--read, 0));
+    transform-origin: left center;
+    opacity: 0.85;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 2px;
+    font-family: var(--serif);
+    font-size: 23px;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .brand span { color: var(--red); }
+  .rail__nav {
+    justify-self: center;
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .rail__nav a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 6px 0;
+    position: relative;
+    color: var(--ink-3);
+    transition: color 0.25s;
+  }
+  .rail__nav a i { font-style: normal; font-size: 9px; color: var(--red); opacity: 0.7; }
+  .rail__nav a::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1px;
+    background: var(--ink);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.35s var(--ease);
+  }
+  .rail__nav a:hover, .rail__nav a.is-active { color: var(--ink); }
+  .rail__nav a.is-active::after, .rail__nav a:hover::after { transform: scaleX(1); }
+  .rail__acts { display: flex; align-items: center; gap: 10px; }
+  .rail__me, .rail__gh {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 7px 16px;
-    border-radius: 999px;
-    background: var(--clay);
-    color: #fff;
-    font-weight: 500;
-    opacity: 1;
-    transition: background 0.25s var(--ease), transform 0.25s var(--ease);
+    gap: 6px;
+    padding: 7px 13px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    border: 1px solid var(--rule-2);
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
   }
-  .nav-me:hover { opacity: 1; background: #c1653f; transform: translateY(-1px); }
-  .nav-me span { font-size: 11px; }
+  .rail__me { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .rail__me:hover { background: var(--red); border-color: var(--red); }
+  .rail__gh:hover { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
   /* ---------- hero ---------- */
   .hero {
     position: relative;
     min-height: 100svh;
     display: flex;
-    align-items: center;
-    padding: calc(var(--head-h) + 58px) 0 74px;
-    background: var(--ink);
-    color: var(--bg);
+    flex-direction: column;
+    justify-content: center;
+    padding: calc(70px + clamp(42px, 7vh, 86px)) 0 0;
     overflow: hidden;
   }
-  .hero .dust {
+  .hero::before {
+    content: "";
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    -webkit-mask-image: radial-gradient(ellipse 64% 80% at 64% 48%, #000 16%, rgba(0, 0, 0, 0.6) 62%, transparent 90%);
-    mask-image: radial-gradient(ellipse 64% 80% at 64% 48%, #000 16%, rgba(0, 0, 0, 0.6) 62%, transparent 90%);
-  }
-  .hero-glow {
-    position: absolute;
-    inset: auto -10% -32% 34%;
-    height: 120%;
-    background: radial-gradient(closest-side, rgba(217, 119, 87, 0.2), transparent 70%);
+    z-index: 0;
+    right: -8vw;
+    top: 2vh;
+    width: min(58vw, 760px);
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(184, 55, 31, 0.1) 0%, rgba(184, 55, 31, 0) 66%);
     pointer-events: none;
   }
-  .hero-inner {
+  .hero__inner {
     position: relative;
     z-index: 2;
     display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
     align-items: center;
-    gap: 56px;
+    gap: clamp(34px, 5vw, 78px);
   }
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 11px;
-    font-size: 11px;
+  .hero__slug {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    padding-bottom: 16px;
+    margin-bottom: clamp(24px, 4vh, 40px);
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-3);
+    font-family: var(--mono);
+    font-size: 9.5px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--cream-2);
-    margin-bottom: 28px;
   }
-  .eyebrow::before { content: ""; width: 26px; height: 1px; background: var(--clay); }
-  h1.hero-title {
-    margin: 0 0 28px;
-    font-weight: 600;
-    font-size: clamp(46px, 5.6vw, 82px);
-    line-height: 1.06;
-    letter-spacing: -0.03em;
+  .hero__slug b { color: var(--red); font-weight: 500; }
+  .hero__title {
+    font-size: clamp(44px, 6.3vw, 98px);
+    font-weight: 700;
+    line-height: 1.04;
+    letter-spacing: -0.045em;
+    font-feature-settings: "palt" 1;
   }
-  .line { display: block; overflow: hidden; padding-bottom: 0.34em; margin-bottom: -0.3em; }
-  .line-in { display: inline-block; position: relative; }
-  .line-in.accent { color: var(--clay); }
-  .line-in .dot { color: var(--bg); }
-  .scribble {
-    position: absolute;
-    left: 0;
-    bottom: -0.3em;
-    width: 100%;
-    height: 0.18em;
-    overflow: visible;
-    pointer-events: none;
+  .hero__title .line {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.07em;
+    margin-bottom: -0.05em;
   }
-  .scribble path {
-    fill: none;
-    stroke: var(--clay);
-    stroke-width: 3.4;
-    stroke-linecap: round;
-    stroke-dasharray: 320;
-    stroke-dashoffset: 0;
+  .hero__title .line-in {
+    display: inline-block;
+    position: relative;
+    animation: lineRise 1.05s var(--ease) both;
   }
-  html.has-motion .line-in { transform: translateY(112%); }
-  html.has-motion .scribble path { stroke-dashoffset: 320; }
-  html.has-motion.drawn .scribble path {
-    stroke-dashoffset: 0;
-    transition: stroke-dashoffset 0.9s ease-in-out 0.7s;
+  .hero__title .line:nth-child(1) .line-in { animation-delay: 0.06s; }
+  .hero__title .line:nth-child(2) .line-in { animation-delay: 0.15s; }
+  .hero__title .line:nth-child(3) .line-in { animation-delay: 0.24s; }
+  .hero__title em { font-style: normal; color: var(--red); }
+  .hero__title .dot { color: var(--red); }
+  .hero__lede {
+    max-width: 33em;
+    margin-top: clamp(24px, 3.6vh, 38px);
+    font-size: clamp(15px, 1.15vw, 17px);
+    line-height: 1.85;
+    color: var(--ink-2);
+    text-wrap: pretty;
+    animation: fadeUp 0.9s var(--ease) 0.5s both;
   }
-
-  .lede {
-    max-width: 31em;
-    margin: 0 0 34px;
-    font-size: 15.5px;
-    line-height: 1.9;
-    color: var(--cream-2);
+  .hero__cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: clamp(26px, 3.8vh, 40px);
+    animation: fadeUp 0.9s var(--ease) 0.62s both;
   }
-  .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .btn {
     display: inline-flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 22px;
-    border-radius: 8px;
-    font-size: 14.5px;
+    padding: 14px 20px;
+    border: 1px solid var(--ink);
+    font-size: 13px;
     font-weight: 600;
-    letter-spacing: 0.01em;
-    transition: background 0.3s var(--ease), border-color 0.3s var(--ease), color 0.3s var(--ease);
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+    background: transparent;
+    color: var(--ink);
+    transition: background 0.3s var(--ease), color 0.3s var(--ease), border-color 0.3s var(--ease), transform 0.3s var(--ease);
   }
   .btn svg { width: 17px; height: 17px; flex: none; }
-  .btn-label { text-align: left; line-height: 1.2; }
+  .btn__label { display: block; text-align: left; }
   .btn .ver {
     display: block;
-    font-size: 10.5px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    opacity: 0.62;
-    margin-top: 2px;
+    margin-top: 3px;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    opacity: 0.58;
   }
-  .btn-primary { background: var(--bg); color: var(--ink); }
-  .btn-primary:hover { background: #fff; }
-  .btn-ghost { border: 1px solid rgba(250, 249, 245, 0.26); color: var(--bg); }
-  .btn-ghost:hover { border-color: var(--bg); background: rgba(250, 249, 245, 0.06); }
-  .hero-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 20px;
-    margin-top: 28px;
-    font-size: 12px;
-    color: var(--cream-3);
-  }
-  .hero-meta span { display: inline-flex; align-items: center; gap: 8px; }
-  .hero-meta span::before { content: ""; width: 5px; height: 5px; background: var(--clay); }
-
-  /* hero screenshots */
-  .stage { position: relative; min-height: 470px; }
-  .stage-inner { position: relative; transform-style: preserve-3d; will-change: transform; }
-  .shot-desktop {
-    position: relative;
-    width: 100%;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid rgba(250, 249, 245, 0.16);
-    background: #1b1b19;
-    box-shadow: 0 60px 110px -50px rgba(0, 0, 0, 0.9), 0 2px 10px rgba(0, 0, 0, 0.4);
-    rotate: -3deg;
-  }
-  .shot-desktop img { width: 100%; height: auto; }
-  .shot-phone {
-    position: absolute;
-    right: -2%;
-    bottom: -46px;
-    width: 142px;
-    padding: 6px;
-    border-radius: 24px;
-    background: #0c0c0b;
-    border: 1px solid rgba(250, 249, 245, 0.18);
-    box-shadow: 0 34px 60px -26px rgba(0, 0, 0, 0.95);
-    rotate: 3deg;
-  }
-  .shot-phone img { width: 100%; height: auto; border-radius: 19px; }
-
-  /* ---------- sections ---------- */
-  section { position: relative; }
-  section[id] { scroll-margin-top: var(--head-h); }
-  .band { padding: 116px 0; border-top: 1px solid var(--line-soft); }
-  .band-soft { background: var(--soft); border-color: rgba(20, 20, 19, 0.06); }
-  .band.dark {
-    background: var(--ink);
-    color: var(--bg);
-    border-top: 0;
-  }
-  .band-head { max-width: 720px; }
-  .kicker {
+  .btn--ink { background: var(--ink); color: var(--paper); }
+  .btn--ink:hover { background: var(--red); border-color: var(--red); transform: translateY(-2px); }
+  .btn--line:hover { background: var(--ink); color: var(--paper); transform: translateY(-2px); }
+  .hero__src {
     display: inline-flex;
-    align-items: baseline;
-    gap: 10px;
-    font-size: 10.5px;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1px solid var(--rule-2);
+    padding-bottom: 2px;
+    transition: color 0.25s, border-color 0.25s;
+  }
+  .hero__src:hover { color: var(--red); border-color: var(--red); }
+  .hero__meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 610px;
+    margin-top: clamp(32px, 5vh, 56px);
+    border-top: 1px solid var(--rule-2);
+    animation: fadeUp 0.9s var(--ease) 0.74s both;
+  }
+  .hero__meta > div {
+    padding: 14px 16px 0 0;
+    border-right: 1px solid var(--rule);
+  }
+  .hero__meta > div:last-child { border-right: 0; }
+  .hero__meta dt {
+    font-family: var(--mono);
+    font-size: 9px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--clay);
-    margin-bottom: 22px;
+    color: var(--ink-3);
   }
-  .kicker i { font-style: normal; color: var(--mid); letter-spacing: 0.1em; }
-  h2 {
-    font-weight: 600;
-    font-size: clamp(30px, 3.4vw, 44px);
-    line-height: 1.3;
-    letter-spacing: -0.02em;
-    margin: 0 0 16px;
-  }
-  .band p.sub {
-    margin: 0;
-    color: var(--text-2);
-    font-size: 15.5px;
-    max-width: 36em;
-  }
-  .band.dark p.sub { color: var(--cream-2); }
+  .hero__meta dd { margin-top: 7px; font-size: 13.5px; letter-spacing: -0.01em; }
 
-  /* sync */
-  .sync-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 68px;
-    align-items: center;
-    margin-top: 56px;
+  .hero__plate {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    transform: rotate(-1.4deg) translate3d(0, var(--py, 0px), 0);
+    animation: plateIn 1.2s var(--ease) 0.2s both;
   }
-  .sync-copy p { color: var(--text-2); margin: 0 0 18px; font-size: 15px; line-height: 1.85; }
-  .sync-copy p:last-child { margin-bottom: 0; }
-  .sync-copy strong { color: var(--ink); font-weight: 600; }
-  .sync-diagram {
+  .hero__print {
+    position: relative;
+    padding: 9px;
+    background: var(--paper-hi);
+    border: 1px solid var(--rule-2);
+    box-shadow: 0 50px 90px -54px rgba(21, 17, 12, 0.55), 0 3px 14px -8px rgba(21, 17, 12, 0.22);
+  }
+  .hero__print img { width: 100%; height: auto; border: 1px solid var(--rule); }
+  .hero__phone {
+    position: absolute;
+    right: -6%;
+    bottom: -42px;
+    width: 130px;
+    padding: 6px;
+    border-radius: 22px;
+    background: var(--ink);
+    border: 1px solid rgba(242, 236, 221, 0.22);
+    box-shadow: 0 30px 50px -24px rgba(21, 17, 12, 0.85);
+    transform: rotate(2.6deg);
+  }
+  .hero__phone img { width: 100%; height: auto; border-radius: 16px; }
+  .hero__plate figcaption {
     display: flex;
     align-items: center;
-    padding: 42px 34px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: #fffdf8;
+    gap: 10px;
+    margin-top: 12px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
-  .node { flex: 1; min-width: 0; text-align: center; }
-  .node .device {
-    width: 54px;
-    height: 54px;
-    margin: 0 auto 12px;
-    border-radius: 9px;
-    border: 1px solid var(--line);
+  .hero__plate figcaption span { color: var(--red); }
+  .seal {
+    position: absolute;
+    left: -30px;
+    top: -34px;
+    z-index: 3;
+    width: 88px;
+    height: 88px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 1px;
+    border: 1.5px solid var(--red);
+    color: var(--red);
+    background: rgba(250, 245, 233, 0.78);
+    box-shadow: inset 0 0 0 3px rgba(184, 55, 31, 0.14), inset 0 0 0 4px var(--red);
+    transform: rotate(-9deg);
+    font-family: var(--mono);
+    font-size: 7.5px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+  }
+  .seal b {
+    font-family: var(--serif);
+    font-size: 23px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    text-indent: 0.02em;
+  }
+  .hero__foot {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 26px;
+    margin-top: clamp(38px, 7vh, 82px);
+    padding: 14px 0 18px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .scrollcue { display: inline-flex; align-items: center; gap: 10px; }
+  .scrollcue i {
+    position: relative;
+    display: block;
+    width: 56px;
+    height: 1px;
+    background: var(--rule);
+    overflow: hidden;
+  }
+  .scrollcue i::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--red);
+    transform: translateX(-100%);
+    animation: cue 2.6s var(--ease) infinite;
+  }
+
+  /* ---------- contents ---------- */
+  .contents {
+    border-top: 1px solid var(--rule-2);
+    border-bottom: 1px solid var(--rule-2);
+    background: rgba(250, 245, 233, 0.42);
+  }
+  .contents__inner { display: flex; flex-wrap: wrap; align-items: stretch; }
+  .contents__label {
+    display: flex;
+    align-items: center;
+    padding: 17px 30px 17px 0;
+    border-right: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .contents a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 9px;
+    padding: 17px 26px;
+    border-right: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-2);
+    transition: background 0.25s, color 0.25s;
+  }
+  .contents a i {
+    font-family: var(--mono);
+    font-style: normal;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--red);
+  }
+  .contents a:hover { background: var(--ink); color: var(--paper); }
+  .contents a:hover i { color: var(--red-2); }
+
+  /* ---------- statement ---------- */
+  .statement { padding: clamp(88px, 13vw, 168px) 0; }
+  .statement__grid {
+    display: grid;
+    grid-template-columns: 168px minmax(0, 1fr);
+    gap: clamp(24px, 5vw, 64px);
+  }
+  .statement__label {
+    padding-top: 12px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .statement blockquote {
+    font-size: clamp(38px, 6.2vw, 88px);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.045em;
+    font-feature-settings: "palt" 1;
+  }
+  .statement blockquote em { font-style: normal; color: var(--red); }
+  .statement__note {
+    max-width: 42em;
+    margin-top: clamp(24px, 3.4vw, 38px);
+    padding-left: 22px;
+    border-left: 1px solid var(--red);
+    font-size: 15.5px;
+    line-height: 1.9;
+    color: var(--ink-2);
+  }
+
+  /* ---------- chapter ---------- */
+  .chapter { padding: clamp(72px, 10vw, 132px) 0; border-top: 1px solid var(--rule); }
+  .chapter__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(34px, 6vw, 92px);
+  }
+  .chapter__head { position: sticky; top: 96px; align-self: start; }
+  .chapter__no {
+    display: block;
+    font-family: var(--serif);
+    font-size: clamp(62px, 8.6vw, 124px);
+    line-height: 0.78;
+    letter-spacing: -0.04em;
+    color: var(--red);
+  }
+  .chapter__label {
+    margin-top: 20px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .chapter h2 {
+    margin-top: 14px;
+    font-size: clamp(30px, 4.2vw, 58px);
+    font-weight: 700;
+    line-height: 1.06;
+    letter-spacing: -0.04em;
+    font-feature-settings: "palt" 1;
+  }
+  .chapter__body { padding-top: 4px; }
+  .chapter__lead {
+    max-width: 30em;
+    margin-bottom: 22px;
+    font-size: clamp(18px, 1.55vw, 22px);
+    line-height: 1.75;
+    letter-spacing: -0.015em;
+  }
+  .chapter__body p {
+    max-width: 36em;
+    margin-bottom: 18px;
+    font-size: 15.5px;
+    line-height: 1.9;
+    color: var(--ink-2);
+    text-wrap: pretty;
+  }
+  .chapter__body strong { color: var(--ink); font-weight: 600; }
+
+  .schematic {
+    position: relative;
+    margin-top: 42px;
+    padding: clamp(24px, 4vw, 44px);
+    border: 1px solid var(--rule-2);
+    background: var(--paper-hi);
+  }
+  .schematic__row { display: flex; align-items: center; gap: 12px; }
+  .device { flex: 1; min-width: 0; text-align: center; }
+  .device__icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 13px;
     display: grid;
     place-items: center;
-    background: var(--bg);
+    border: 1px solid var(--rule-2);
+    background: var(--paper);
+    color: var(--ink-2);
   }
-  .node .device svg { width: 21px; height: 21px; }
-  .node.blue .device { color: var(--blue); }
-  .node.green .device { color: var(--green); }
-  .node b { display: block; font-size: 12.5px; font-weight: 600; }
-  .node small { display: block; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
-  .link {
-    flex: none;
-    width: 76px;
-    height: 1px;
-    margin: 0 6px 26px;
-    background: repeating-linear-gradient(90deg, var(--clay) 0 4px, transparent 4px 9px);
+  .device__icon svg { width: 21px; height: 21px; }
+  .device b { display: block; font-size: 13.5px; font-weight: 600; }
+  .device small {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .wire {
     position: relative;
+    flex: 1.25;
+    height: 1px;
+    margin-bottom: 34px;
+    border-top: 1px dashed var(--rule-2);
   }
-  .link span {
+  .wire span {
     position: absolute;
     left: 50%;
-    top: -20px;
+    top: -22px;
     transform: translateX(-50%);
-    font-size: 9.5px;
-    letter-spacing: 0.12em;
-    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .wire i {
+    position: absolute;
+    top: -3px;
+    left: 0;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: travel 2.8s var(--ease) infinite;
+  }
+  .schematic figcaption {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 28px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .schematic figcaption span { color: var(--red); }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 34px;
+    border-top: 1px solid var(--rule);
+  }
+  .steps li { padding: 16px 20px 0 0; border-right: 1px solid var(--rule); }
+  .steps li:last-child { border-right: 0; }
+  .steps i { font-style: normal; font-family: var(--mono); font-size: 9.5px; color: var(--red); }
+  .steps b { display: block; margin: 7px 0 3px; font-size: 13.5px; font-weight: 600; }
+  .steps span { font-size: 12px; line-height: 1.7; color: var(--ink-3); }
+
+  /* ---------- features ---------- */
+  .chapter--ink {
+    background: var(--ink);
+    color: var(--paper);
+    border-top: 0;
+  }
+  .chapter--ink .chapter__grid { display: block; }
+  .chapter--ink .chapter__head { position: static; display: block; max-width: 900px; }
+  .chapter--ink .chapter__head .chapter__no { color: var(--red-2); }
+  .chapter--ink .chapter__label { color: var(--cream-3); }
+  .chapter--ink h2 { color: var(--paper); }
+  .chapter--ink .chapter__body { max-width: 760px; margin-top: 26px; }
+  .chapter--ink .chapter__body p { color: var(--cream-2); }
+  .ledger { margin-top: clamp(36px, 5vw, 60px); border-top: 1px solid var(--cream-rule); }
+  .ledger li {
+    display: grid;
+    grid-template-columns: 58px minmax(140px, 0.8fr) minmax(0, 2fr) 110px;
+    gap: 22px;
+    align-items: start;
+    padding: 25px 6px;
+    border-bottom: 1px solid var(--cream-rule);
+    transition: background 0.4s, padding-left 0.5s var(--ease);
+  }
+  .ledger li:hover { background: rgba(242, 236, 221, 0.045); padding-left: 16px; }
+  .ledger__no { padding-top: 3px; font-family: var(--mono); font-size: 10.5px; color: var(--red-2); }
+  .ledger h3 { font-size: clamp(17px, 1.9vw, 23px); font-weight: 600; letter-spacing: -0.02em; }
+  .ledger p { max-width: 48em; font-size: 13.5px; line-height: 1.8; color: var(--cream-2); }
+  .ledger__tag {
+    justify-self: end;
+    padding: 4px 8px;
+    border: 1px solid var(--cream-rule);
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cream-3);
     white-space: nowrap;
   }
 
-  /* features */
-  .features {
+  /* ---------- gallery ---------- */
+  .gallery { position: relative; background: var(--ink); color: var(--paper); border-top: 1px solid var(--cream-rule); }
+  .gallery__track { height: 205vh; }
+  .gallery__pin {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    overflow: hidden;
+    padding-top: 88px;
+  }
+  .gallery__head { position: absolute; top: 88px; left: 0; right: 0; z-index: 4; }
+  .gallery__head .chapter__label { color: var(--cream-3); }
+  .gallery__head h2 {
+    margin-top: 10px;
+    font-size: clamp(30px, 4vw, 54px);
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.04em;
+    color: var(--paper);
+  }
+  .gallery__head p { max-width: 38em; margin-top: 12px; font-size: 14px; line-height: 1.8; color: var(--cream-2); }
+  .gallery__stage {
+    position: absolute;
+    inset: 88px 0 0;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin-top: 58px;
-    border-top: 1px solid rgba(20, 20, 19, 0.14);
+    place-items: center;
+    perspective: 1600px;
+    transform-style: preserve-3d;
   }
-  .feature { padding: 28px 30px 30px 0; border-bottom: 1px solid rgba(20, 20, 19, 0.14); }
-  .feature + .feature { padding-left: 30px; border-left: 1px solid rgba(20, 20, 19, 0.14); }
-  .feature:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
-  .feature .num {
-    display: block;
-    font-family: var(--serif);
-    font-style: italic;
-    font-size: 12px;
-    color: var(--clay);
-    margin-bottom: 14px;
-  }
-  .feature h3 { margin: 0 0 7px; font-size: 16px; font-weight: 600; }
-  .feature p { margin: 0; font-size: 13.5px; line-height: 1.78; color: var(--text-2); }
-
-  /* ---------- 3D gallery ---------- */
-  .band-gallery { padding: 0; background: var(--ink); }
-  .band-gallery .dust-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-  .band-gallery .dust {
+  .gallery__stage .dust {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    -webkit-mask-image: radial-gradient(ellipse 58% 58% at 50% 56%, transparent 22%, #000 76%);
-    mask-image: radial-gradient(ellipse 58% 58% at 50% 56%, transparent 22%, #000 76%);
+    pointer-events: none;
+    -webkit-mask-image: radial-gradient(ellipse 60% 62% at 50% 56%, transparent 20%, #000 78%);
+    mask-image: radial-gradient(ellipse 60% 62% at 50% 56%, transparent 20%, #000 78%);
   }
-  .deck-glow {
+  .gallery__glow {
     position: absolute;
     left: 50%;
-    top: 55%;
-    width: 72vw;
-    height: 60vh;
+    top: 52%;
+    width: 70vw;
+    height: 56vh;
     transform: translate(-50%, -50%);
-    background: radial-gradient(closest-side, rgba(217, 119, 87, 0.16), transparent 72%);
+    background: radial-gradient(closest-side, rgba(184, 55, 31, 0.16), transparent 72%);
     pointer-events: none;
   }
-  .deck-track { position: relative; height: 220vh; }
-  .deck-pin {
-    position: sticky;
-    top: 0;
-    height: 100svh;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    padding-top: calc(var(--head-h) + 26px);
-  }
-  .deck-head { position: relative; z-index: 5; }
-  .deck-head h2 { margin-bottom: 12px; }
-  .deck-head p.sub { max-width: 34em; }
-  .deck {
-    position: relative;
-    display: grid;
-    place-items: center;
-    perspective: 1500px;
-    transform-style: preserve-3d;
-  }
-  .deck .shot {
+  .shot {
     position: absolute;
-    width: min(38vw, 540px);
-    border-radius: 10px;
-    overflow: hidden;
-    background: #101010;
-    border: 1px solid rgba(250, 249, 245, 0.24);
-    box-shadow: 0 60px 120px -50px rgba(0, 0, 0, 0.95), 0 0 60px -20px rgba(217, 119, 87, 0.12);
+    left: 50%;
+    top: 50%;
+    width: min(38vw, 560px);
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(242, 236, 221, 0.24);
+    background: #0f0d09;
+    box-shadow: 0 60px 120px -50px rgba(0, 0, 0, 0.95), 0 0 60px -20px rgba(184, 55, 31, 0.14);
     will-change: transform;
   }
-  .deck .shot img { width: 100%; height: auto; }
-  .deck .main { width: min(44vw, 640px); z-index: 3; }
-  .deck .shot.phone { width: min(17vw, 250px); border-radius: 20px; border-color: rgba(250, 249, 245, 0.3); }
-  .deck .shot.phone img { border-radius: 15px; }
-  .deck .left { transform: translate3d(-56%, 30px, -420px) rotateY(26deg); z-index: 2; }
-  .deck .right { transform: translate3d(430px, 46px, -380px) rotateY(-22deg); z-index: 1; }
+  .shot img { width: 100%; height: auto; }
+  .shot--main { width: min(44vw, 650px); z-index: 3; }
+  .shot--phone { width: min(16vw, 232px); border-radius: 20px; z-index: 4; }
+  .shot--phone img { border-radius: 15px; }
+  .gallery__hint {
+    position: absolute;
+    right: var(--gutter);
+    bottom: 30px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--cream-3);
+  }
+  .gallery__hint i { display: block; width: 70px; height: 1px; background: var(--cream-rule); position: relative; overflow: hidden; }
+  .gallery__hint i::after { content: ""; position: absolute; inset: 0; background: var(--red-2); transform: scaleX(var(--gp, 0)); transform-origin: left center; }
 
   /* ---------- typography ---------- */
-  .type-grid {
+  .type__grid {
     display: grid;
-    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
-    gap: 60px;
-    align-items: center;
-    margin-top: 22px;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(34px, 5vw, 70px);
+    align-items: start;
   }
-  .type-copy p { color: var(--text-2); font-size: 15px; line-height: 1.85; margin: 0 0 16px; }
-  .type-list {
-    list-style: none;
-    padding: 0;
-    margin: 30px 0 0;
+  .type__list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px 24px;
+    margin-top: 30px;
+    border-top: 1px solid var(--rule);
   }
-  .type-list li {
-    font-size: 13px;
-    color: var(--text-2);
+  .type__list li {
     display: flex;
     align-items: center;
     gap: 9px;
-  }
-  .type-list li::before { content: ""; width: 5px; height: 5px; background: var(--clay); flex: none; }
-  .type-demo {
-    border-radius: 12px;
-    background: var(--ink);
-    padding: 18px;
-    box-shadow: 0 40px 80px -50px rgba(20, 20, 19, 0.8);
-  }
-  .type-demo .shot { border-radius: 6px; overflow: hidden; background: #000; }
-  .type-demo .shot img { width: 100%; height: auto; }
-  .demo-controls { display: flex; gap: 8px; margin-top: 14px; }
-  .demo-controls span {
-    flex: 1;
-    height: 30px;
-    border-radius: 6px;
-    border: 1px solid var(--cream-line);
-    display: grid;
-    place-items: center;
-    font-size: 10.5px;
-    color: var(--cream-2);
-    letter-spacing: 0.04em;
-  }
-  .demo-controls span.on {
-    border-color: rgba(217, 119, 87, 0.66);
-    color: var(--bg);
-    background: rgba(217, 119, 87, 0.16);
-  }
-
-  /* ---------- final ---------- */
-  .final {
-    padding: 120px 0 110px;
-    background: var(--ink);
-    color: var(--bg);
-  }
-  .final .wrap {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 38px;
-  }
-  .final h2 {
-    font-size: clamp(38px, 5vw, 68px);
-    line-height: 1.12;
-    margin: 0 0 14px;
-    letter-spacing: -0.03em;
-  }
-  .final p { margin: 0; color: var(--cream-3); font-size: 13.5px; }
-  .final .actions { display: flex; flex-wrap: wrap; gap: 12px; }
-  .btn-light { background: var(--bg); color: var(--ink); }
-  .btn-light:hover { background: #fff; }
-  .btn-outline { border: 1px solid rgba(250, 249, 245, 0.26); color: var(--bg); }
-  .btn-outline:hover { border-color: var(--bg); background: rgba(250, 249, 245, 0.06); }
-
-  /* footer */
-  .site-foot {
-    background: var(--ink);
-    color: var(--mid);
-    padding: 0 0 46px;
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--rule);
     font-size: 12.5px;
+    color: var(--ink-2);
   }
-  .site-foot .wrap {
+  .type__list li::before { content: ""; width: 5px; height: 5px; background: var(--red); flex: none; }
+  .type__list li:nth-child(odd) { border-right: 1px solid var(--rule); }
+  .type__list li:nth-child(even) { padding-left: 14px; }
+
+  .specimen {
+    border: 1px solid var(--rule-2);
+    background: var(--paper-hi);
+    box-shadow: 0 44px 90px -60px rgba(21, 17, 12, 0.5);
+  }
+  .specimen__bar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 18px 30px;
-    padding-top: 34px;
-    border-top: 1px solid var(--cream-line);
+    gap: 12px 18px;
+    padding: 13px 15px;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
-  .site-foot .brand { color: var(--bg); font-size: 16px; }
-  .site-foot nav { margin-left: auto; display: flex; flex-wrap: wrap; gap: 22px; }
-  .site-foot a { transition: color 0.2s var(--ease); }
-  .site-foot a:hover { color: var(--bg); }
+  .seg { display: inline-flex; border: 1px solid var(--rule-2); }
+  .seg button {
+    padding: 5px 10px;
+    border: 0;
+    border-right: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink-2);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button.is-on { background: var(--ink); color: var(--paper); }
+  .specimen__bar label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .specimen__bar input[type="range"] {
+    width: 76px;
+    height: 14px;
+    accent-color: var(--red);
+    cursor: pointer;
+  }
+  .specimen__bar b { font-weight: 500; color: var(--ink); min-width: 1.6em; }
+  .specimen__theme {
+    margin-left: auto;
+    padding: 5px 10px;
+    border: 1px solid var(--rule-2);
+    background: transparent;
+    color: var(--ink-2);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+  .specimen__theme:hover { background: var(--ink); color: var(--paper); }
+  .specimen__page {
+    --spec-bg: var(--paper-hi);
+    --spec-ink: var(--ink);
+    --spec-ff: var(--serif);
+    --spec-fs: 20px;
+    --spec-lh: 1.9;
+    padding: clamp(26px, 4.2vw, 50px);
+    background: var(--spec-bg);
+    transition: background 0.45s var(--ease), color 0.45s var(--ease);
+  }
+  .specimen__page.is-night { --spec-bg: #16130d; --spec-ink: #e9e2d1; }
+  .specimen__text {
+    margin: 0;
+    font-family: var(--spec-ff);
+    font-size: var(--spec-fs);
+    line-height: var(--spec-lh);
+    color: var(--spec-ink);
+    text-align: justify;
+    font-feature-settings: "palt" 1;
+    transition: font-size 0.2s var(--ease), line-height 0.2s var(--ease);
+  }
+  .specimen__meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .specimen__meta span { color: var(--red); }
+  .type__plate { margin-top: 34px; }
+  .type__plate img { width: 100%; border: 1px solid var(--rule-2); box-shadow: 0 40px 80px -60px rgba(21, 17, 12, 0.5); }
+  .type__plate figcaption {
+    display: flex;
+    gap: 10px;
+    margin-top: 11px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .type__plate figcaption span { color: var(--red); }
 
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .btn, .site-head, .nav a { transition: none; }
+  /* ---------- download ---------- */
+  .download { padding: clamp(80px, 11vw, 150px) 0; border-top: 1px solid var(--rule); }
+  .download__title {
+    margin-top: 14px;
+    font-size: clamp(44px, 7vw, 96px);
+    font-weight: 700;
+    line-height: 0.98;
+    letter-spacing: -0.05em;
+    font-feature-settings: "palt" 1;
+  }
+  .download__title em { font-style: normal; color: var(--red); }
+  .download__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: clamp(34px, 5vw, 56px);
+  }
+  .dlc {
+    position: relative;
+    display: block;
+    padding: 24px 24px 22px;
+    border: 1px solid var(--rule-2);
+    background: var(--paper-hi);
+    overflow: hidden;
+    transition: transform 0.45s var(--ease), box-shadow 0.45s var(--ease), border-color 0.3s;
+  }
+  .dlc::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 3px;
+    background: var(--red);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.55s var(--ease);
+  }
+  .dlc:hover { transform: translateY(-3px); border-color: var(--ink); box-shadow: 0 28px 50px -34px rgba(21, 17, 12, 0.5); }
+  .dlc:hover::after { transform: scaleX(1); }
+  .dlc__os { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--red); }
+  .dlc__name { display: block; margin-top: 10px; font-size: clamp(24px, 2.6vw, 34px); font-weight: 700; letter-spacing: -0.035em; }
+  .dlc__ver { display: block; margin-top: 4px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+  .dlc__go {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 22px;
+    padding-top: 13px;
+    border-top: 1px solid var(--rule);
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .dlc__go i { margin-left: auto; font-style: normal; color: var(--red); transition: transform 0.35s var(--ease); }
+  .dlc:hover .dlc__go i { transform: translate(3px, -3px); }
+  .download__note { max-width: 40em; margin-top: 22px; font-size: 12.5px; line-height: 1.8; color: var(--ink-3); }
+  .req {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 46px;
+    border-top: 1px solid var(--rule-2);
+  }
+  .req > div { padding: 15px 18px 0 0; border-right: 1px solid var(--rule); }
+  .req > div:last-child { border-right: 0; }
+  .req dt { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+  .req dd { margin-top: 7px; font-size: 13px; line-height: 1.6; }
+
+  /* ---------- footer ---------- */
+  .colophon {
+    padding: 40px 0 30px;
+    background: var(--ink);
+    color: var(--cream-3);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .colophon__top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 26px; }
+  .colophon .brand { font-size: 26px; letter-spacing: -0.02em; color: var(--paper); text-transform: none; }
+  .colophon__meta { max-width: 30em; line-height: 1.9; }
+  .colophon nav { display: flex; flex-wrap: wrap; gap: 20px; }
+  .colophon nav a { transition: color 0.2s; }
+  .colophon nav a:hover { color: var(--paper); }
+  .colophon__bottom {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px 24px;
+    margin-top: 30px;
+    padding-top: 15px;
+    border-top: 1px solid var(--cream-rule);
+    color: rgba(242, 236, 221, 0.3);
   }
 
-  @media (max-width: 1040px) {
-    .hero { padding-top: calc(var(--head-h) + 44px); }
-    .hero-inner { grid-template-columns: 1fr; gap: 52px; }
-    .stage { min-height: 0; max-width: 560px; width: 100%; }
-    .shot-phone { right: 0; bottom: -34px; width: 124px; }
-    .sync-grid, .type-grid { grid-template-columns: 1fr; gap: 40px; }
-    .features { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .feature:nth-child(3n + 1) { padding-left: 30px; border-left: 1px solid rgba(20, 20, 19, 0.14); }
-    .feature:nth-child(2n + 1) { padding-left: 0; border-left: 0; }
-    .nav a:not(.nav-gh):not(.nav-me) { display: none; }
-    .deck-track { height: auto; }
-    .deck-pin {
-      position: static;
-      height: auto;
-      padding: 84px 0 0;
-      grid-template-rows: auto auto;
-    }
-    .deck {
-      height: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding: 28px 20px 56px;
-      perspective: none;
-    }
-    .deck .shot, .deck .left, .deck .right, .deck .main {
+  /* ---------- motion ---------- */
+  .js .reveal {
+    opacity: 0;
+    transform: translateY(26px);
+    transition: opacity 0.9s var(--ease), transform 0.9s var(--ease);
+  }
+  .js .reveal.is-in { opacity: 1; transform: none; }
+  .reveal[data-delay="1"] { transition-delay: 90ms; }
+  .reveal[data-delay="2"] { transition-delay: 180ms; }
+  .reveal[data-delay="3"] { transition-delay: 270ms; }
+
+  @keyframes lineRise { from { transform: translateY(112%); } to { transform: translateY(0); } }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  @keyframes plateIn { from { opacity: 0; transform: rotate(-1.4deg) translateY(36px); } to { opacity: 1; transform: rotate(-1.4deg) translateY(0); } }
+  @keyframes cue { 0% { transform: translateX(-100%); } 55% { transform: translateX(0); } 100% { transform: translateX(100%); } }
+  @keyframes travel { 0% { left: 0; opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { left: 100%; opacity: 0; } }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1120px) {
+    .rail__nav { gap: 18px; }
+    .rail__nav a span { display: none; }
+    .hero__inner { grid-template-columns: minmax(0, 1fr); gap: 52px; }
+    .hero { padding-bottom: 10px; }
+    .hero__plate { width: min(620px, 92%); margin-inline: auto; }
+    .hero__phone { right: 2%; }
+    .hero__meta { max-width: 100%; }
+    .chapter__grid { grid-template-columns: minmax(0, 1fr); gap: 34px; }
+    .chapter__head { position: static; }
+    .chapter__no { font-size: 74px; }
+    .type__grid { grid-template-columns: minmax(0, 1fr); gap: 40px; }
+    .ledger li { grid-template-columns: 50px minmax(120px, 0.7fr) minmax(0, 2fr); }
+    .ledger__tag { display: none; }
+  }
+
+  @media (max-width: 860px) {
+    .rail { grid-template-columns: 1fr auto; gap: 16px; height: 62px; }
+    .rail__nav { display: none; }
+    .rail__gh { display: none; }
+    .hero { min-height: auto; padding-top: 118px; }
+    .hero__title { font-size: clamp(40px, 8.6vw, 68px); }
+    .hero__foot { margin-top: 44px; }
+    .statement__grid { grid-template-columns: 1fr; gap: 16px; }
+    .statement__label { padding-top: 0; }
+    .contents__label { display: none; }
+    .contents a { padding: 14px 18px; }
+    .gallery__track { height: auto; }
+    .gallery__pin { position: static; height: auto; padding: 76px 0 64px; }
+    .gallery__head { position: static; padding-bottom: 6px; }
+    .gallery__stage { position: static; inset: auto; display: flex; flex-direction: column; gap: 14px; padding: 26px var(--gutter) 0; perspective: none; }
+    .gallery__stage .dust, .gallery__glow, .gallery__hint { display: none; }
+    .shot, .shot--main, .shot--phone {
       position: static;
       width: 100%;
       transform: none;
+      left: auto; top: auto;
     }
-    .deck .shot.phone { width: min(58%, 220px); align-self: center; }
+    .shot--phone { width: min(58%, 230px); align-self: center; }
+    .download__grid { grid-template-columns: 1fr; }
+    .req { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .req > div:nth-child(2) { border-right: 0; }
+    .req > div:nth-child(n + 3) { margin-top: 16px; }
+    .colophon__top { flex-direction: column; align-items: flex-start; }
   }
 
-  @media (max-width: 640px) {
-    .wrap { padding: 0 20px; }
-    .site-head { padding: 16px 0; }
-    .nav { gap: 12px; font-size: 12px; }
-    .nav-me, .nav-gh { padding: 6px 12px; }
-    .hero { padding-top: calc(var(--head-h) + 26px); padding-bottom: 56px; }
-    h1.hero-title { font-size: clamp(36px, 10.4vw, 50px); }
-    .lede { font-size: 14.5px; }
-    .btn { padding: 12px 16px; font-size: 13.5px; }
-    .shot-phone { width: 104px; padding: 5px; border-radius: 19px; }
-    .shot-phone img { border-radius: 14px; }
-    .band { padding: 76px 0; }
-    .features { grid-template-columns: 1fr; }
-    .feature, .feature + .feature, .feature:nth-child(3n + 1), .feature:nth-child(2n + 1) {
-      padding: 24px 0;
-      border-left: 0;
-    }
-    .sync-diagram { padding: 26px 14px; }
-    .link { width: 40px; }
-    .link span { font-size: 8px; letter-spacing: 0.06em; }
-    .type-list { gap: 10px 18px; }
-    .final { padding: 76px 0 70px; }
-    .final .wrap { align-items: flex-start; }
-    .site-foot nav { margin-left: 0; }
+  @media (max-width: 620px) {
+    .hero__slug { gap: 6px 14px; font-size: 8.5px; }
+    .hero__title { letter-spacing: -0.05em; }
+    .hero__title .line { padding-bottom: 0.1em; }
+    .hero__lede { font-size: 14.5px; }
+    .btn { padding: 12px 15px; font-size: 12.5px; }
+    .hero__src { display: none; }
+    .hero__meta { grid-template-columns: 1fr; border-top: 1px solid var(--rule-2); }
+    .hero__meta > div { display: flex; align-items: baseline; justify-content: space-between; padding: 10px 0; border-right: 0; border-bottom: 1px solid var(--rule); }
+    .hero__meta dd { margin-top: 0; }
+    .hero__phone { width: 98px; bottom: -30px; }
+    .seal { width: 68px; height: 68px; left: -14px; top: -20px; font-size: 6.5px; }
+    .seal b { font-size: 18px; }
+    .statement blockquote { font-size: clamp(34px, 11vw, 48px); }
+    .chapter { padding: 68px 0; }
+    .chapter__no { font-size: 58px; }
+    .schematic { padding: 22px 14px; }
+    .device__icon { width: 46px; height: 46px; }
+    .wire { flex: 0.7; }
+    .wire span { font-size: 8px; }
+    .steps { grid-template-columns: 1fr; border-top: 0; }
+    .steps li { padding: 14px 0; border-right: 0; border-top: 1px solid var(--rule); }
+    .ledger li { grid-template-columns: 38px minmax(0, 1fr); gap: 8px 14px; }
+    .ledger p { grid-column: 2; }
+    .type__list { grid-template-columns: 1fr; }
+    .type__list li:nth-child(odd) { border-right: 0; }
+    .type__list li:nth-child(even) { padding-left: 0; }
+    .specimen__bar { gap: 10px 12px; }
+    .specimen__theme { margin-left: 0; }
+    .download__title { font-size: clamp(40px, 12vw, 60px); }
+    .req { grid-template-columns: 1fr; }
+    .req > div { border-right: 0; padding-top: 12px; }
+    .req > div + div { border-top: 1px solid var(--rule); margin-top: 0; }
+    .colophon__bottom { flex-direction: column; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+    .js .reveal { opacity: 1; transform: none; }
+    .hero__title .line-in { transform: none; }
   }
 </style>
 </head>
 <body>
 
-<header class="site-head">
-  <div class="wrap head-inner">
-    <a class="brand" href="#top" aria-label="Folio 首页">Folio<span class="brand-dot"></span></a>
-    <nav class="nav" aria-label="主导航">
-      <a href="#sync">同步</a>
-      <a href="#features">功能</a>
-      <a href="#gallery">界面</a>
-      <a href="#type">排版</a>
-      <a class="nav-me" href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页<span aria-hidden="true">↗</span></a>
-      <a class="nav-gh" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
-    </nav>
+<header class="rail" id="rail">
+  <a class="brand" href="#top" aria-label="Folio 首页">Folio<span>.</span></a>
+  <nav class="rail__nav" aria-label="章节导航">
+    <a href="#sync" aria-label="01 同步"><i>01</i><span>同步</span></a>
+    <a href="#features" aria-label="02 功能"><i>02</i><span>功能</span></a>
+    <a href="#gallery" aria-label="03 界面"><i>03</i><span>界面</span></a>
+    <a href="#type" aria-label="04 排版"><i>04</i><span>排版</span></a>
+    <a href="#download" aria-label="05 下载"><i>05</i><span>下载</span></a>
+  </nav>
+  <div class="rail__acts">
+    <a class="rail__me" href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页<span aria-hidden="true">↗</span></a>
+    <a class="rail__gh" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub<span aria-hidden="true">↗</span></a>
   </div>
+  <span class="rail__bar" aria-hidden="true"></span>
 </header>
 
 <main id="top">
 
   <!-- HERO -->
   <section class="hero" id="hero">
-    <canvas class="dust" id="hero-dust" aria-hidden="true"></canvas>
-    <div class="hero-glow" aria-hidden="true"></div>
-    <div class="wrap hero-inner">
-      <div class="hero-copy">
-        <span class="eyebrow">本地优先 · 桌面 + 安卓</span>
-        <h1 class="hero-title">
-          <span class="line"><span class="line-in">把书架，放回</span></span>
-          <span class="line"><span class="line-in accent">你自己的硬盘<svg class="scribble" viewBox="0 0 260 10" aria-hidden="true"><path d="M3 7.2C50 2.6 98 9.4 150 6.4c38-2.2 72-3.4 107-1.2"/></svg><span class="dot">。</span></span></span>
-        </h1>
-        <p class="lede">Folio 是一台 Windows 阅读器，也是一个独立的安卓阅读器。两端各自存书，只在局域网里交换进度、书签和阅读痕迹。</p>
-        <div class="cta-row">
-          <a class="btn btn-primary" id="dl-win" href="https://github.com/flulwh/folio/releases">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6 10.4 4.6v7.1H3V5.6Zm0 12.8 7.4 1V12.4H3v6Zm8.6-13.9L21 3.3v8.4h-9.4V4.5Zm0 8.9H21v8.4l-9.4-1.3V13.4Z"/></svg>
-            <span class="btn-label">下载 Windows 版<span class="ver" id="win-ver">Windows 10 / 11</span></span>
-          </a>
-          <a class="btn btn-ghost" id="dl-android" href="https://github.com/flulwh/folio/releases">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 9.4h11.6c.4 0 .7.3.7.7v6.2a2.6 2.6 0 0 1-2.6 2.6H8.1a2.6 2.6 0 0 1-2.6-2.6v-6.2c0-.4.3-.7.7-.7Zm-2 1.2c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1Zm15.6 0c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1ZM8.4 8.2c.2-1.7 1.4-3.1 3.1-3.7l-.8-1.5a.4.4 0 0 1 .7-.4l.9 1.6a5.9 5.9 0 0 1 3.4 0l.9-1.6a.4.4 0 0 1 .7.4l-.8 1.5a4.6 4.6 0 0 1 3.1 3.7H8.4Zm2.8-2.3a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm6 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Z"/></svg>
-            <span class="btn-label">下载 Android 版<span class="ver" id="android-ver">Android 8.0+</span></span>
-          </a>
+    <div class="wrap">
+      <div class="hero__inner">
+        <div class="hero__copy">
+          <p class="hero__slug">
+            <span>Folio — 本地优先阅读系统</span>
+            <span>Edition <b>2026</b></span>
+            <span>Windows / Android</span>
+          </p>
+          <h1 class="hero__title">
+            <span class="line"><span class="line-in">把书架，</span></span>
+            <span class="line"><span class="line-in">放回</span></span>
+            <span class="line"><span class="line-in"><em>你自己的硬盘</em><span class="dot">。</span></span></span>
+          </h1>
+          <p class="hero__lede">一台 Windows 阅读器，一个独立的安卓阅读器。两端各自存书，只在同一个 Wi-Fi 里交换进度、书签和阅读痕迹。没有账号，没有云端，没有后台。</p>
+          <div class="hero__cta">
+            <a class="btn btn--ink" id="dl-win" href="https://github.com/flulwh/folio/releases">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6 10.4 4.6v7.1H3V5.6Zm0 12.8 7.4 1V12.4H3v6Zm8.6-13.9L21 3.3v8.4h-9.4V4.5Zm0 8.9H21v8.4l-9.4-1.3V13.4Z"/></svg>
+              <span class="btn__label">下载 Windows 版<span class="ver" id="win-ver">Windows 10 / 11</span></span>
+            </a>
+            <a class="btn btn--line" id="dl-android" href="https://github.com/flulwh/folio/releases">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 9.4h11.6c.4 0 .7.3.7.7v6.2a2.6 2.6 0 0 1-2.6 2.6H8.1a2.6 2.6 0 0 1-2.6-2.6v-6.2c0-.4.3-.7.7-.7Zm-2 1.2c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1Zm15.6 0c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1ZM8.4 8.2c.2-1.7 1.4-3.1 3.1-3.7l-.8-1.5a.4.4 0 0 1 .7-.4l.9 1.6a5.9 5.9 0 0 1 3.4 0l.9-1.6a.4.4 0 0 1 .7.4l-.8 1.5a4.6 4.6 0 0 1 3.1 3.7H8.4Zm2.8-2.3a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm6 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Z"/></svg>
+              <span class="btn__label">下载 Android 版<span class="ver" id="android-ver">Android 8.0+</span></span>
+            </a>
+            <a class="hero__src" href="https://github.com/flulwh/folio" target="_blank" rel="noopener">源码 ↗</a>
+          </div>
+          <dl class="hero__meta">
+            <div><dt>形态</dt><dd>桌面 + 安卓</dd></div>
+            <div><dt>同步</dt><dd>局域网直连</dd></div>
+            <div><dt>授权</dt><dd>MIT · 免费</dd></div>
+          </dl>
         </div>
-        <div class="hero-meta">
-          <span>免费 · 无账号</span>
-          <span>离线可读</span>
-          <span>数据留在本机</span>
-        </div>
-      </div>
 
-      <div class="stage" aria-label="Folio 实际界面截图">
-        <div class="stage-inner" id="stage-inner">
-          <figure class="shot-desktop">
+        <figure class="hero__plate">
+          <div class="seal" aria-hidden="true"><span>Local</span><b>F.</b><span>2026</span></div>
+          <div class="hero__print">
             <img src="./assets/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架界面" fetchpriority="high" />
-          </figure>
-          <figure class="shot-phone">
+          </div>
+          <figure class="hero__phone">
             <img src="./assets/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面" />
           </figure>
-        </div>
+          <figcaption><span>Fig. 01</span>桌面端 / 书架 · 实际运行截图</figcaption>
+        </figure>
       </div>
     </div>
-  </section>
-
-  <!-- SYNC -->
-  <section class="band" id="sync">
     <div class="wrap">
-      <div class="band-head" data-reveal>
-        <span class="kicker"><i>01</i> Sync</span>
-        <h2>同步，不需要服务器。</h2>
-        <p class="sub">没有云、没有账号、没有上传。手机和电脑在同一个 Wi-Fi 下，进度自己走。</p>
-      </div>
-      <div class="sync-grid">
-        <div class="sync-copy" data-reveal>
-          <p>桌面端开一个局域网面板，手机上填一次地址和访问码。<strong>之后每次连上同一个网络，书架、进度、书签都会对齐。</strong></p>
-          <p>书本身不强制同步：桌面端可以把书推到手机，手机也能把书拉回电脑。想各读各的，就只同步进度。</p>
-          <p>所有数据都落在本机磁盘，换设备时带走数据目录即可，不依赖任何第三方服务活着。</p>
-        </div>
-        <div class="sync-diagram" data-reveal aria-hidden="true">
-          <div class="node blue">
-            <div class="device">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="19" height="12.5" rx="1.6"/><path d="M8 20h8M12 16.5V20"/></svg>
-            </div>
-            <b>桌面端</b>
-            <small>书架 128 本</small>
-          </div>
-          <div class="link"><span>局域网</span></div>
-          <div class="node green">
-            <div class="device">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="6.5" y="2.5" width="11" height="19" rx="2.4"/><path d="M10.5 18.5h3"/></svg>
-            </div>
-            <b>安卓端</b>
-            <small>进度已对齐</small>
-          </div>
-        </div>
+      <div class="hero__foot">
+        <span>Windows 10 / 11 · Android 8.0+</span>
+        <span class="scrollcue">向下展开<i></i></span>
+        <span>数据只留在本机</span>
       </div>
     </div>
   </section>
 
-  <!-- FEATURES -->
-  <section class="band band-soft" id="features">
+  <!-- CONTENTS -->
+  <nav class="contents" aria-label="目录">
+    <div class="wrap contents__inner">
+      <span class="contents__label">Contents / 目录</span>
+      <a href="#sync"><i>01</i>同步</a>
+      <a href="#features"><i>02</i>功能</a>
+      <a href="#gallery"><i>03</i>界面</a>
+      <a href="#type"><i>04</i>排版</a>
+      <a href="#download"><i>05</i>下载</a>
+    </div>
+  </nav>
+
+  <!-- STATEMENT -->
+  <section class="statement">
+    <div class="wrap statement__grid">
+      <p class="statement__label">00 — 立场<br />Statement</p>
+      <div>
+        <blockquote class="reveal">书是你的。<br /><em>进度也是。</em></blockquote>
+        <p class="statement__note reveal" data-delay="1">没有信息流，没有推荐算法，没有会员等级。打开 Folio 就是书架，读完合上就是书架。所有记录写成你能直接打开、备份、搬走的本地文件。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 01 SYNC -->
+  <section class="chapter" id="sync">
+    <div class="wrap chapter__grid">
+      <header class="chapter__head">
+        <span class="chapter__no">01</span>
+        <p class="chapter__label">Sync / 局域网</p>
+        <h2>同步，<br />不需要服务器。</h2>
+      </header>
+      <div class="chapter__body">
+        <p class="chapter__lead reveal">没有云、没有账号、没有上传。手机和电脑在同一个 Wi-Fi 下，进度自己走。</p>
+        <p class="reveal" data-delay="1">桌面端开一个局域网面板，手机上填一次地址和访问码。<strong>之后每次连上同一个网络，书架、进度、书签都会对齐。</strong></p>
+        <p class="reveal" data-delay="1">书本身不强制同步：桌面端可以把书推到手机，手机也能把书拉回电脑。想各读各的，就只同步进度。</p>
+        <p class="reveal" data-delay="2">所有数据都落在本机磁盘，换设备时带走数据目录即可，不依赖任何第三方服务活着。</p>
+
+        <figure class="schematic reveal" data-delay="2">
+          <div class="schematic__row">
+            <div class="device">
+              <div class="device__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="4" width="19" height="12.5" rx="1.6"/><path d="M8 20h8M12 16.5V20"/></svg>
+              </div>
+              <b>桌面端</b>
+              <small>书架 · 128 本</small>
+            </div>
+            <div class="wire" aria-hidden="true"><i></i><span>同一 Wi-Fi · 直连</span></div>
+            <div class="device">
+              <div class="device__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6.5" y="2.5" width="11" height="19" rx="2.4"/><path d="M10.5 18.5h3"/></svg>
+              </div>
+              <b>安卓端</b>
+              <small>进度 · 已对齐</small>
+            </div>
+          </div>
+          <figcaption><span>Fig. 02</span>局域网直连 / 无中转服务器</figcaption>
+        </figure>
+
+        <ol class="steps reveal" data-delay="3">
+          <li><i>01</i><b>开启面板</b><span>设置 → 网络 → 开启面板，记下地址与访问码。</span></li>
+          <li><i>02</i><b>填一次地址</b><span>手机端输入地址和访问码，或点「搜索桌面端」。</span></li>
+          <li><i>03</i><b>自动对齐</b><span>同一网络下，进度、书签与阅读痕迹按更新时间合并。</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 FEATURES -->
+  <section class="chapter chapter--ink" id="features">
     <div class="wrap">
-      <div class="band-head" data-reveal>
-        <span class="kicker"><i>02</i> Features</span>
-        <h2>小工具该有的样子。</h2>
-        <p class="sub">没有信息流，没有推荐，没有会员。打开就是书架。</p>
+      <div class="chapter__head">
+        <span class="chapter__no reveal">02</span>
+        <p class="chapter__label">Capabilities / 功能</p>
+        <h2 class="reveal" data-delay="1">小工具该有的样子。</h2>
+        <div class="chapter__body">
+          <p class="reveal" data-delay="2">没有信息流，没有推荐，没有会员。打开就是书架，读完合上就是书架。</p>
+        </div>
       </div>
-      <div class="features">
-        <article class="feature"><span class="num">01</span><h3>本地优先</h3><p>书在磁盘上，索引在本地。断网、关服务器、换电脑，都不影响你接着读。</p></article>
-        <article class="feature"><span class="num">02</span><h3>字体商店</h3><p>几款开源中文字体，一键装到本机。正文、标题、预览分别选，不联网也能用。</p></article>
-        <article class="feature"><span class="num">03</span><h3>双端独立</h3><p>安卓端不是遥控器：没有桌面端也能导入、阅读、做笔记，连上后再对齐。</p></article>
-        <article class="feature"><span class="num">04</span><h3>书源在沙箱里</h3><p>网页书源跑在独立进程，解析失败不会拖垮主界面；返回的文本只当内容，不当代码。</p></article>
-        <article class="feature"><span class="num">05</span><h3>漫画也能读</h3><p>竖向、横向两种翻页，长图不断行；桌面与手机的记忆位置各自保留。</p></article>
-        <article class="feature"><span class="num">06</span><h3>没有账号</h3><p>不登录、不订阅、不埋点。设置、书签、进度都是本地 JSON，随时能看、能备份。</p></article>
-      </div>
+      <ol class="ledger">
+        <li class="reveal">
+          <span class="ledger__no">01</span>
+          <h3>本地优先</h3>
+          <p>书在磁盘上，索引在本地。断网、关服务器、换电脑，都不影响你接着读。</p>
+          <span class="ledger__tag">Local</span>
+        </li>
+        <li class="reveal">
+          <span class="ledger__no">02</span>
+          <h3>字体商店</h3>
+          <p>几款开源中文字体，一键装到本机。正文、标题、预览分别选，不联网也能用。</p>
+          <span class="ledger__tag">Type</span>
+        </li>
+        <li class="reveal">
+          <span class="ledger__no">03</span>
+          <h3>双端独立</h3>
+          <p>安卓端不是遥控器：没有桌面端也能导入、阅读、做笔记，连上后再对齐。</p>
+          <span class="ledger__tag">Native</span>
+        </li>
+        <li class="reveal">
+          <span class="ledger__no">04</span>
+          <h3>书源在沙箱里</h3>
+          <p>网页书源跑在独立进程，解析失败不会拖垮主界面；返回的文本只当内容，不当代码。</p>
+          <span class="ledger__tag">Sandbox</span>
+        </li>
+        <li class="reveal">
+          <span class="ledger__no">05</span>
+          <h3>漫画也能读</h3>
+          <p>竖向、横向两种翻页，长图不断行；桌面与手机的记忆位置各自保留。</p>
+          <span class="ledger__tag">Comic</span>
+        </li>
+        <li class="reveal">
+          <span class="ledger__no">06</span>
+          <h3>没有账号</h3>
+          <p>不登录、不订阅、不埋点。设置、书签、进度都是本地 JSON，随时能看、能备份。</p>
+          <span class="ledger__tag">Private</span>
+        </li>
+      </ol>
     </div>
   </section>
 
-  <!-- 3D GALLERY -->
-  <section class="band dark band-gallery" id="gallery">
-    <div class="deck-track" id="deck-track">
-      <div class="deck-pin">
-        <div class="dust-layer" aria-hidden="true"><canvas class="dust" id="gallery-dust"></canvas></div>
-        <div class="deck-glow" aria-hidden="true"></div>
-        <div class="wrap deck-head" data-reveal>
-          <span class="kicker"><i>03</i> Interface</span>
-          <h2>就是它在跑，不是效果图。</h2>
-          <p class="sub">桌面书架、沉浸阅读、安卓端，三张都是实际运行时的截图。往下滚，它们会在三维里退开。</p>
+  <!-- 03 GALLERY -->
+  <section class="gallery" id="gallery">
+    <div class="gallery__track" id="deck-track">
+      <div class="gallery__pin">
+        <div class="wrap gallery__head">
+          <p class="chapter__label">03 — Interface / 界面</p>
+          <h2>就是它在跑，<br />不是效果图。</h2>
+          <p>桌面书架、沉浸阅读、安卓端，三张都是实际运行时的截图。往下滚，它们会在三维里退开。</p>
         </div>
-        <div class="deck" id="deck">
-          <figure class="shot left">
+        <div class="gallery__stage" id="deck">
+          <canvas class="dust" id="gallery-dust" aria-hidden="true"></canvas>
+          <div class="gallery__glow" aria-hidden="true"></div>
+          <figure class="shot shot--side" id="deck-left">
             <img src="./assets/bookshelf.png" width="1583" height="922" alt="Folio 桌面端书架截图" decoding="async" />
           </figure>
-          <figure class="shot main">
+          <figure class="shot shot--main" id="deck-main">
             <img src="./assets/reader.png" width="1583" height="922" alt="Folio 桌面端沉浸阅读截图" decoding="async" />
           </figure>
-          <figure class="shot right phone">
+          <figure class="shot shot--phone" id="deck-phone">
             <img src="./assets/android-reader.png" width="1080" height="2160" alt="Folio 安卓端阅读界面截图" decoding="async" />
           </figure>
         </div>
+        <div class="gallery__hint" aria-hidden="true"><span>Scroll</span><i id="gallery-progress"></i></div>
       </div>
     </div>
   </section>
 
-  <!-- TYPE -->
-  <section class="band" id="type">
+  <!-- 04 TYPOGRAPHY -->
+  <section class="chapter" id="type">
     <div class="wrap">
-      <div class="type-grid">
-        <div class="type-copy" data-reveal>
-          <span class="kicker"><i>04</i> Typography</span>
-          <h2>排版，是阅读的一部分。</h2>
-          <p>字号、行距、页边距、背景纸色，逐项可调；中英文混排的字距与缩进也按中文习惯处理。</p>
-          <p>装进本机的字体立刻出现在正文里，不经过网页渲染，翻页时不会闪一下。</p>
-          <ul class="type-list">
+      <div class="type__grid">
+        <div>
+          <span class="chapter__no reveal">04</span>
+          <p class="chapter__label">Typography / 排版</p>
+          <h2 class="reveal" data-delay="1">排版，<br />是阅读的一部分。</h2>
+          <div class="chapter__body" style="margin-top: 24px;">
+            <p class="reveal" data-delay="2">字号、行距、页边距、背景纸色，逐项可调；中英文混排的字距与缩进也按中文习惯处理。</p>
+            <p class="reveal" data-delay="2">装进本机的字体立刻出现在正文里，不经过网页渲染，翻页时不会闪一下。</p>
+          </div>
+          <ul class="type__list reveal" data-delay="3">
             <li>字号与行距</li>
             <li>页边距与栏宽</li>
             <li>纸色与夜间</li>
@@ -770,52 +1350,82 @@
             <li>自定义字体</li>
           </ul>
         </div>
-        <div class="type-demo" data-reveal>
-          <figure class="shot">
-            <img src="./assets/themes-appearance.png" width="1583" height="922" alt="Folio 外观与阅读排版设置界面" decoding="async" />
+
+        <div>
+          <figure class="specimen reveal" data-spec data-delay="1">
+            <div class="specimen__bar">
+              <div class="seg" role="group" aria-label="预览字体">
+                <button type="button" data-face="serif" class="is-on">宋</button>
+                <button type="button" data-face="sans">黑</button>
+                <button type="button" data-face="mono">等宽</button>
+              </div>
+              <label>字号 <input type="range" min="16" max="27" step="1" value="20" data-size /><b data-size-out>20</b></label>
+              <label>行距 <input type="range" min="1.5" max="2.2" step="0.05" value="1.9" data-leading /></label>
+              <button class="specimen__theme" type="button" data-theme aria-pressed="false">夜间</button>
+            </div>
+            <div class="specimen__page" data-page>
+              <p class="specimen__text" data-text>山里的夜来得早。他把灯芯挑亮一点，书页便从暗处浮出来。风穿过窗纸，像有人在极远的地方翻动同一本书。读到第三页，他忽然忘了时间——这大概就是阅读本来的样子。</p>
+            </div>
+            <p class="specimen__meta"><span>Fig. 03</span>排版设置 / 实时预览</p>
           </figure>
-          <div class="demo-controls" aria-hidden="true">
-            <span>字号 20</span>
-            <span>行距 1.9</span>
-            <span class="on">思源宋体</span>
-          </div>
+          <figure class="type__plate reveal" data-delay="2">
+            <img src="./assets/themes-appearance.png" width="1583" height="922" alt="Folio 外观与阅读排版设置界面" loading="lazy" decoding="async" />
+            <figcaption><span>Fig. 04</span>外观 / 主题与字体</figcaption>
+          </figure>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- FINAL CTA -->
-  <section class="final">
+  <!-- 05 DOWNLOAD -->
+  <section class="download" id="download">
     <div class="wrap">
-      <div data-reveal>
-        <h2>现在开始读。</h2>
-        <p>Windows 10 / 11 · Android 8.0+ · 免费开源，MIT 许可</p>
-      </div>
-      <div class="actions" data-reveal>
-        <a class="btn btn-light" id="dl-win-2" href="https://github.com/flulwh/folio/releases">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6 10.4 4.6v7.1H3V5.6Zm0 12.8 7.4 1V12.4H3v6Zm8.6-13.9L21 3.3v8.4h-9.4V4.5Zm0 8.9H21v8.4l-9.4-1.3V13.4Z"/></svg>
-          <span class="btn-label">下载 Windows 版<span class="ver" id="win-ver-2">查看最新版本</span></span>
+      <p class="chapter__label">05 — Download / 下载</p>
+      <h2 class="download__title reveal">现在<em>开始读</em>。</h2>
+      <div class="download__grid">
+        <a class="dlc reveal" id="dl-win-2" href="https://github.com/flulwh/folio/releases" data-delay="1">
+          <span class="dlc__os">01 / Windows</span>
+          <span class="dlc__name">桌面端</span>
+          <span class="dlc__ver" id="win-ver-2">Windows 10 / 11 · x64</span>
+          <span class="dlc__go">安装包 / 便携版 / ZIP<i aria-hidden="true">↗</i></span>
         </a>
-        <a class="btn btn-outline" id="dl-android-2" href="https://github.com/flulwh/folio/releases">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.2 9.4h11.6c.4 0 .7.3.7.7v6.2a2.6 2.6 0 0 1-2.6 2.6H8.1a2.6 2.6 0 0 1-2.6-2.6v-6.2c0-.4.3-.7.7-.7Zm-2 1.2c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1Zm15.6 0c.6 0 1 .4 1 1v4.7a1 1 0 0 1-2 0v-4.7c0-.6.4-1 1-1ZM8.4 8.2c.2-1.7 1.4-3.1 3.1-3.7l-.8-1.5a.4.4 0 0 1 .7-.4l.9 1.6a5.9 5.9 0 0 1 3.4 0l.9-1.6a.4.4 0 0 1 .7.4l-.8 1.5a4.6 4.6 0 0 1 3.1 3.7H8.4Zm2.8-2.3a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Zm6 0a.7.7 0 1 0 0-1.4.7.7 0 0 0 0 1.4Z"/></svg>
-          <span class="btn-label">下载 Android 版<span class="ver" id="android-ver-2">查看最新版本</span></span>
+        <a class="dlc reveal" id="dl-android-2" href="https://github.com/flulwh/folio/releases" data-delay="2">
+          <span class="dlc__os">02 / Android</span>
+          <span class="dlc__name">安卓端</span>
+          <span class="dlc__ver" id="android-ver-2">Android 8.0+ · APK</span>
+          <span class="dlc__go">直接安装 APK<i aria-hidden="true">↗</i></span>
         </a>
       </div>
+      <p class="download__note reveal" data-delay="2">免费开源，MIT 许可。升级不丢数据：应用标识与包名不变，书架、进度、书签与设置保持兼容。</p>
+      <dl class="req reveal" data-delay="3">
+        <div><dt>Windows</dt><dd>10 / 11 · x64</dd></div>
+        <div><dt>Android</dt><dd>8.0 及以上</dd></div>
+        <div><dt>体积</dt><dd>APK 约 11 MB</dd></div>
+        <div><dt>许可</dt><dd>MIT · 开源</dd></div>
+      </dl>
     </div>
   </section>
 </main>
 
-<footer class="site-foot">
+<footer class="colophon">
   <div class="wrap">
-    <a class="brand" href="#top">Folio<span class="brand-dot"></span></a>
-    <span>© <span id="year">2026</span> · 本地优先的阅读器</span>
-    <nav aria-label="页脚">
-      <a href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页</a>
-      <a href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/flulwh/folio/releases" target="_blank" rel="noopener">更新日志</a>
-      <a href="https://github.com/flulwh/folio/tree/main/docs" target="_blank" rel="noopener">文档</a>
-      <a href="https://github.com/flulwh/folio/blob/main/LICENSE" target="_blank" rel="noopener">MIT 许可</a>
-    </nav>
+    <div class="colophon__top">
+      <div>
+        <a class="brand" href="#top">Folio<span>.</span></a>
+        <p class="colophon__meta" style="margin-top: 14px;">本地优先的双端阅读器<br />Windows + Android · 局域网同步</p>
+      </div>
+      <nav aria-label="页脚">
+        <a href="https://flulwh.github.io/" target="_blank" rel="noopener">作者主页</a>
+        <a href="https://github.com/flulwh/folio" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/flulwh/folio/releases" target="_blank" rel="noopener">更新日志</a>
+        <a href="https://github.com/flulwh/folio/tree/main/docs" target="_blank" rel="noopener">文档</a>
+        <a href="https://github.com/flulwh/folio/blob/main/LICENSE" target="_blank" rel="noopener">MIT 许可</a>
+      </nav>
+    </div>
+    <div class="colophon__bottom">
+      <span>© <span id="year">2026</span> Folio · 数据留在本机</span>
+      <span>Set in Bodoni Moda &amp; IBM Plex Mono</span>
+    </div>
   </div>
 </footer>
 
@@ -823,10 +1433,11 @@
   (function () {
     var doc = document.documentElement;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var clamp01 = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
 
     document.getElementById('year').textContent = new Date().getFullYear();
 
-    // 版本号与直链从 Releases 实时取，页面上不写死。
+    /* ---------- 版本号与直链 ---------- */
     var setText = function (id, text) {
       var el = document.getElementById(id);
       if (el && text) el.textContent = text;
@@ -845,7 +1456,7 @@
             if (a) a.href = desktop.html_url;
           });
           setText('win-ver', 'Windows 10 / 11 · ' + ver);
-          setText('win-ver-2', 'v' + ver + ' · 安装包 / 便携版');
+          setText('win-ver-2', 'v' + ver + ' · 安装包 / 便携版 / ZIP');
         }
         if (android) {
           var aver = android.tag_name.replace(/^android-/, '');
@@ -860,18 +1471,114 @@
       })
       .catch(function () { /* 接口不可达时保留 Releases 兜底链接 */ });
 
-    /* ---------- 3D 粒子 ---------- */
-    // 一团在三维空间里缓慢自转的尘埃：滚动只改转速与相机推拉，不重建粒子。
+    /* ---------- 排版样张 ---------- */
+    var spec = document.querySelector('[data-spec]');
+    if (spec) {
+      var page = spec.querySelector('[data-page]');
+      var size = spec.querySelector('[data-size]');
+      var lead = spec.querySelector('[data-leading]');
+      var out = spec.querySelector('[data-size-out]');
+      var faces = { serif: 'var(--serif)', sans: 'var(--sans)', mono: 'var(--mono)' };
+      var syncSpec = function () {
+        page.style.setProperty('--spec-fs', size.value + 'px');
+        page.style.setProperty('--spec-lh', lead.value);
+        out.textContent = size.value;
+      };
+      spec.querySelectorAll('[data-face]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          spec.querySelectorAll('[data-face]').forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+          page.style.setProperty('--spec-ff', faces[btn.getAttribute('data-face')]);
+        });
+      });
+      size.addEventListener('input', syncSpec);
+      lead.addEventListener('input', syncSpec);
+      var themeBtn = spec.querySelector('[data-theme]');
+      themeBtn.addEventListener('click', function () {
+        var night = page.classList.toggle('is-night');
+        themeBtn.textContent = night ? '纸色' : '夜间';
+        themeBtn.setAttribute('aria-pressed', String(night));
+      });
+      syncSpec();
+    }
+
+    /* ---------- 滚动 / 章节高亮 ---------- */
+    var rail = document.getElementById('rail');
+    var track = document.getElementById('deck-track');
+    var deck = document.getElementById('deck');
+    var dLeft = document.getElementById('deck-left');
+    var dMain = document.getElementById('deck-main');
+    var dPhone = document.getElementById('deck-phone');
+    var gProgress = document.getElementById('gallery-progress');
+    var links = Array.prototype.slice.call(document.querySelectorAll('.rail__nav a'));
+    var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+    var galleryDust;
+    var deckP = 0;
+    var ticking = false;
+
+    function setDeck(p) {
+      if (!deck || window.innerWidth <= 860) return;
+      deck.style.transform = 'rotateY(' + (-12 + p * 24).toFixed(2) + 'deg) rotateX(' + (4 - p * 7).toFixed(2) + 'deg)';
+      if (dLeft) dLeft.style.transform = 'translate(-50%,-50%) translate3d(' + (-58 + p * 8).toFixed(2) + '%, ' + (44 - p * 54).toFixed(1) + 'px, ' + (-430 + p * 210).toFixed(0) + 'px) rotateY(' + (30 - p * 12).toFixed(1) + 'deg)';
+      if (dMain) dMain.style.transform = 'translate(-50%,-50%) translate3d(0,' + (34 - p * 56).toFixed(1) + 'px,' + (-30 + p * 150).toFixed(0) + 'px) scale(' + (0.91 + p * 0.09).toFixed(3) + ')';
+      if (dPhone) dPhone.style.transform = 'translate(-50%,-50%) translate3d(' + (300 - p * 70).toFixed(0) + 'px,' + (56 - p * 76).toFixed(0) + 'px,' + (120 + p * 80).toFixed(0) + 'px) rotateY(-14deg) rotate(' + (3 - p * 3).toFixed(1) + 'deg)';
+      if (gProgress) gProgress.style.setProperty('--gp', p.toFixed(3));
+      if (galleryDust) galleryDust.setProgress(p);
+    }
+
+    function onScroll() {
+      var y = window.scrollY;
+      var vh = window.innerHeight;
+      rail.classList.toggle('is-stuck', y > 16);
+      var max = document.body.scrollHeight - vh;
+      rail.style.setProperty('--read', max > 0 ? (y / max).toFixed(4) : '0');
+
+      var current = sections[0];
+      sections.forEach(function (s) {
+        if (s && s.getBoundingClientRect().top <= vh * 0.42) current = s;
+      });
+      links.forEach(function (a) {
+        a.classList.toggle('is-active', current && a.getAttribute('href') === '#' + current.id);
+      });
+
+      if (track && window.innerWidth > 860) {
+        var r = track.getBoundingClientRect();
+        deckP = clamp01((-r.top) / (r.height - vh));
+        setDeck(deckP);
+      }
+
+      ticking = false;
+    }
+
+    window.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+    }, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    onScroll();
+
+    /* ---------- 入场 ---------- */
+    var revealItems = Array.prototype.slice.call(document.querySelectorAll('.reveal'));
+    if (!reduce && 'IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-in');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
+      revealItems.forEach(function (el) { io.observe(el); });
+    } else {
+      revealItems.forEach(function (el) { el.classList.add('is-in'); });
+    }
+
+    /* ---------- 粒子尘埃 ---------- */
     function Dust(canvas, cfg) {
       if (!canvas || !canvas.getContext) return { setProgress: function () {} };
       var ctx = canvas.getContext('2d');
       var dpr = Math.min(window.devicePixelRatio || 1, 2);
-      var W = 0, H = 0, cx = 0, cy = 0;
-      var pts = [];
-      var yaw = cfg.yaw || 0;
-      var aim = 0, progress = 0, mx = 0, my = 0;
-      var raf = 0, last = 0, visible = false;
-      var perspective = cfg.perspective || 1000;
+      var W = 0, H = 0, cx = 0, cy = 0, pts = [];
+      var yaw = cfg.yaw || 0, aim = 0, progress = 0, mx = 0, my = 0;
+      var raf = 0, last = 0;
 
       function makeSprite(rgb) {
         var c = document.createElement('canvas');
@@ -879,21 +1586,20 @@
         var g = c.getContext('2d');
         var grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
         grad.addColorStop(0, 'rgba(' + rgb + ',0.95)');
-        grad.addColorStop(0.4, 'rgba(' + rgb + ',0.32)');
+        grad.addColorStop(0.4, 'rgba(' + rgb + ',0.3)');
         grad.addColorStop(1, 'rgba(' + rgb + ',0)');
         g.fillStyle = grad;
         g.fillRect(0, 0, 64, 64);
         return c;
       }
       var sprites = {
-        cream: makeSprite('250,249,245'),
-        clay: makeSprite('217,119,87'),
-        blue: makeSprite('106,155,204')
+        cream: makeSprite('242,236,221'),
+        clay: makeSprite('184,55,31'),
+        olive: makeSprite('109,115,82')
       };
 
       function build() {
         var count = window.innerWidth < 700 ? Math.round(cfg.count * 0.45) : cfg.count;
-        // 主体是环面上的尘埃，少量游离颗粒补空间层次。
         var R = (cfg.rMin + cfg.rMax) / 2;
         var tube = (cfg.rMax - cfg.rMin) / 2;
         pts = [];
@@ -917,8 +1623,8 @@
             r: 0.7 + Math.random() * 2.4,
             a: 0.2 + Math.random() * 0.6,
             g: Math.random() < 0.18,
-            c: tone > 0.9 ? 'clay' : tone > 0.82 ? 'blue' : 'cream',
-            rgb: tone > 0.9 ? '217,119,87' : tone > 0.82 ? '106,155,204' : '250,249,245'
+            c: tone > 0.92 ? 'clay' : tone > 0.84 ? 'olive' : 'cream',
+            rgb: tone > 0.92 ? '184,55,31' : tone > 0.84 ? '109,115,82' : '242,236,221'
           });
         }
       }
@@ -954,7 +1660,7 @@
           var y1 = p.y * cosX - z1 * sinX;
           var z2 = p.y * sinX + z1 * cosX + cfg.camZ + dolly;
           if (z2 < 80) continue;
-          var s = perspective / z2;
+          var s = (cfg.perspective || 1000) / z2;
           var sx = cx + x1 * s;
           var sy = cy + y1 * s;
           if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) continue;
@@ -962,9 +1668,8 @@
           if (rad < 0.3) continue;
           var alpha = Math.min(0.92, p.a * s * 1.2);
           if (p.g) {
-            // 少量大颗粒带柔光，负责深度与空气感。
             var gs = rad * 5.5;
-            ctx.globalAlpha = alpha * 0.42;
+            ctx.globalAlpha = alpha * 0.4;
             ctx.drawImage(sprites[p.c], sx - gs, sy - gs, gs * 2, gs * 2);
             ctx.globalAlpha = 1;
           }
@@ -982,14 +1687,12 @@
         last = t;
         render(dt);
       }
-
       function start() {
         if (reduce) { render(0); return; }
         if (raf) return;
         last = 0;
         raf = requestAnimationFrame(loop);
       }
-
       function stop() {
         if (!raf) return;
         cancelAnimationFrame(raf);
@@ -998,22 +1701,14 @@
 
       build();
       resize();
-
       if ('IntersectionObserver' in window) {
         new IntersectionObserver(function (entries) {
-          visible = entries[0].isIntersecting;
-          visible ? start() : stop();
+          entries[0].isIntersecting ? start() : stop();
         }, { rootMargin: '120px' }).observe(canvas);
       } else {
         start();
       }
-
-      window.addEventListener('resize', function () {
-        build();
-        resize();
-        if (reduce) render(0);
-      }, { passive: true });
-
+      window.addEventListener('resize', function () { build(); resize(); if (reduce) render(0); }, { passive: true });
       document.addEventListener('pointermove', function (e) {
         mx = (e.clientX / window.innerWidth - 0.5) * 2;
         my = (e.clientY / window.innerHeight - 0.5) * 2;
@@ -1025,138 +1720,13 @@
       };
     }
 
-    var heroDust = Dust(document.getElementById('hero-dust'), {
-      count: 480, rMin: 320, rMax: 450, loose: 0.06, cx: 0.63,
-      perspective: 1000, camZ: 950, yaw: 0.5,
-      spin: 0.05, scrollSpin: 1, dolly: 420,
-      tilt: -0.42, scrollTilt: 0.14
-    });
-
-    var galleryDust = Dust(document.getElementById('gallery-dust'), {
+    galleryDust = Dust(document.getElementById('gallery-dust'), {
       count: 620, rMin: 400, rMax: 540, loose: 0.12, cx: 0.5,
       perspective: 1000, camZ: 1100, yaw: 1.1,
       spin: 0.035, scrollSpin: 1.7, dolly: 620,
       tilt: 0.3, scrollTilt: -0.1
     });
-
-    /* ---------- 顶栏 / 滚动进度 ---------- */
-    var head = document.querySelector('.site-head');
-    var hero = document.getElementById('hero');
-    var track = document.getElementById('deck-track');
-    var stageInner = document.getElementById('stage-inner');
-    var lastScroll = -1;
-
-    function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
-
-    function onScroll() {
-      var y = window.scrollY;
-      var vh = window.innerHeight;
-      head.classList.toggle('is-stuck', y > 24);
-
-      var heroH = hero.offsetHeight;
-      if (y !== lastScroll) {
-        heroDust.setProgress(clamp01(y / (heroH * 0.85)));
-        if (track) {
-          var r = track.getBoundingClientRect();
-          galleryDust.setProgress(clamp01((vh - r.top) / (r.height + vh)));
-        }
-        lastScroll = y;
-      }
-
-      // 首屏截图随离开视口轻微下沉，制造前景层次。
-      if (stageInner) {
-        var p = clamp01(y / heroH);
-        stageInner.style.transform = 'translate3d(0,' + (-p * 26).toFixed(1) + 'px,0)';
-      }
-    }
-
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-
-    // 鼠标轻微倾斜首屏截图（只在桌面端）。
-    if (!reduce && window.matchMedia('(pointer: fine)').matches) {
-      var tiltX = 0, tiltY = 0, tiltAimX = 0, tiltAimY = 0, tiltRaf = 0;
-      var heroEl = document.getElementById('hero');
-      var tickTilt = function () {
-        tiltRaf = requestAnimationFrame(tickTilt);
-        tiltX += (tiltAimX - tiltX) * 0.08;
-        tiltY += (tiltAimY - tiltY) * 0.08;
-        if (stageInner) stageInner.style.rotate = (tiltX * 1.6).toFixed(2) + 'deg';
-      };
-      heroEl.addEventListener('pointermove', function (e) {
-        var r = heroEl.getBoundingClientRect();
-        tiltAimX = (e.clientX - r.left) / r.width - 0.5;
-        tiltAimY = (e.clientY - r.top) / r.height - 0.5;
-        if (!tiltRaf) tickTilt();
-      }, { passive: true });
-      heroEl.addEventListener('pointerleave', function () {
-        tiltAimX = 0;
-        tiltAimY = 0;
-      }, { passive: true });
-    }
-
-    /* ---------- 动效：Motion ---------- */
-    var M = window.Motion;
-    if (!M || reduce) return;
-    try {
-      var animate = M.animate;
-      var scroll = M.scroll;
-      var inView = M.inView;
-      var stagger = M.stagger;
-      var easeOut = [0.22, 1, 0.36, 1];
-
-      animate('.eyebrow', { opacity: [0, 1], transform: ['translateY(14px)', 'translateY(0px)'] }, { duration: 0.7, ease: easeOut });
-      animate('.line-in', { transform: ['translateY(112%)', 'translateY(0%)'] }, { duration: 1.15, delay: stagger(0.12, { startDelay: 0.08 }), ease: [0.16, 1, 0.3, 1] });
-      requestAnimationFrame(function () { doc.classList.add('drawn'); });
-      animate('.lede', { opacity: [0, 1], transform: ['translateY(16px)', 'translateY(0px)'] }, { duration: 0.8, delay: 0.45, ease: easeOut });
-      animate('.cta-row > .btn', { opacity: [0, 1], transform: ['translateY(16px)', 'translateY(0px)'] }, { duration: 0.7, delay: stagger(0.08, { startDelay: 0.6 }), ease: easeOut });
-      animate('.hero-meta span', { opacity: [0, 1], transform: ['translateY(10px)', 'translateY(0px)'] }, { duration: 0.6, delay: stagger(0.06, { startDelay: 0.75 }), ease: easeOut });
-      animate('.shot-desktop', { opacity: [0, 1], transform: ['translateY(48px) scale(0.97)', 'translateY(0px) scale(1)'] }, { duration: 1.3, delay: 0.15, ease: [0.16, 1, 0.3, 1] });
-      animate('.shot-phone', { opacity: [0, 1], transform: ['translateY(52px)', 'translateY(0px)'] }, { duration: 1.15, delay: 0.5, ease: [0.16, 1, 0.3, 1] });
-
-      document.querySelectorAll('[data-reveal]').forEach(function (el) {
-        inView(el, function () {
-          animate(el, { opacity: [0, 1], transform: ['translateY(26px)', 'translateY(0px)'] }, { duration: 0.9, ease: easeOut });
-        }, { amount: 0.2 });
-      });
-
-      inView('.features', function () {
-        animate('.feature', { opacity: [0, 1], transform: ['translateY(22px)', 'translateY(0px)'] }, { duration: 0.8, delay: stagger(0.06), ease: easeOut });
-      }, { amount: 0.15 });
-
-      inView('.sync-diagram', function () {
-        animate('.sync-diagram .link', { transform: ['scaleX(0)', 'scaleX(1)'], opacity: [0, 1] }, { duration: 0.9, ease: easeOut });
-        animate('.sync-diagram .node', { opacity: [0, 1], transform: ['scale(0.94)', 'scale(1)'] }, { duration: 0.8, delay: stagger(0.14, { startDelay: 0.2 }), ease: easeOut });
-      }, { amount: 0.3 });
-
-      inView('.type-demo', function () {
-        animate('.type-demo .shot', { opacity: [0, 1], transform: ['translateY(26px)', 'translateY(0px)'] }, { duration: 1, ease: easeOut });
-        animate('.demo-controls span', { opacity: [0, 1], transform: ['translateY(8px)', 'translateY(0px)'] }, { duration: 0.6, delay: stagger(0.07, { startDelay: 0.15 }), ease: easeOut });
-      }, { amount: 0.25 });
-
-      // 3D 画廊：滚动时整组卡片旋转，左右两张向两侧退开。
-      if (track && window.matchMedia('(min-width: 1041px)').matches) {
-        var deckScroll = { target: track, offset: ['start end', 'end start'] };
-        scroll(animate('.deck', { transform: ['rotateY(-13deg) rotateX(5deg)', 'rotateY(13deg) rotateX(-3deg)'] }, { ease: 'linear' }), deckScroll);
-        scroll(animate('.deck .left', { transform: ['translate3d(-62%, 70px, -560px) rotateY(36deg)', 'translate3d(-50%, -10px, -240px) rotateY(22deg)'] }, { ease: 'linear' }), deckScroll);
-        scroll(animate('.deck .main', { transform: ['translate3d(0, 44px, -40px) scale(0.9)', 'translate3d(0, -22px, 120px) scale(1)'] }, { ease: 'linear' }), deckScroll);
-        scroll(animate('.deck .right', { transform: ['translate3d(540px, 100px, -560px) rotateY(-32deg)', 'translate3d(430px, -14px, -300px) rotateY(-18deg)'] }, { ease: 'linear' }), deckScroll);
-      }
-
-      document.querySelectorAll('.btn').forEach(function (btn) {
-        btn.addEventListener('pointerenter', function () {
-          animate(btn, { transform: 'translateY(-3px)' }, { duration: 0.3, ease: 'easeOut' });
-        });
-        btn.addEventListener('pointerleave', function () {
-          animate(btn, { transform: 'translateY(0px)' }, { duration: 0.45, ease: easeOut });
-        });
-      });
-    } catch (err) {
-      // 动效失败就把页面恢复成静态终态，别让标题停在出场前的位置。
-      doc.classList.remove('has-motion');
-      document.querySelectorAll('.line-in').forEach(function (el) { el.style.transform = ''; });
-    }
+    galleryDust.setProgress(deckP);
   })();
 </script>
 </body>
