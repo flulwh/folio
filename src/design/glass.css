@@ -120,10 +120,11 @@
 
 /* 设置分区：外层一张玻璃卡，行自己的实色底交出来。
    只作用于整页设置（.settings-page）；阅读器右侧抽屉复用 .settings-group，
-   那里本身已经是半透明面板，再套一层玻璃卡会显得发白、层级打架。 */
+   那里本身已经是半透明面板，再套一层玻璃卡会显得发白、层级打架。
+   圆角与书架「继续阅读」卡一致（--r-2xl），全站卡片只有这一种圆角。 */
 .settings-page .settings-group {
   border: 1px solid var(--glass-stroke);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-2xl);
   background: var(--glass-surface);
   -webkit-backdrop-filter: blur(20px) saturate(170%);
   backdrop-filter: blur(20px) saturate(170%);

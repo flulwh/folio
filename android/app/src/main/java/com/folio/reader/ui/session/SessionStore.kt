@@ -801,9 +801,10 @@ class SessionStore(private val app: Application) {
     /**
      * 音量键翻页（由 Activity 的 `onKeyDown` 转发）。
      *
+     * @param repeatCount 长按时的重复计数：0 是首次按下，之后系统会持续发 1、2、3…
      * @return true 表示这次按键已被阅读器消费，不再调音量
      */
-    fun onVolumeKey(keyCode: Int): Boolean {
+    fun onVolumeKey(keyCode: Int, repeatCount: Int = 0): Boolean {
         if (!settings.volumeKeysTurn) return false
         val direction = when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> 1
@@ -813,6 +814,8 @@ class SessionStore(private val app: Application) {
         val state = _reader.value
         // 正文还没排好时不抢音量键，否则用户会以为音量失灵
         if (state.book == null || state.paragraphs.isEmpty()) return false
+        // 长按只翻一页：重复事件吞掉不翻，否则按住音量键会一路翻到首页/末页
+        if (repeatCount > 0) return true
         requestPageTurn(direction)
         return true
     }

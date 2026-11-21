@@ -227,11 +227,11 @@ input.switch:checked::after {
   padding: var(--sp-5) var(--sp-6) var(--sp-8);
 }
 
-/* 正文列居中：左右留白相等，行长控制在 60–70 字符 */
+/* 正文列居中：左右留白相等，行长控制在 60–70 字符。
+   分组已经是玻璃卡，卡与卡之间要有固定间距，不能再靠分组自身 padding 拼出来。 */
 .settings-main-inner {
   max-width: 720px;
   margin: 0 auto;
-  gap: 0;
 }
 
 /* --- 公告横幅：启动时只提示第一条未读，关掉即记已读 ---------------------- */
@@ -353,6 +353,24 @@ input.switch:checked::after {
   margin: 0 auto;
 }
 
+/* 公告页没有侧栏，页头内层要和正文列同宽：否则标题浮在左边、卡片居中，
+   两套左边界看起来像两个页面拼在一起。返回键落在正文左边界上，
+   版本号落在正文右边界上。 */
+.notice-page .settings-page-head,
+html[data-frame='macos'] .notice-page .settings-page-head {
+  padding-left: var(--sp-4);
+  padding-right: var(--sp-4);
+}
+
+.notice-page-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
 .notice-card {
   display: flex;
   flex-direction: column;
@@ -413,16 +431,18 @@ input.switch:checked::after {
   font-size: var(--fs-small);
 }
 
+/* 分组的水平内边距不能是 0：玻璃层把分组画成一张卡后，
+   文字会直接贴在卡的描边上（关于页的 flulwh / MIT 就是这样被裁掉的）。 */
 .settings-page .settings-group {
   margin: 0;
-  padding: var(--sp-5) 0 var(--sp-3);
+  padding: var(--sp-5);
   border: 0;
-  border-top: 1px solid var(--line);
 }
 
-.settings-page .settings-group:first-of-type {
-  padding-top: 0;
-  border-top: 0;
+/* 分区都挂在一个 motion 容器下，容器自身的 gap 落不到卡片上；
+   相邻卡片必须在这里给间距，否则两张玻璃卡的圆角会直接贴在一起。 */
+.settings-page .settings-group + .settings-group {
+  margin-top: var(--sp-5);
 }
 
 .settings-page .settings-group-title {
@@ -443,7 +463,7 @@ input.switch:checked::after {
   color: var(--text-faint);
 }
 
-/* --- 一行设置：52px，无行线，组尾一条线 ---------------------------------- */
+/* --- 一行设置：52px，行间一条发丝线，组尾不收线 -------------------------- */
 
 .settings-page-row {
   min-height: 52px;
@@ -453,7 +473,17 @@ input.switch:checked::after {
   border-bottom: 0;
 }
 
+/* 同一张卡里的相邻行用发丝线串起来：与公告列表、书源列表同一套读法 */
+.settings-page .settings-group > .settings-page-row + .settings-page-row,
+.settings-page .settings-group > .switch-row + .settings-page-row,
+.settings-page .settings-group > .settings-page-row + .switch-row,
+.settings-page .settings-group > .switch-row + .switch-row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+
 .settings-page-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
   gap: 3px;
 }
 
@@ -468,10 +498,21 @@ input.switch:checked::after {
   font-size: var(--fs-caption);
   line-height: var(--lh-snug);
   color: var(--text-soft);
+  overflow-wrap: anywhere;
 }
 
+/* 控件不参与压缩：描述再长也只挤文字列，右侧的按钮 / 值不会被挤出卡片 */
 .settings-page-row-control {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   gap: var(--sp-2);
+}
+
+/* 设置页的输入框统一 28px，与 .btn.small 同高。
+   30px 的输入框配 28px 的按钮，上下各差 1px，同一行里永远对不齐。 */
+.settings-page .text-input {
+  height: 28px;
 }
 
 .settings-page-muted {
@@ -509,6 +550,8 @@ input.switch:checked::after {
 
 .settings-page .switch-row > span {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   flex-direction: column;
   gap: 3px;
   font-size: var(--fs-body);
@@ -580,8 +623,8 @@ input.switch:checked::after {
 /* --- 主题卡：64×48 的纸样，左侧一道书脊 ---------------------------------- */
 
 .theme-head {
-  align-items: baseline;
-  margin-bottom: var(--sp-4);
+  align-items: center;
+  margin-bottom: var(--sp-3);
   gap: var(--sp-4);
 }
 
@@ -720,7 +763,7 @@ input.switch:checked::after {
 
 .settings-page .theme-editor-row .text-input {
   width: 220px;
-  height: 30px;
+  height: 28px;
 }
 
 .settings-page .theme-color {
@@ -927,7 +970,7 @@ input.switch:checked::after {
 
 .settings-page .proxy-row .text-input {
   width: 240px;
-  height: 30px;
+  height: 28px;
   font-family: var(--font-mono);
   font-size: var(--fs-caption);
 }

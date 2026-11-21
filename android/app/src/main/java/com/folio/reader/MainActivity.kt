@@ -64,9 +64,10 @@ class MainActivity : FragmentActivity() {
     /**
      * 音量键翻页：只在小说阅读页消费，其他页面保持系统音量行为。
      * 开关在排版面板「06 翻页」里，关掉后这里直接放行。
+     * 传 repeatCount：长按音量键时系统会持续发 repeat 事件，交给会话层吞掉。
      */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (session.route.value == ROUTE_READER && session.onVolumeKey(keyCode)) return true
+        if (session.route.value == ROUTE_READER && session.onVolumeKey(keyCode, event?.repeatCount ?: 0)) return true
         return super.onKeyDown(keyCode, event)
     }
 

@@ -59,11 +59,10 @@ const COLOR = {
   danger: '#ff3b30',
 };
 
+/* 组内不再叠第二张卡：玻璃分组本身就是卡，内层只保留排版间距。
+   之前这里的实底 + 描边 + 圆角会在卡里再画一个小卡，和设置页其余分组不是一套语言。 */
 const cardStyle = {
-  borderRadius: 14,
-  border: '0.5px solid var(--line)',
-  background: 'var(--bg-elevated)',
-  padding: '14px 16px',
+  padding: 0,
 };
 
 const rowStyle = {
@@ -543,7 +542,6 @@ export default function DevicesPanel() {
             display: 'flex',
             alignItems: 'center',
             gap: 9,
-            padding: '11px 14px',
           }}
         >
           <span style={dotStyle(online)} />
@@ -893,7 +891,6 @@ export default function DevicesPanel() {
                   key={command.id}
                   style={{
                     ...cardStyle,
-                    padding: '9px 12px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 10,
@@ -931,7 +928,6 @@ export default function DevicesPanel() {
                     key={`${command.id}-${command.state}`}
                     style={{
                       ...cardStyle,
-                      padding: '9px 12px',
                       display: 'flex',
                       alignItems: 'center',
                       gap: 10,

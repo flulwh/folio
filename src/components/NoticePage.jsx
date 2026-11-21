@@ -26,14 +26,16 @@ export default function NoticePage({ onClose }) {
   return (
     <div className="settings-page notice-page">
       <header className="settings-page-head">
-        <button className="icon-btn ghost" onClick={onClose} title="返回书架 (Esc)" aria-label="返回书架">
-          <IconArrowLeft size={19} />
-        </button>
-        <div className="settings-page-heading">
-          <h1>公告</h1>
-          <span>{loading ? '正在读取…' : unreadCount ? `${unreadCount} 条未读` : '全部已读'}</span>
+        <div className="notice-page-head">
+          <button className="icon-btn ghost" onClick={onClose} title="返回书架 (Esc)" aria-label="返回书架">
+            <IconArrowLeft size={19} />
+          </button>
+          <div className="settings-page-heading">
+            <h1>公告</h1>
+            <span>{loading ? '正在读取…' : unreadCount ? `${unreadCount} 条未读` : '全部已读'}</span>
+          </div>
+          <span className="settings-page-version">v{__APP_VERSION__}</span>
         </div>
-        <span className="settings-page-version">v{__APP_VERSION__}</span>
       </header>
 
       <div className="notice-page-body">
