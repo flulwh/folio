@@ -1,6 +1,7 @@
 package com.folio.reader.ui.reader
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -107,6 +108,10 @@ fun TocSheet(
                                         if (selected) scheme.accent.copy(alpha = 0.12f)
                                         else androidx.compose.ui.graphics.Color.Transparent
                                     )
+                                    // 少了这个 modifier，目录就只是「能看不能点」的列表：
+                                    // onSelect 一路传到 SessionStore.switchChapter 都接好了，
+                                    // 但没有 clickable 就永远不会触发。漫画目录有这一行，小说目录漏了。
+                                    .clickable { onSelect(chapterIndex) }
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
