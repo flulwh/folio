@@ -4,7 +4,7 @@
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。桌面端版本号唯一来源是 `package.json`；
 Android 客户端自带版本号，见 `android/app/build.gradle.kts`。
 
-## [未发布]
+## [2.18.1] — 2026-11-27
 
 **桌面端安装包换成品牌化界面：左侧竖图、页头图与欢迎/完成页文案都换成 Folio 自己的一套。**
 

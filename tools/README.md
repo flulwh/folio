@@ -42,6 +42,7 @@
 | `_vreg.mjs` | 视觉回归：`--save` 保存基线、`--diff` 统计像素差异，不引第三方依赖 |
 | `_fontcheck.mjs` | 用 Edge 的 `document.fonts.check` 与逐字测量交叉验证字体真实可用（读 `EDGE_PATH`） |
 | `_font-shot.cjs` | 在 Electron 主进程里走真实 IPC 验证字体链路（安装 → `fonts.json` → `font:list` → `FontFace`） |
+| `_gen-installer-art.mjs` | 生成安装器配图 `build/installerSidebar.bmp`（164×314）与 `build/installerHeader.bmp`（150×57）：Edge 截图 → 内置 PNG 解码 → 24 位 BMP（`--edge` 或 `EDGE_PATH` 指定浏览器） |
 | `_theme-check.cjs` | CDP 里逐张点主题卡，比对 `.app` 上计算后的 `--accent/--bg/--text` 与 `themes.js` 声明值 |
 | `_feel.cjs` | 手感测量：rAF 采样 + CDP 真实鼠标事件，算按下深度、回弹峰值、稳定时间 |
 | `_lan-ui.cjs` | 局域网面板 UI 冒烟：设置 → 网络 → 开开关 → 校验服务真的起来并截图（`--keep-on` 保持开启） |
