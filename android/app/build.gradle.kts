@@ -141,7 +141,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     // FragmentActivity 宿主（EPUB 的 Readium presenter 需要 Fragment）。
-    implementation("androidx.fragment:fragment-ktx:1.8.7")
+    implementation("androidx.fragment:fragment-ktx:1.9.1")
 
     implementation(platform("androidx.compose:compose-bom:2025.06.01"))
     implementation("androidx.compose.ui:ui")
@@ -151,14 +151,14 @@ dependencies {
 
     // 后台周期同步在 3.0 下线：只在「连接成功 / 回前台 / 手动点按」时同步，
     // 不再引 WorkManager（省一个常驻依赖，也省掉系统调度带来的不可控时机）。
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
 
     // ---- 4.0.0 重构引入的现成库（不自己写 UI 组件与算法）----
     // compose-cupertino：iOS 风格 Compose 组件（替代 Miuix / Material3 / 自研 HyperKit）。
     implementation("io.github.alexzhirkevich:cupertino:0.1.0-alpha04")
     implementation("io.github.alexzhirkevich:cupertino-icons-extended:0.1.0-alpha04")
     // Coil 3：图片加载（内存缓存、采样、请求去重）。3.6.3 要求 compileSdk 37，故锁 3.3.0。
-    implementation("io.coil-kt.coil3:coil-compose:3.3.0")
+    implementation("io.coil-kt.coil3:coil-compose:3.6.3")
     // Telephoto：漫画缩放与大图分块（替代自研 ZoomableImage）。
     implementation("me.saket.telephoto:zoomable-image-coil3:0.19.0")
     // Voyager：导航 + 页面级 ScreenModel（替代 1757 行 AppViewModel 与手写 NavHost）。
@@ -166,14 +166,14 @@ dependencies {
     implementation("cafe.adriel.voyager:voyager-screenmodel:1.1.0-beta03")
     implementation("cafe.adriel.voyager:voyager-transitions:1.1.0-beta03")
     // Readium：EPUB 解析、排版、分页、目录（只用于真 EPUB，本机专用）。
-    implementation("org.readium.kotlin-toolkit:readium-shared:3.1.2")
-    implementation("org.readium.kotlin-toolkit:readium-streamer:3.1.2")
-    implementation("org.readium.kotlin-toolkit:readium-navigator:3.1.2")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation("org.readium.kotlin-toolkit:readium-shared:3.4.0")
+    implementation("org.readium.kotlin-toolkit:readium-streamer:3.4.0")
+    implementation("org.readium.kotlin-toolkit:readium-navigator:3.4.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
